@@ -17,6 +17,11 @@ Exit codes: 0 scan completed (verdict is in the output), 2 usage/path error.
 Layer 1 never executes or "understands" the skill; it only matches
 patterns. Layer 2 (references/classifier-prompt.md) is the isolated model
 classifier. Combine both per SKILL.md.
+
+Calibration (2026-09-26, from 1,154 real-world skills): layer 1 over-flags
+documentation. URL volume, `.env` docs, `--yes` CLI flags, and `<redacted>`
+placeholders are dampened to informational findings (recorded, not scored).
+They still appear in the report — layer 2 is the backstop.
 """
 
 import json
@@ -25,7 +30,45 @@ import re
 import shutil
 import sys
 
-SEVERITY_WEIGHT = {"high": 3, "medium": 2, "low": 1}
+SEVERITY_WEIGHT = {"high": 3, "medium": 2, "low": 1, "info": 0}
+
+# Per-file cap on how many EXTERNAL_URL findings contribute to the score.
+# Documentation links are the #1 false-positive driver (2026-09-26: 102 of
+# 123 UNSAFE verdicts across 1,154 real skills were pure URL volume).
+URL_SCORE_CAP = 5
+
+# Vendor documentation hosts: links here are almost always docs, not exfil.
+# (Real exfiltration is caught by the EXFILTRATION check, not this one.)
+DOC_HOSTS = frozenset({
+    "docs.anthropic.com", "anthropic.com", "console.anthropic.com",
+    "vercel.com", "cloudflare.com", "developers.cloudflare.com",
+    "stripe.com", "docs.stripe.com",
+    "atlassian.com",
+    "github.com", "docs.github.com",
+    "microsoft.com", "learn.microsoft.com",
+    "developers.google.com", "cloud.google.com",
+})
+
+
+def _is_doc_host(hostname):
+    host = hostname.lower()
+    if host.startswith("www."):
+        host = host[4:]
+    return host in DOC_HOSTS
+
+
+# Line-level benign contexts: if one matches, high/medium findings on that
+# line are recorded as info (not scored). Still visible in the report.
+BENIGN_CONTEXT_RES = [
+    r"<redacted>",                                  # placeholder, not a real secret
+    r"--yes\b",                                     # CLI flag docs ("--yes skips confirmation")
+    r"(?:^|\s)-y\b",                                # short -y flag docs
+    r"\be\.g\.\b|\bfor example\b|\bexample:",      # illustrative context
+    r"\b[a-z][a-z0-9_]*(api[_-]?key|webhook_secret)\b",  # API-key setup docs
+    # (^ matched against the lowercased line; e.g. RESEND_API_KEY in code
+    # samples. Real harvesting still trips other checks on the same line:
+    # "send me your X" hits EXFILTRATION, "~/.ssh" hits its own pattern.)
+]
 
 # (check_id, category, severity, description, [regex, ...])
 CHECKS = [
@@ -125,12 +168,26 @@ def scan_file(path):
                  "severity": "low", "file": path, "line": 0,
                  "match": str(exc)[:120],
                  "description": "File could not be read; scan incomplete"}]
+    url_scored = 0
     for lineno, line in enumerate(lines, 1):
         low = line.lower()
         for check_id, category, severity, description, patterns in CHECKS:
             for pat in patterns:
                 m = re.search(pat, low)
                 if m:
+                    sev = severity
+                    if check_id == "external-url":
+                        host = re.search(r"https?://([^/\s)\"']+)", m.group(0))
+                        hostname = host.group(1) if host else ""
+                        if _is_doc_host(hostname):
+                            sev = "info"
+                        elif url_scored >= URL_SCORE_CAP:
+                            sev = "info"
+                        else:
+                            url_scored += 1
+                    if sev in ("high", "medium") and any(
+                            re.search(p, low) for p in BENIGN_CONTEXT_RES):
+                        sev = "info"
                     start = max(0, m.start() - 60)
                     excerpt = line[start:m.end() + 60].strip()
                     if len(excerpt) > 160:
@@ -138,7 +195,7 @@ def scan_file(path):
                     findings.append({
                         "check_id": check_id,
                         "category": category,
-                        "severity": severity,
+                        "severity": sev,
                         "file": path,
                         "line": lineno,
                         "match": excerpt,
