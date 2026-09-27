@@ -131,7 +131,7 @@ def _add(args):
     return add.EXIT_FOR_OUTCOME[out["outcome"]]
 
 
-CANARY_BIN = "/usr/local/lib/skillcanary/bin/canary"
+CANARY_BIN = "/Library/Application Support/SkillCanary/bin/canary"
 
 
 def _hook(args):

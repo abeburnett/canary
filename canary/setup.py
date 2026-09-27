@@ -24,7 +24,11 @@ from canary.hosts import claude as claude_host
 from canary.hosts import codex as codex_host
 
 LEVELS = ("scan", "guard", "lockdown")
-LIB = "usr/local/lib/skillcanary"
+# macOS keeps every folder on this path root-owned, so no user account can
+# swap the install. 0.1.0 used usr/local/lib, which old Homebrew installs
+# leave owned by the person.
+LIB = "Library/Application Support/SkillCanary"
+OLD_LIBS = ("usr/local/lib/skillcanary",)
 LINK = "usr/local/bin/canary"
 PYTHON = "/usr/bin/python3"
 PACKAGE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -84,12 +88,15 @@ def _sha_file(path):
 
 
 def read_state(prefix="/"):
-    try:
-        with open(_at(prefix, LIB + "/state.json"), encoding="utf-8") as fh:
-            state = json.load(fh)
+    """This Mac's recorded level, from the current install or a 0.1.0 one."""
+    for lib in (LIB,) + OLD_LIBS:
+        try:
+            with open(_at(prefix, lib + "/state.json"), encoding="utf-8") as fh:
+                state = json.load(fh)
+        except (OSError, ValueError):
+            continue
         return state if isinstance(state, dict) and state.get("level") in LEVELS else None
-    except (OSError, ValueError):
-        return None
+    return None
 
 
 def plan(level, home, prefix="/"):

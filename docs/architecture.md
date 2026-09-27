@@ -415,7 +415,7 @@ administrator dialog, which an agent cannot answer.
 | Level | Password | What setup does |
 |---|---|---|
 | Scan | no | Nothing machine-wide. Reports the existing library. |
-| Guard | once | Installs Canary root-owned in `/usr/local/lib/skillcanary` (link `/usr/local/bin/canary`); writes the Claude Code drop-in `managed-settings.d/canary.json` and creates `/etc/codex/requirements.toml` when absent (else prints the block to add). |
+| Guard | once | Installs Canary root-owned in `/Library/Application Support/SkillCanary`, a path macOS keeps root-owned all the way up (link `/usr/local/bin/canary`; 0.1.0 used `/usr/local/lib/skillcanary`, which old Homebrew installs leave owned by the person); writes the Claude Code drop-in `managed-settings.d/canary.json` and creates `/etc/codex/requirements.toml` when absent (else prints the block to add). |
 | Lockdown | once, and at every `canary add` | Guard, plus the user-level roots `~/.claude/skills` and `~/.agents/skills` become owned by root, so nothing running as the person (an agent, `npx skills`, a script inside a skill) can change them. `canary add` then installs through the administrator dialog (password or Touch ID). |
 
 The privileged step is one shell script passed to
@@ -423,7 +423,7 @@ The privileged step is one shell script passed to
 on disk, so nothing can swap it while the dialog is open. Canary's own files
 travel inside it as a base64 archive whose SHA-256 the script checks before
 extracting. The script records the level and every file it created in
-`/usr/local/lib/skillcanary/state.json` (root-owned). Moving to a lower level
+`/Library/Application Support/SkillCanary/state.json` (root-owned; setup also reads a 0.1.0 `state.json` from the old location, and never deletes inside that folder as root, because the person controls it). Moving to a lower level
 removes only files Canary created and that still match what it wrote, and
 returns the roots to the person. The program itself stays installed at every
 level, since the Mac installer may have put it there.
@@ -449,6 +449,11 @@ line. A marker can be copied, so this keeps setup from replacing other skills;
 it is not proof of who wrote the folder. The skill is always written as the
 person, through open folder handles that never follow links, and never by the
 privileged step: at Lockdown it is written before the roots are locked.
+
+For Lockdown, the Mac installer is the recommended channel: Homebrew keeps
+programs in a folder the person's account can write, so software already
+running as them could alter SkillCanary before `canary setup` copies it into
+the root-owned location. `SECURITY.md` lists this with the other known limits.
 
 Setup never sets `allowManagedHooksOnly`, because that would disable the
 person's own hooks; a managed hook cannot be disabled from user settings

@@ -9,13 +9,13 @@
     "canary/classifiers/claude_cli.py": "2120c73e4fe0376ac15fdff06cb256ab526d8b70b2b7705bef7525f22ec33892",
     "canary/classifiers/openai_api.py": "8f12e081140a78b472788263bc483677dabcdc547082cb034849d7d5cb569dc6",
     "canary/classify.py": "721f07a640928eec3ec4c9198c53ba5fc34870a0125882ba3814570321453e06",
-    "canary/cli.py": "68984f63d226a46db6cd7afd367bf67c9abcb12a1d19017b8f92d0e9315736c7",
+    "canary/cli.py": "8ed01f0963afe247cec4dfad365cfd6244221ae9c5e4a06b100ad73213bc6b89",
     "canary/frontdoor.py": "d768f93ceb6d03296fede38de0fdfbedf5c941566aec6184c157f789cb873cdf",
-    "canary/gate.py": "a3ab7696c27b38b3a3dc618ecea426c88b18815a7a0c759d1c5d67da753e3e4e",
+    "canary/gate.py": "271ce18fb7a7b2afe0aaa7cb0d5296e1f29e939f6a5f94693ece4b02c19f3595",
     "canary/hosts/claude.py": "61638d14fdf54669a95142ed8105ad932386bf8c5ab701e000cd786bcc7a46e7",
     "canary/hosts/codex.py": "b86dc6cd927ef91527577617afd815ddabc9a5c33267ee631c851cb3e1169f50",
     "canary/scan.py": "b66fd7c627d995980cf77654728ae42410b1a320dca684d7698f60987688ac58",
-    "canary/setup.py": "b090bf9606b39b3934566e5c5d35790ee1cc3d4ecd9f3aff1b29e3e663ce75cd",
+    "canary/setup.py": "1184a5e076f96c379b02ce6e2e8609448c8cc551bac8bb4965a4da6743922f95",
     "canary/shellparse.py": "19220ace248b9d39106dbb8a35430d08863777c2c5a98a48b71dd87384e39ad7"
   }
 }

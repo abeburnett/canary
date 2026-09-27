@@ -7,6 +7,7 @@ touches this Mac's real policy folders.
 
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -63,7 +64,7 @@ class GuardInstallsBothHooks(unittest.TestCase):
         level, gaps, claim = mac.doctor()
         self.assertEqual((level, gaps), ("guard", []))
         self.assertEqual(claim, setup.CLAIMS["guard"])
-        proc = subprocess.run(setup.hook_command(mac.prefix, "claude").split(),
+        proc = subprocess.run(shlex.split(setup.hook_command(mac.prefix, "claude")),
                               input="not json", capture_output=True, text=True, timeout=60)
         self.assertEqual(proc.returncode, 2)
 
@@ -222,6 +223,41 @@ class SetupTeachesAgentsAboutSkillCanary(unittest.TestCase):
         mac.setup("guard")
         with open(outside) as fh:
             self.assertEqual(fh.read(), "KEEP" + frontdoor.MARKER)
+
+
+
+@MACOS
+class InstallsWhereNoUserCanReplaceIt(unittest.TestCase):
+    """0.1.1: /usr/local/lib is often owned by the person (old Homebrew), so
+    anything running as them could swap the whole install. The program now
+    lives in /Library/Application Support/SkillCanary, whose parents macOS
+    keeps root-owned, and 0.1.0 installs move there."""
+
+    def test_the_install_lives_under_library_application_support(self):
+        self.assertEqual(setup.LIB, "Library/Application Support/SkillCanary")
+
+    def test_a_0_1_0_guard_install_moves_and_its_policy_files_follow(self):
+        import hashlib
+        mac = Mac()
+        old = mac.at("usr/local/lib/skillcanary")
+        os.makedirs(os.path.join(old, "bin"))
+        drop_in = mac.at(DROP_IN)
+        os.makedirs(os.path.dirname(drop_in))
+        old_text = '{"hooks": "0.1.0 command"}\n'
+        with open(drop_in, "w") as fh:
+            fh.write(old_text)
+        with open(os.path.join(old, "state.json"), "w") as fh:
+            json.dump({"level": "guard", "locked": [],
+                       "created": {drop_in: hashlib.sha256(old_text.encode()).hexdigest()}}, fh)
+        out, code = mac.setup("guard")
+        self.assertEqual((out["outcome"], out["manual"]), ("done", []))
+        with open(drop_in) as fh:
+            self.assertIn(setup.hook_command(mac.prefix, "claude"), fh.read().replace('\\"', '"'))
+        # Root never deletes inside a folder the person controls; the old
+        # copy is left unused, and nothing points at it any more.
+        self.assertEqual(os.path.realpath(mac.at(setup.LINK)),
+                         os.path.realpath(mac.at(setup.LIB + "/bin/canary")))
+        self.assertEqual(mac.doctor()[:2], ("guard", []))
 
 
 if __name__ == "__main__":

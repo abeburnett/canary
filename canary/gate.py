@@ -57,7 +57,8 @@ def protected_paths(home, cwd, adapters):
     """Every host's discovery roots and config, plus Canary's own state."""
     paths = [quarantine_dir(home), os.path.join(home, ".agents", ".canary-lock.json"),
              os.path.join(home, SUPPORT), "/Library/Application Support/ClaudeCode",
-             "/etc/codex", "/usr/local/lib/skillcanary", "/usr/local/bin/canary"]
+             "/etc/codex", "/Library/Application Support/SkillCanary",
+             "/usr/local/lib/skillcanary", "/usr/local/bin/canary"]
     for adapter in adapters:
         paths += adapter.discovery_roots(home, cwd) + adapter.config_files(home)
     return sorted({os.path.realpath(p) for p in paths})

@@ -45,3 +45,7 @@ per skill; registry submission and badge issuance are separate steps.
 
 Launch candidate. Marketplace listing materials are drafts until the owner
 publishes them.
+
+## Security
+
+To report a vulnerability, and for what SkillCanary does and doesn't claim, see [SECURITY.md](SECURITY.md).
