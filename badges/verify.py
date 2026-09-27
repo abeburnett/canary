@@ -65,26 +65,25 @@ def sha256_file(path: Path) -> str:
 
 
 def skill_digest(path: Path) -> str:
-    """Digest of every file in a skill folder (or of one file), links refused.
+    """Digest of every file in a skill folder; files, links and unlistable folders refused.
 
     Must match skill_digest() in the issuer (canary-pro badges/canary_badges.py).
     """
     lines = []
-    if path.is_symlink():
-        raise VerificationError("the skill path must not be a link")
-    if path.is_file():
-        lines.append(f"{path.name}\0{sha256_file(path)}\n")
-    elif path.is_dir():
-        for root, dirs, files in os.walk(path):
-            for name in dirs + files:
-                full = Path(root) / name
-                if full.is_symlink() or not (full.is_dir() or full.is_file()):
-                    raise VerificationError("the skill folder contains a link or special file")
-            for name in files:
-                full = Path(root) / name
-                lines.append(f"{full.relative_to(path).as_posix()}\0{sha256_file(full)}\n")
-    else:
-        raise VerificationError("the skill path must be a file or folder")
+    if path.is_symlink() or not path.is_dir():
+        raise VerificationError("the skill path must be a folder, not a file or link")
+
+    def unreadable(exc: OSError) -> None:
+        raise VerificationError("the skill folder could not be read completely") from exc
+
+    for root, dirs, files in os.walk(path, onerror=unreadable):
+        for name in dirs + files:
+            full = Path(root) / name
+            if full.is_symlink() or not (full.is_dir() or full.is_file()):
+                raise VerificationError("the skill folder contains a link or special file")
+        for name in files:
+            full = Path(root) / name
+            lines.append(f"{full.relative_to(path).as_posix()}\0{sha256_file(full)}\n")
     if not lines:
         raise VerificationError("the skill folder is empty")
     return sha256_bytes(TREE_DIGEST_PREFIX + "".join(sorted(lines)).encode("utf-8"))
