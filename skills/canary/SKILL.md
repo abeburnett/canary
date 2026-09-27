@@ -10,14 +10,14 @@ Canary scans AI skill files for prompt-injection and malicious-instruction risk 
 ## Install
 
 1. The scanner engine lives at `scanner/` in this repo (product name: Canary; engine name: Jev). To install, copy `scanner/` into the agent's workspace skills directory.
-   - Files: `SKILL.md` (the full two-layer workflow), `bin/jev-scan` (deterministic layer-1 CLI), `references/checks.md`, `references/classifier-prompt.md`.
-2. Verify it runs: `scanner/bin/jev-scan --help` should print usage. (Python 3, no dependencies.)
+   - Files: `SKILL.md` (the full two-layer workflow), `bin/canary` (layer-1 scanner CLI), `references/checks.md`, `references/classifier-prompt.md`.
+2. Verify it runs: `bin/canary --help` should print usage and exit 0. (Python 3, no dependencies.)
 
 ## Wire it into the workflow
 
 1. **Scan before install.** Every third-party skill gets scanned *before* being added to the agent's skills. No eyeballing — always run the scan.
-2. **The rule:** `scanner/bin/jev-scan <skill-path> --text`. Either layer says UNSAFE → do not install. Any meaningful flag → NEEDS REVIEW, show the user the findings, let them decide. Both clear → install.
-3. **Quarantine, don't delete.** For anything flagged, rerun with `--quarantine` — it produces a `.jev-quarantined` copy with flagged lines commented out, for forensics or safe inspection.
+2. **The rule:** `bin/canary scan <skill-path> --text`. Either layer says UNSAFE → do not install. Any meaningful flag → NEEDS REVIEW, show the user the findings, let them decide. Both clear → install.
+3. **Quarantine, don't delete.** Never copy a flagged skill anywhere an agent loads skills from. Quarantine lives outside every skills directory (see `docs/architecture.md`).
 4. **Re-scan discipline.** Re-run the scan after every new skill install and periodically over the whole skills directory. Skills update; trust doesn't persist.
 
 ## The two layers (summary)
