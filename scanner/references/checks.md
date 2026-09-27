@@ -95,8 +95,9 @@ longer scores at all.
 
 Measured on the 133 skills in one real `~/.agents/skills` library
 (2026-09-26): the earlier engine rated 97 safe, 24 review, 12 unsafe; this one
-rates 94 safe, 34 review, 5 unsafe. Of the 34 reviews, 25 are there only
-because the skill runs code. The planted attack fixture scores 23, `UNSAFE`.
+rates 95 safe, 32 review, 6 unsafe. Of the 32 reviews, 24 are there only
+because the skill runs code; the sixth unsafe is a `curl … | sh` split across
+two lines, which the paragraph pass now catches. The planted attack fixture scores 23, `UNSAFE`.
 
 ## What layer 1 still misses
 
