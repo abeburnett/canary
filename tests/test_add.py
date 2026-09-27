@@ -384,3 +384,16 @@ class AstraRoundTwoRegressions(unittest.TestCase):
             env.add(URL, Approver(True), fetch=FakeGitHub(archive))
         with open(path) as fh:
             self.assertEqual(fh.read(), raw)
+
+
+class BlobLinksSelectTheSkillFolder(unittest.TestCase):
+    def test_a_link_to_skill_md_installs_its_folder(self):
+        env = Env()
+        archive = tarball([("skills/notes/SKILL.md", tarfile.REGTYPE, SKILL),
+                           ("skills/other/SKILL.md", tarfile.REGTYPE, SKILL.replace("notes", "other"))])
+        fetch = FakeGitHub(archive)
+        result = env.add("https://github.com/someone/skills/blob/v1.2/skills/notes/SKILL.md",
+                         Approver(True), fetch=fetch)
+        self.assertEqual(fetch.calls, [("someone", "skills", "v1.2")])
+        self.assertEqual((result["outcome"], result["name"]), ("installed", "notes"))
+        self.assertEqual(env.lock()["skills"]["notes"]["path"], "skills/notes")
