@@ -2,6 +2,7 @@
 
 import json
 import math
+import os
 import sys
 
 from canary import add, classify, scan
@@ -127,7 +128,48 @@ def _add(args):
     return add.EXIT_FOR_OUTCOME[out["outcome"]]
 
 
+CANARY_BIN = "/usr/local/lib/skillcanary/bin/canary"
+
+
+def _hook(args):
+    """Answer a host's pre-tool-use hook. Never raises and never exits with
+    anything but allow (0, silent) or the host's deny: a crash fails open."""
+    host = args[1] if len(args) == 2 and args[0] == "--host" else None
+    try:
+        from canary import gate
+        from canary.hosts import claude, codex
+        adapters = {"claude": claude, "codex": codex}
+        adapter = adapters.get(host, claude)
+    except BaseException:
+        sys.stdout.write('{"hookSpecificOutput":{"hookEventName":"PreToolUse",'
+                         '"permissionDecision":"deny","permissionDecisionReason":'
+                         '"SkillCanary could not start."}}')
+        sys.stderr.write("SkillCanary could not start.\n")
+        return 2 if host != "codex" else 0
+    try:
+        if host is None:
+            raise ValueError("unknown host")
+        payload = gate.envelope(sys.stdin.read())
+        home = os.path.expanduser("~")
+        try:
+            call = adapter.parse_pre_tool_use(payload)
+        except ValueError:
+            call = gate.unmapped(payload)
+        protected = gate.protected_paths(home, payload["cwd"], adapters.values())
+        reason = gate.decide(call, protected, home, CANARY_BIN)
+    except BaseException:
+        reason = gate.UNREADABLE
+    if reason is None:
+        return 0
+    out, code = adapter.deny(reason)
+    sys.stdout.write(out)
+    sys.stderr.write(reason + "\n")
+    return code
+
+
 def main(argv):
+    if argv[:1] == ["hook"]:
+        return _hook(argv[1:])
     if not argv or argv[0] in ("-h", "--help", "help"):
         print(USAGE)
         return 0 if argv else EXIT_USAGE

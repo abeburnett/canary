@@ -120,9 +120,13 @@ Reads the host's pre-tool-use JSON on stdin (the shape both hosts share:
 call installs, writes into, or reads from a protected location.
 
 - Allow: exit 0 with no output. The host's normal permission flow continues.
-- Deny: print exactly what the adapter's `deny(reason)` returns and exit with
-  its code. The hosts differ, and a wrong pairing fails open:
-  - Claude Code: deny JSON on stdout, exit 2 (exit 2 always blocks).
+- Deny: print exactly what the adapter's `deny(reason)` returns, write the
+  reason to stderr, and exit with the adapter's code. The hosts differ, and a
+  wrong pairing fails open:
+  - Claude Code: deny JSON on stdout, reason on stderr, exit 2. Verified
+    2026-09-26 on the installed Claude Code: stderr with exit 2, deny JSON
+    with exit 0, and deny JSON with exit 2 each block; a hook that exits 1
+    lets the call run.
   - Codex: deny JSON on stdout with **exit 0**, or a reason on stderr with
     exit 2. Deny JSON with exit 2 and empty stderr **runs the command**
     (verified on Codex 0.157.1, `docs/codex-facts.md`).
@@ -132,10 +136,38 @@ call installs, writes into, or reads from a protected location.
 - Any internal error: the hook still prints its host's deny. In both hosts a
   missing hook command, a crash or malformed output lets the call run, so the
   hook catches every exception, and `canary` is installed root-owned where an
-  agent cannot remove it.
+  agent cannot remove it. Setup also checks that the Python the hook runs on
+  works, because macOS's `/usr/bin/python3` stub fails when the command-line
+  tools are missing, and a failing hook fails open.
 
-Protected: every discovery root of every supported host (resolved, case-folded
-on macOS), the quarantine directory, the lockfile, and Canary's own install.
+Protected: every discovery root and configuration file of every supported
+host (resolved, case-folded on macOS), the quarantine directory, the
+lockfile, Canary's own install and the managed policy files.
+
+Decision rules (`canary/gate.py`, `decide`), in order:
+
+1. The payload is not a pre-tool-use event with a tool name, a tool input
+   object and an absolute `cwd`: deny.
+2. A command that runs a skill or plugin installer (`npx`, `pnpm dlx`,
+   `bunx` or `yarn dlx` with `skills add|install|update`;
+   `claude plugin install|marketplace add|update`; `codex plugin` installs;
+   `git clone` or `curl`/`wget` output into a protected folder): deny, "use
+   `canary add <source>`".
+3. `canary` itself is allowed when the command's first word is exactly
+   `canary`, it has no other shell syntax, and the `canary` on `PATH` is the
+   root-owned install (so an agent cannot put its own `canary` first).
+4. The adapter mapped the call exactly (a file tool, or a simple shell
+   command): deny when a written path is inside a protected location, or a
+   read path is inside the quarantine. Writing to a folder that contains a
+   protected location (`rm -rf ~/.claude`) counts as writing into it.
+5. The adapter could not map it exactly (compound shell, variables,
+   unknown tools such as MCP calls): the call's text is screened. Deny when
+   it names a protected location (the resolved paths, their `~` and `$HOME`
+   spellings, and the fragments `.claude/skills`, `.agents/skills`,
+   `.claude/plugins`, `.codex/skills`, `.canary-lock`,
+   `Application Support/Canary`, `managed-settings`, `/etc/codex`);
+   allow otherwise, so ordinary compound commands keep working.
+6. Otherwise allow.
 
 ## Host adapters (`canary/hosts/<host>.py`)
 
