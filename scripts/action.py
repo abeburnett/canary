@@ -3,8 +3,10 @@
 
 Each skill folder (a directory holding SKILL.md) is scanned as one package, so
 findings spread across a skill's files are totalled the way the scanner totals
-them. When the path holds no skill folder, the whole path is one package. The
-Action's verdict is the strictest package verdict.
+them. Everything else under the path, except those folders and the
+checkout's own .git, is scanned as one more package, so a harmless skill
+folder cannot hide files next to it. The Action's verdict is the strictest
+package verdict.
 """
 
 import hashlib
@@ -99,12 +101,27 @@ def resolve_target(workspace, supplied_path):
 
 
 def skill_packages(target):
-    """Directories holding a SKILL.md (any case), or the target itself."""
+    """[(package, exclude)]: each skill folder, then the rest of the path."""
     if not target.is_dir():
-        return [target]
-    packages = sorted({Path(root) for root, _, files in os.walk(target)
-                       if any(name.lower() == "skill.md" for name in files)})
-    return packages or [target]
+        return [(target, [])]
+    skills = sorted({Path(root) for root, _, files in os.walk(target)
+                     if any(name.lower() == "skill.md" for name in files)})
+    if skills == [target]:
+        return [(target, [".git"] if (target / ".git").is_dir() else [])]
+    exclude = [os.path.relpath(skill, target) for skill in skills if skill != target]
+    if (target / ".git").is_dir():
+        exclude.append(".git")
+    packages = [(skill, []) for skill in skills if skill != target]
+    skipped = {target / rel for rel in exclude}
+    rest_has_files = False
+    for root, dirs, files in os.walk(target):
+        dirs[:] = [d for d in dirs if Path(root) / d not in skipped]
+        if files:
+            rest_has_files = True
+            break
+    if rest_has_files or not packages:
+        packages.append((target, exclude))
+    return packages
 
 
 def display_path(path, workspace):
@@ -115,9 +132,12 @@ def display_path(path, workspace):
     return "path-sha256:" + hashlib.sha256(rel.encode("utf-8", "replace")).hexdigest()[:12]
 
 
-def scan(package, environment):
+def scan(package, exclude, environment):
+    command = [sys.executable, str(CANARY), "scan", str(package), "--json"]
+    for rel in exclude:
+        command += ["--exclude", rel]
     completed = subprocess.run(
-        [sys.executable, str(CANARY), "scan", str(package), "--json"],
+        command,
         env=environment, text=True, capture_output=True, check=False,
     )
     if completed.returncode not in SCANNER_EXIT:
@@ -181,8 +201,8 @@ def main():
     scanner_environment.pop("CANARY_API_TOKEN", None)
 
     overall, complete = "LIKELY_SAFE", True
-    for package in skill_packages(target):
-        report = scan(package, scanner_environment)
+    for package, exclude in skill_packages(target):
+        report = scan(package, exclude, scanner_environment)
         verdict = report["verdict"]
         overall = max(overall, verdict, key=VERDICT_RANK.get)
         complete = complete and report["coverage"]["complete"]

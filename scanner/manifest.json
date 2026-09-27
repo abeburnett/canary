@@ -1,10 +1,10 @@
 {
-  "version": "783af6a1f300f11d9fb55c1a4c77ded8129a8324",
+  "version": "cfc070c502af3619243714ffe38bc0f55ad908a2",
   "files": {
     "bin/canary": "6be3492d4a1c5373bf1040f4a612737548593853448d95f436d5828e9545ffa9",
     "canary/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "canary/catalog.py": "919f88a52c06de905d60be5b10e12955b68977dd7ef7ecb45c44b6d341d32f64",
-    "canary/cli.py": "908351deb471d5e6a3dcee288539040f535e5ea6462e01c7850014eb7d2c64a0",
-    "canary/scan.py": "b95fbe57a606e35a387517cde5762fe240a1d7f0d92720b9b1decd784ac5e9a4"
+    "canary/catalog.py": "069a8cd663f0cf7f58e2d685032786d00901c35fe5e998c1cb1f6ffdddfb25b7",
+    "canary/cli.py": "c0e7152f722b835a9d47bceef5315125f084f06e4a154645bae090cff44cdc88",
+    "canary/scan.py": "bf22e3af91bfbf27cb0bd9341ed19320e19b272468477250e5dc6306df2672af"
   }
 }

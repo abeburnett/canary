@@ -18,15 +18,18 @@ The action emits `verdict` (`safe`, `review`, or `unsafe`), `layer1_verdict`
 
 Each skill folder under `path` (a directory holding `SKILL.md`) is scanned as
 one package, so findings spread across a skill's files are totalled together.
-When `path` holds no skill folder, the whole path is one package. The overall
+Everything else under `path`, except those folders and the checkout's own
+`.git`, is scanned as one more package, so a harmless skill folder cannot hide
+the files next to it. The overall
 verdict is the strictest package verdict. A package that runs code (scripts,
 hooks, MCP configuration, tool grants) is `NEEDS_REVIEW` by design: a person
 approves it once.
 
 If any file could not be read (binary, too large, a link inside the package),
 the scan cannot pass: the step fails unless `fail-on` is `never`. When `path`
-has no skill folder, point it at the folder you mean to scan; scanning a whole
-repository includes `.git`, whose binary objects make coverage incomplete.
+includes binary files (images other than PNG, JPEG, GIF and WebP, compiled
+code, archives), coverage is incomplete and the step fails; point `path` at the
+folders you mean to scan.
 
 The log reports each package's verdict, score, threat categories and
 capability kinds. It never prints matched skill text, and prints a package's
