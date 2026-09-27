@@ -16,7 +16,28 @@ DOC_CONTEXT = re.compile(
     r"|\b[a-z][a-z0-9_]*(api[_-]?key|webhook_secret)\b",
     re.IGNORECASE)
 
-# (check_id, category, severity, description, paragraph_pass, [(regex, doc), ...])
+_DOWNLOADER = re.compile(r"\b(curl|wget|iwr|invoke-webrequest)\b", re.I)
+_PIPE_TO_SHELL = re.compile(
+    r"\|\s*(sudo\s+)?(sh|bash|zsh|fish|dash|ksh|python\d?|node|perl|ruby|iex)\b", re.I)
+_CURL = re.compile(r"\bcurl\b", re.I)
+_UPLOAD_FLAG = re.compile(r"(\s-d\b|--data|--data-binary|\s-F\b|--form|\s-T\b|--upload-file)", re.I)
+
+
+def _download_piped_to_shell(text):
+    """A downloader, and later on the same line a pipe into a shell. Linear time."""
+    m = _DOWNLOADER.search(text)
+    return bool(m and _PIPE_TO_SHELL.search(text, m.end()))
+
+
+def _curl_upload(text):
+    """curl, and later on the same line an option that sends data. Linear time."""
+    m = _CURL.search(text)
+    return bool(m and _UPLOAD_FLAG.search(text, m.end()))
+
+
+# (check_id, category, severity, description, paragraph_pass, [(pattern, doc), ...])
+# A pattern is a regex source string or a function of the text; functions
+# replace patterns that would need an unbounded gap between two tokens.
 CHECKS = [
     ("instruction-override", "INSTRUCTION_OVERRIDE", "high",
      "Tries to override or discard the agent's own instructions", True,
@@ -46,10 +67,10 @@ CHECKS = [
       (r"requestbin\.(com|net)|requestcatcher\.com|webhook\.site|pipedream\.net|interact\.sh", False),
       (r"[a-z0-9-]+\.ngrok(-free)?\.(io|app|dev)", False),
       (r"(send|post|upload|forward|exfiltrate|transmit)\s+.{0,60}?\s+to\s+https?://", False),
-      (r"curl\s+[^\n]{0,300}?(-d\b|--data|--data-binary|-F\b|--form|-T\b|--upload-file)", False)]),
+      (_curl_upload, False)]),
     ("shell-pipe", "SHELL_PIPE", "high",
      "Runs a remote download straight in a shell or interpreter", True,
-     [(r"(curl|wget|iwr|invoke-webrequest)\b[^|\n]{0,300}\|\s*(sudo\s+)?(sh|bash|zsh|fish|dash|ksh|python\d?|node|perl|ruby|iex)\b", False),
+     [(_download_piped_to_shell, False),
       (r"\b(sh|bash|zsh|source|\.)\s+<\(\s*(curl|wget)", False),
       (r"\$\(\s*(curl|wget)\b", False),
       (r"\beval\s+[\"']?\$\(", False)]),
@@ -99,7 +120,14 @@ EXTRA = {
                           "Word mixes Latin with Cyrillic or Greek look-alike letters"),
 }
 
-_COMPILED = [(cid, cat, sev, desc, para, [(re.compile(p, re.IGNORECASE), doc) for p, doc in pats])
+def _matcher(pattern):
+    if callable(pattern):
+        return pattern
+    rx = re.compile(pattern, re.IGNORECASE)
+    return lambda text: rx.search(text) is not None
+
+
+_COMPILED = [(cid, cat, sev, desc, para, [(_matcher(p), doc) for p, doc in pats])
              for cid, cat, sev, desc, para, pats in CHECKS]
 
 
@@ -127,8 +155,8 @@ def match_line(path, line_no, line, raw_line):
     doc_context = DOC_CONTEXT.search(line) is not None
     for cid, _, sev, _, _, patterns in _COMPILED:
         hit = dampened = False
-        for rx, doc in patterns:
-            if rx.search(line):
+        for matches, doc in patterns:
+            if matches(line):
                 if doc and doc_context:
                     dampened = True
                 else:
@@ -144,8 +172,8 @@ def match_paragraph(path, start_line, joined, raw_joined):
     for cid, _, _, _, para, patterns in _COMPILED:
         if not para:
             continue
-        for rx, doc in patterns:
-            if not doc and rx.search(joined):
+        for matches, doc in patterns:
+            if not doc and matches(joined):
                 out.append(finding(cid, path, start_line, raw_joined))
                 break
     return out

@@ -28,7 +28,7 @@ when an agent reads them. The limits of each enforcement layer are stated in
 The Claude Code and Codex plugins in each marketplace are front doors: they
 explain Canary and run `canary setup`. They are not the enforcement.
 
-## `canary scan <path> [--json | --text] [--excerpts]`
+## `canary scan <path> [--json | --text] [--excerpts] [--exclude <relative-path>]...`
 
 Scans a file or a package directory. Never executes, imports or installs
 anything it scans.
@@ -48,7 +48,7 @@ Exit codes (every Canary command uses these):
 ```json
 {
   "schema": "canary.scan/1",
-  "target": "/abs/path",
+  "target_id": "f:…",
   "package_digest": "sha256:…",
   "verdict": "LIKELY_SAFE | NEEDS_REVIEW | UNSAFE",
   "threat_verdict": "LIKELY_SAFE | NEEDS_REVIEW | UNSAFE",
@@ -76,13 +76,18 @@ Rules the verdict follows:
   capability that runs code is present.
 - Skip reasons: `binary`, `too_large`, `unreadable`, `special_file`,
   `symlink` (links inside a package are never followed), `symlink_loop`,
-  `too_deep` (over 64 levels), `too_many_entries` (over 5,000), and `media`.
-  Every reason except `media` makes coverage incomplete. `media` needs an
-  image, font or PDF extension, matching first bytes, and content that does
-  not decode as text; anything that decodes as text is scanned as text.
+  `too_deep` (over 64 levels), `too_many_entries` (over 5,000 files and
+  directories), and `media`. Every reason except `media` makes coverage
+  incomplete. `media` is a PNG, JPEG, GIF, WebP or WOFF file whose structure
+  parses (PNG chunk CRCs, JPEG segments, GIF blocks, WebP and WOFF lengths);
+  anything that decodes as text is scanned as text, and PDFs and other
+  binaries are incomplete coverage.
 - Attacker-controlled text stays out of default output: no excerpts, and file
-  names appear only as opaque `path_id` values. `--excerpts` adds `path` and
-  `excerpt` fields and is for a person's terminal, never an agent.
+  names and the target path appear only as opaque `path_id` / `target_id`
+  values. `--excerpts` adds `path`, `excerpt` and `target` fields and is for a
+  person's terminal, never an agent.
+- `--exclude` names paths, relative to a directory target, that are scanned as
+  separate packages (the Action uses it to scan files outside skill folders).
 
 Capability kinds that block auto-approval: `shell_injection` (a `` !`cmd` ``
 line or a ```` ```! ```` block in a skill), `allowed_tools`, `skill_hooks`
@@ -91,13 +96,18 @@ the declarative set below, one that is not valid JSON, or any
 `marketplace.json`), `plugin_hooks` (any `hooks.json`), `mcp_config`
 (`.mcp.json`, `mcp.json`), `skill_dependencies` (an `agents/*.yaml` that
 declares dependencies, MCP servers, tools, permissions or install steps),
+`unparsed_frontmatter` (frontmatter this parser cannot read line by line:
+flow style, escaped or unusual keys, an unclosed block, a continuation that
+looks like a key), `instructs_execution` (Markdown telling the agent to run an
+interpreter on a file, such as `python3 helper.txt` or `awk -f x.awk`),
 `bin_dir` (any path segment named `bin`, any case), `script` (a script
 extension or a shebang), `executable_bit`, `package_manifest`
 (`package.json`, `pyproject.toml`, `requirements.txt` and similar), and
 `unrecognized_file` (a text file whose type is not on the inert-document
 allowlist in `canary/scan.py`; unknown means possibly runnable).
 
-Listed but not blocking: `plugin_manifest` (a `plugin.json` using only
+Listed but not blocking: `unknown_frontmatter_key` (hosts ignore keys they do
+not define), `plugin_manifest` (a `plugin.json` using only
 `$schema`, `name`, `version`, `description`, `author`, `homepage`,
 `repository`, `license`, `keywords`, `skills` as paths, `displayName`,
 `category`, `tags`) and `context_fork`. Hook, MCP and command declarations
