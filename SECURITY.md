@@ -53,6 +53,9 @@ These are documented, not bugs; the site and `docs/architecture.md` state them.
 - **Skill roots reached through a link are not locked.** If `~/.claude`,
   `~/.agents` or a `skills` folder in them is a symbolic link, Lockdown skips
   it rather than follow the link, and `canary doctor` reports it.
+- **Hard-linked files in a skill root stay unlocked.** A file with more than
+  one name could be another file elsewhere on the Mac, so SkillCanary never
+  changes its owner or permissions, and `canary doctor` reports it.
 - **A recently used `sudo` can be reused** from the same terminal window, for
   a few minutes, by anything running there, including an agent. Close the
   window after using `sudo`.

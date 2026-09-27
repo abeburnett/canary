@@ -349,5 +349,41 @@ class LockdownNeverFollowsLinks(unittest.TestCase):
         self.assertTrue(any(".claude" in g for g in mac.doctor()[1]))
 
 
+
+@MACOS
+class NeverTouchesWhatItCannotSeeOrOwn(unittest.TestCase):
+    """0.1.1 round 3: an unreadable policy is not a missing one, and a file
+    with more than one name is never re-owned or re-permissioned."""
+
+    def test_an_unreadable_policy_is_a_manual_step(self):
+        mac = Mac()
+        policy = mac.at(CODEX)
+        os.makedirs(os.path.dirname(policy))
+        with open(policy, "w") as fh:
+            fh.write("# the administrator's policy\n")
+        os.chmod(policy, 0o000)
+        try:
+            out, _ = mac.setup("guard")
+            self.assertEqual([m["path"] for m in out["manual"]], [policy])
+        finally:
+            os.chmod(policy, 0o600)
+        with open(policy) as fh:
+            self.assertEqual(fh.read(), "# the administrator's policy\n")
+
+    def test_hard_linked_files_are_left_alone_and_reported(self):
+        mac = Mac()
+        outside = mac.at("etc/outside.conf")
+        os.makedirs(os.path.dirname(outside))
+        with open(outside, "w") as fh:
+            fh.write("x")
+        os.chmod(outside, 0o666)
+        os.link(outside, os.path.join(mac.home, ".claude", "skills", "linked.md"))
+        mac.setup("lockdown")
+        self.assertEqual(os.stat(outside).st_mode & 0o777, 0o666)
+        self.assertTrue(any("more than one name" in g for g in mac.doctor()[1]))
+        mac.setup("scan")
+        self.assertEqual(os.stat(outside).st_mode & 0o777, 0o666)
+
+
 if __name__ == "__main__":
     unittest.main()

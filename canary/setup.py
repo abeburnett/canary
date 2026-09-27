@@ -122,7 +122,14 @@ def _policies(prefix):
     return out
 
 
+MISSING = object()
+
+
 def _read(path):
+    """The file's text; MISSING only when nothing is there. An unreadable or
+    undecodable file returns None, which is never treated as missing."""
+    if not os.path.lexists(path):
+        return MISSING
     try:
         with open(path, encoding="utf-8") as fh:
             return fh.read()
@@ -144,13 +151,14 @@ def plan(level, home, prefix="/"):
     files, remove, manual, created = [], [], [], {}
     for target, (content, earlier) in _policies(prefix).items():
         now = _read(target)
-        sha = hashlib.sha256(now.encode()).hexdigest() if now is not None else None
-        ours = now is not None and (now == content or now in earlier or (
+        known = isinstance(now, str)
+        sha = hashlib.sha256(now.encode()).hexdigest() if known else None
+        ours = known and (now == content or now in earlier or (
             isinstance(recorded.get(target), str) and recorded[target] == sha))
         if level == "scan":
             if ours:
                 remove.append(target)
-        elif now is None or ours:
+        elif now is MISSING or ours:
             if now != content:
                 files.append({"path": target, "content": content})
             created[target] = hashlib.sha256(content.encode()).hexdigest()
@@ -228,6 +236,10 @@ def change_roots(action, owner, person, home, roots):
                     st = os.stat(name, dir_fd=dfd, follow_symlinks=False)
                     if stat.S_ISDIR(st.st_mode):
                         continue  # fwalk visits it next, through its own handle
+                    if stat.S_ISREG(st.st_mode) and st.st_nlink > 1:
+                        # Another name for this file may live outside the
+                        # root; changing it would change that file too.
+                        continue
                     os.chown(name, uid, gid, dir_fd=dfd, follow_symlinks=False)
                     if action == "lock" and stat.S_ISREG(st.st_mode):
                         os.chmod(name, st.st_mode & 0o7755, dir_fd=dfd, follow_symlinks=False)
@@ -390,6 +402,17 @@ def doctor(home=None, prefix="/", expected_uid=0):
         if linked:
             gaps.append(f"{linked[0]} is a link, so SkillCanary cannot lock or safely write "
                         f"{root}; make it a real folder.")
+    for root in lock_roots(home):
+        if os.path.islink(root) or not os.path.isdir(root):
+            continue
+        for dirpath, _, filenames in os.walk(root):
+            if any(os.lstat(os.path.join(dirpath, f)).st_nlink > 1
+                   for f in filenames if not os.path.islink(os.path.join(dirpath, f))):
+                gaps.append(f"{root} contains a file with more than one name (a hard link); "
+                            "SkillCanary leaves it unlocked. Replace it with a plain copy.")
+                break
+        else:
+            continue
     if level == "lockdown":
         for root in lock_roots(home):
             try:
