@@ -226,10 +226,6 @@ class CanaryActionTests(unittest.TestCase):
             self.assertNotIn(token, present.stdout)
             self.assertNotIn(token, present.stderr)
 
-
-if __name__ == "__main__":
-    unittest.main()
-
     def test_an_unlisted_module_in_a_subfolder_is_refused(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -245,3 +241,7 @@ if __name__ == "__main__":
             result, outputs = self.run_action(workspace, path="SKILL.md", script=script)
             self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
             self.assertIn("do not match the manifest", result.stdout + result.stderr)
+
+
+if __name__ == "__main__":
+    unittest.main()
