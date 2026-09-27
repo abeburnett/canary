@@ -13,6 +13,21 @@ baseline). Owner decisions, 2026-09-26:
 - Claude builds the core and the Claude Code side; Codex builds its own side
   from `docs/codex-brief.md`, against `docs/architecture.md`.
 
+Owner decisions, later on 2026-09-26:
+
+- Drop the name "Jev" from Canary. The product is SkillCanary; the command is
+  `canary`. The rename happens during integration.
+- Protection is the user's choice at setup, stated openly, with three levels:
+  Scan (no password), Guard (managed hooks; password once), Lockdown (adds
+  root-owned user-level skill folders; plugin updates go through
+  `canary update`). Setup asks rather than defaulting silently, recommends a
+  level from what it detects, and can be reversed; `canary doctor` prints the
+  current level and its gaps; public claims are made per level.
+
+Pending owner answers: pulling and replacing the live `canary-kit.zip`;
+Claude integrating `program/2026-09-26-paid-launch` onto this scanner; an
+independent Opus review of the payments and badge code before live payments.
+
 ## Slice 1: scanner hardening
 
 Done when:
