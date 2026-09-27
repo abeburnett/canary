@@ -44,6 +44,15 @@ These are documented, not bugs; the site and `docs/architecture.md` state them.
   could change SkillCanary before you run `canary setup`. The Mac installer
   puts it in `/Library/Application Support/SkillCanary`, which macOS keeps
   root-owned.
+- **The `canary` command link can be replaced on some Macs.** It lives in
+  `/usr/local/bin`, which an older Homebrew may have given to your account.
+  Something running as you could then point `canary` at another program. The
+  hooks are unaffected: they run SkillCanary by its full, root-owned path,
+  `/Library/Application Support/SkillCanary/bin/canary`, which you can also
+  use yourself for setup.
+- **Skill roots reached through a link are not locked.** If `~/.claude`,
+  `~/.agents` or a `skills` folder in them is a symbolic link, Lockdown skips
+  it rather than follow the link, and `canary doctor` reports it.
 - **A recently used `sudo` can be reused** from the same terminal window, for
   a few minutes, by anything running there, including an agent. Close the
   window after using `sudo`.

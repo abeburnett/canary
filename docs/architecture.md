@@ -423,9 +423,14 @@ The privileged step is one shell script passed to
 on disk, so nothing can swap it while the dialog is open. Canary's own files
 travel inside it as a base64 archive whose SHA-256 the script checks before
 extracting. The script records the level and every file it created in
-`/Library/Application Support/SkillCanary/state.json` (root-owned; setup also reads a 0.1.0 `state.json` from the old location, and never deletes inside that folder as root, because the person controls it). Moving to a lower level
-removes only files Canary created and that still match what it wrote, and
-returns the roots to the person. The program itself stays installed at every
+`/Library/Application Support/SkillCanary/state.json` (root-owned; setup reads a 0.1.0 `state.json` from the old location only as a hint to the previous level, because the person may control that folder, and never deletes inside it as root). Nothing read from disk authorizes a root operation by itself. Setup only
+ever writes or removes its two policy files, and only when their content is
+exactly what this or an earlier SkillCanary writes, or their hash is recorded
+in the root-owned state; any other content is a manual step. It only ever
+locks or unlocks the two user skill roots, through the root-owned `canary`,
+which opens each folder from `/` without following links and skips (and
+`canary doctor` reports) a root reached through a link. Moving to a lower
+level removes those files and returns the roots to the person. The program itself stays installed at every
 level, since the Mac installer may have put it there.
 
 At Lockdown, `canary add` copies the checked snapshot into a root-owned

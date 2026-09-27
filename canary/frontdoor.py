@@ -72,16 +72,41 @@ def _ours(folder_fd):
         return stat.S_ISREG(os.fstat(fh.fileno()).st_mode) and fh.read().endswith(MARKER)
 
 
+def _open_root(home, root, create=False):
+    """An fd for root, opened from home one folder at a time without
+    following links (the home folder itself is taken as given)."""
+    rel = [c for c in os.path.relpath(root, home).split(os.sep) if c]
+    if not rel or rel[0] == "..":
+        raise OSError("skill root is not under the home folder")
+    fd = os.open(home, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        for part in rel:
+            try:
+                nfd = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            except FileNotFoundError:
+                if not create:
+                    raise
+                os.mkdir(part, 0o755, dir_fd=fd)
+                nfd = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            os.close(fd)
+            fd = nfd
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
 def targets(home, roots):
     """Skills roots where setup may write the skill: its canary folder is
     missing, or looks like SkillCanary's. Links are never followed."""
     out = []
     for root in roots:
         try:
-            root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            root_fd = _open_root(home, root)
+        except FileNotFoundError:
+            out.append(root)
+            continue
         except OSError:
-            if not os.path.lexists(root):
-                out.append(root)
             continue
         try:
             try:
@@ -102,12 +127,14 @@ def targets(home, roots):
     return out
 
 
-def write(root):
-    """Write the skill into root/canary as the current user, through open
-    folder handles and without following links, re-checking at write time.
-    Returns False when the folder is no longer safe to write."""
-    os.makedirs(root, exist_ok=True)
-    root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+def write(home, root):
+    """Write the skill into root/canary as the current user, through folder
+    handles opened from home without following links, re-checking at write
+    time. Returns False when the folder is no longer safe to write. A file
+    dropped into the folder between that check and the final rename can
+    still be replaced; only something already running as the person can do
+    that, and it controls the folder anyway."""
+    root_fd = _open_root(home, root, create=True)
     try:
         try:
             os.mkdir("canary", 0o755, dir_fd=root_fd)

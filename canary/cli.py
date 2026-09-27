@@ -240,6 +240,9 @@ def main(argv):
             return _doctor(rest)
         if command == "digest":
             return _digest(rest)
+        if command == "_roots" and len(rest) >= 5 and rest[0] in ("lock", "unlock"):
+            # Internal: run by the privileged setup step only.
+            return setup.change_roots(rest[0], rest[1], rest[2], rest[3], rest[4:])
     except Exception as exc:  # fail closed: callers treat 3 as NEEDS_REVIEW
         # Exception text can quote file names from the package being checked.
         print(f"canary: internal error ({type(exc).__name__})", file=sys.stderr)

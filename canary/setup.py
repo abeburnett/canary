@@ -87,45 +87,155 @@ def _sha_file(path):
         return None
 
 
+def _state_at(prefix, lib):
+    try:
+        with open(_at(prefix, lib + "/state.json"), encoding="utf-8") as fh:
+            state = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    return state if isinstance(state, dict) and state.get("level") in LEVELS else None
+
+
 def read_state(prefix="/"):
-    """This Mac's recorded level, from the current install or a 0.1.0 one."""
+    """This Mac's recorded level: the root-owned install's state, else a 0.1.0
+    state from a folder the person may control (a hint only; see plan)."""
     for lib in (LIB,) + OLD_LIBS:
-        try:
-            with open(_at(prefix, lib + "/state.json"), encoding="utf-8") as fh:
-                state = json.load(fh)
-        except (OSError, ValueError):
-            continue
-        return state if isinstance(state, dict) and state.get("level") in LEVELS else None
+        state = _state_at(prefix, lib)
+        if state:
+            return state
     return None
 
 
+def _policies(prefix):
+    """The only files setup ever writes or removes: {path: (content now,
+    contents an earlier SkillCanary wrote)}."""
+    out = {}
+    for host, adapter in (("claude", claude_host), ("codex", codex_host)):
+        for planned in adapter.managed_install_plan(_at(prefix, LIB + "/bin/canary")):
+            target = _at(prefix, planned.path)
+            earlier = set()
+            for old in OLD_LIBS:
+                for was in adapter.managed_install_plan(_at(prefix, old + "/bin/canary")):
+                    if _at(prefix, was.path) == target:
+                        earlier.add(was.content)
+            out[target] = (planned.content, earlier)
+    return out
+
+
+def _read(path):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return fh.read()
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
 def plan(level, home, prefix="/"):
-    """What the privileged script must do to move this Mac to `level`."""
-    previous = read_state(prefix) or {"level": "scan", "created": {}, "locked": []}
-    files, remove, manual = [], [], []
-    if level != "scan":
-        for host, adapter in (("claude", claude_host), ("codex", codex_host)):
-            for planned in adapter.managed_install_plan(_at(prefix, LIB + "/bin/canary")):
-                target, content = _at(prefix, planned.path), planned.content
-                recorded = previous.get("created", {}).get(target)
-                if os.path.lexists(target) and recorded != _sha_file(target):
-                    manual.append({"path": target, "block": content})
-                elif _sha_file(target) != hashlib.sha256(content.encode()).hexdigest():
-                    files.append({"path": target, "content": content})
-    keep = {f["path"] for f in files} | set(previous.get("created", {})) if level != "scan" else set()
-    for path, sha in previous.get("created", {}).items():
-        if level == "scan" and _sha_file(path) == sha:
-            remove.append(path)
-    created = {} if level == "scan" else {
-        p: s for p, s in previous.get("created", {}).items() if p in keep and _sha_file(p) == s}
-    created.update({f["path"]: hashlib.sha256(f["content"].encode()).hexdigest() for f in files})
+    """What the privileged script must do to move this Mac to `level`.
+
+    Nothing read from disk authorizes a root operation by itself: setup only
+    touches the two policy files and the two skill roots it knows, rewrites
+    or removes a policy file only when its content is exactly what this or an
+    earlier SkillCanary writes (or its hash is recorded in the root-owned
+    state), and leaves anything else as a manual step."""
+    trusted = _state_at(prefix, LIB) or {}
+    hint = read_state(prefix) or {"level": "scan"}
+    recorded = trusted.get("created") if isinstance(trusted.get("created"), dict) else {}
+    files, remove, manual, created = [], [], [], {}
+    for target, (content, earlier) in _policies(prefix).items():
+        now = _read(target)
+        sha = hashlib.sha256(now.encode()).hexdigest() if now is not None else None
+        ours = now is not None and (now == content or now in earlier or (
+            isinstance(recorded.get(target), str) and recorded[target] == sha))
+        if level == "scan":
+            if ours:
+                remove.append(target)
+        elif now is None or ours:
+            if now != content:
+                files.append({"path": target, "content": content})
+            created[target] = hashlib.sha256(content.encode()).hexdigest()
+        else:
+            manual.append({"path": target, "block": content})
+    roots = lock_roots(home)
     return {"level": level, "files": files, "remove": remove, "manual": manual,
-            "frontdoor": frontdoor.targets(home, lock_roots(home)),
-            "lock": lock_roots(home) if level == "lockdown" else [],
-            "unlock": [r for r in previous.get("locked", []) if level != "lockdown"],
+            "frontdoor": frontdoor.targets(home, roots),
+            "lock": roots if level == "lockdown" else [],
+            "unlock": roots if level != "lockdown" and hint.get("level") == "lockdown" else [],
+            "home": home,
             "state": {"level": level, "created": created,
-                      "locked": lock_roots(home) if level == "lockdown" else [],
+                      "locked": roots if level == "lockdown" else [],
                       "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}}
+
+
+def _open_dirs(path, create_under=None, person=None):
+    """An fd for the folder at `path`, opened from / one component at a time
+    without following links. Missing components below `create_under` are
+    created owned by `person` (uid, gid). Raises OSError on a link."""
+    parts = [c for c in os.path.abspath(path).split("/") if c]
+    fd = os.open("/", os.O_RDONLY | os.O_DIRECTORY)
+    walked = "/"
+    try:
+        for part in parts:
+            walked = os.path.join(walked, part)
+            try:
+                nfd = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            except FileNotFoundError:
+                if create_under is None or not walked.startswith(create_under.rstrip("/") + "/"):
+                    raise
+                os.mkdir(part, 0o755, dir_fd=fd)
+                nfd = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+                if person:
+                    os.fchown(nfd, *person)
+            os.close(fd)
+            fd = nfd
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def _ids(spec):
+    import grp
+    import pwd
+    user, _, group = spec.partition(":")
+    uid = int(user) if user.isdigit() else pwd.getpwnam(user).pw_uid
+    gid = int(group) if group.isdigit() else grp.getgrnam(group).gr_gid
+    return uid, gid
+
+
+def change_roots(action, owner, person, home, roots):
+    """Lock (owner, no group/other write) or unlock (back to the person) each
+    skill root through folder handles, never following links. A root reached
+    through a link is skipped and reported; `canary doctor` shows it as a gap.
+    Runs as root inside the privileged step, from the root-owned install."""
+    uid, gid = _ids(owner if action == "lock" else person)
+    pid = _ids(person)
+    skipped = []
+    for root in roots:
+        try:
+            fd = _open_dirs(root, create_under=home if action == "lock" else None, person=pid)
+        except FileNotFoundError:
+            continue
+        except OSError:
+            skipped.append(root)
+            continue
+        try:
+            for _, dirnames, filenames, dfd in os.fwalk(".", dir_fd=fd, follow_symlinks=False):
+                os.fchown(dfd, uid, gid)
+                if action == "lock":
+                    os.fchmod(dfd, os.fstat(dfd).st_mode & 0o7755 | 0o755)
+                for name in filenames + dirnames:
+                    st = os.stat(name, dir_fd=dfd, follow_symlinks=False)
+                    if stat.S_ISDIR(st.st_mode):
+                        continue  # fwalk visits it next, through its own handle
+                    os.chown(name, uid, gid, dir_fd=dfd, follow_symlinks=False)
+                    if action == "lock" and stat.S_ISREG(st.st_mode):
+                        os.chmod(name, st.st_mode & 0o7755, dir_fd=dfd, follow_symlinks=False)
+        finally:
+            os.close(fd)
+    for root in skipped:
+        print(f"canary: skipped {root}: it is reached through a link", file=sys.stderr)
+    return 0
 
 
 def script(p, prefix="/", owner="root:wheel", person=None):
@@ -148,12 +258,14 @@ def script(p, prefix="/", owner="root:wheel", person=None):
                   f"chmod 644 {q(f['path'] + '.canary-new')}",
                   f"mv {q(f['path'] + '.canary-new')} {q(f['path'])}"]
     lines += [f"rm -f {q(path)}" for path in p["remove"]]
-    for root in p["lock"]:
-        lines += [f"mkdir -p {q(root)}", f"chown -R {q(owner)} {q(root)}",
-                  f"chmod -R go-w {q(root)}", f"chmod 755 {q(root)}"]
-    for root in p["unlock"]:
-        if person:
-            lines.append(f"[ ! -e {q(root)} ] || chown -R {q(person)} {q(root)}")
+    # Locking and unlocking run the root-owned canary, which walks each skill
+    # root from / through folder handles and never follows a link.
+    helper = f"{PYTHON} -I -B {q(lib + '/bin/canary')}"
+    for action, roots in (("lock", p["lock"]), ("unlock", p["unlock"] if person else [])):
+        if roots:
+            lines.append(f"[ ! -x {q(lib + '/bin/canary')} ] || {helper} _roots {action} "
+                         f"{q(owner)} {q(person or owner)} {q(p['home'])} "
+                         + " ".join(q(r) for r in roots))
     # Scan keeps the program (the Mac installer may have put it there) and
     # records the level; only the protection is removed.
     state = base64.b64encode(json.dumps(p["state"], indent=2).encode()).decode("ascii")
@@ -201,7 +313,7 @@ def choose_level():
 def _write_frontdoor(p):
     for root in p["frontdoor"]:
         try:
-            frontdoor.write(root)
+            frontdoor.write(p["home"], root)
         except OSError:
             pass  # the skill is a convenience; protection does not depend on it
 
@@ -229,6 +341,12 @@ def setup(level=None, *, home=None, prefix="/", runner=run_as_admin, chooser=cho
         _write_frontdoor(p)
     return {"outcome": "done", "level": level,
             "manual": [{"path": m["path"], "block": m["block"]} for m in p["manual"]]}, 0
+
+
+def _below(home, path):
+    """Each folder from just under home down to path."""
+    rel = os.path.relpath(path, home).split(os.sep)
+    return [os.path.join(home, *rel[:i + 1]) for i in range(len(rel))]
 
 
 def doctor(home=None, prefix="/", expected_uid=0):
@@ -267,6 +385,11 @@ def doctor(home=None, prefix="/", expected_uid=0):
             has_hook = False
         if not has_hook:
             gaps.append(f"{name} is not running Canary's hook ({policy} lacks it).")
+    for root in lock_roots(home):
+        linked = [c for c in _below(home, root) if os.path.islink(c)]
+        if linked:
+            gaps.append(f"{linked[0]} is a link, so SkillCanary cannot lock or safely write "
+                        f"{root}; make it a real folder.")
     if level == "lockdown":
         for root in lock_roots(home):
             try:

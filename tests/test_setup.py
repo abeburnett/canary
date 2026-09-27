@@ -244,7 +244,8 @@ class InstallsWhereNoUserCanReplaceIt(unittest.TestCase):
         os.makedirs(os.path.join(old, "bin"))
         drop_in = mac.at(DROP_IN)
         os.makedirs(os.path.dirname(drop_in))
-        old_text = '{"hooks": "0.1.0 command"}\n'
+        from canary.hosts import claude as claude_host
+        old_text = claude_host.managed_install_plan(os.path.join(old, "bin", "canary"))[0].content
         with open(drop_in, "w") as fh:
             fh.write(old_text)
         with open(os.path.join(old, "state.json"), "w") as fh:
@@ -259,6 +260,93 @@ class InstallsWhereNoUserCanReplaceIt(unittest.TestCase):
         self.assertEqual(os.path.realpath(mac.at(setup.LINK)),
                          os.path.realpath(mac.at(setup.LIB + "/bin/canary")))
         self.assertEqual(mac.doctor()[:2], ("guard", []))
+
+
+
+@MACOS
+class OldStateIsAHintNotPermission(unittest.TestCase):
+    """0.1.1 round 2: 0.1.0's state.json can sit in a folder the person
+    controls, so nothing in it may authorize a root operation."""
+
+    def forge(self, mac, state):
+        old = mac.at("usr/local/lib/skillcanary")
+        os.makedirs(old, exist_ok=True)
+        with open(os.path.join(old, "state.json"), "w") as fh:
+            json.dump(state, fh)
+
+    def victim(self, mac, name="important.conf", mode=0o600):
+        path = mac.at("etc/" + name)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as fh:
+            fh.write("KEEP\n")
+        os.chmod(path, mode)
+        return path
+
+    def test_forged_created_entries_are_never_deleted(self):
+        import hashlib
+        mac = Mac()
+        victim = self.victim(mac)
+        self.forge(mac, {"level": "guard", "locked": [], "created": {
+            victim: hashlib.sha256(b"KEEP\n").hexdigest(), mac.at("etc/unreadable"): None}})
+        mac.setup("scan")
+        self.assertTrue(os.path.exists(victim))
+        for text in mac.scripts:
+            self.assertNotIn(victim, text)
+
+    def test_forged_locked_folders_are_never_touched(self):
+        mac = Mac()
+        private = mac.at("private-folder")
+        os.makedirs(private)
+        os.chmod(private, 0o700)
+        self.forge(mac, {"level": "lockdown", "created": {}, "locked": [private]})
+        mac.setup("guard")
+        for text in mac.scripts:
+            self.assertNotIn(private, text)
+        self.assertEqual(os.stat(private).st_mode & 0o777, 0o700)
+
+    def test_a_forged_hash_cannot_claim_an_administrators_policy(self):
+        import hashlib
+        mac = Mac()
+        policy = mac.at(CODEX)
+        os.makedirs(os.path.dirname(policy))
+        with open(policy, "w") as fh:
+            fh.write("# the administrator's policy\n")
+        self.forge(mac, {"level": "guard", "locked": [], "created": {
+            policy: hashlib.sha256(b"# the administrator's policy\n").hexdigest()}})
+        out, _ = mac.setup("guard")
+        with open(policy) as fh:
+            self.assertEqual(fh.read(), "# the administrator's policy\n")
+        self.assertEqual([m["path"] for m in out["manual"]], [policy])
+
+
+@MACOS
+class LockdownNeverFollowsLinks(unittest.TestCase):
+    def test_a_linked_skills_root_is_not_locked_and_doctor_says_so(self):
+        mac = Mac()
+        private = mac.at("private-folder")
+        os.makedirs(private)
+        os.chmod(private, 0o700)
+        root = os.path.join(mac.home, ".claude", "skills")
+        os.rmdir(root)
+        os.symlink(private, root)
+        mac.setup("lockdown")
+        self.assertEqual(os.stat(private).st_mode & 0o777, 0o700)
+        self.assertTrue(any(".claude/skills" in g for g in mac.doctor()[1]))
+
+    def test_a_link_above_the_skills_root_is_refused_too(self):
+        mac = Mac()
+        elsewhere = mac.at("elsewhere")
+        os.makedirs(os.path.join(elsewhere, "skills"))
+        os.chmod(elsewhere, 0o700)
+        claude = os.path.join(mac.home, ".claude")
+        os.rmdir(os.path.join(claude, "skills"))
+        os.rmdir(claude)
+        os.symlink(elsewhere, claude)
+        mac.setup("lockdown")
+        self.assertEqual(os.stat(os.path.join(elsewhere, "skills")).st_mode & 0o022,
+                         os.stat(os.path.join(elsewhere, "skills")).st_mode & 0o022)
+        self.assertFalse(os.path.exists(os.path.join(elsewhere, "skills", "canary")))
+        self.assertTrue(any(".claude" in g for g in mac.doctor()[1]))
 
 
 if __name__ == "__main__":
