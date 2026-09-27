@@ -20,25 +20,23 @@ import os
 import re
 import stat
 import unicodedata
+import zlib
 
 from canary import catalog
 
 MAX_FILE_BYTES = 2 * 1024 * 1024
 MAX_ENTRIES = 5000
 MAX_DEPTH = 64
-MAX_ROOT_LINK_HOPS = 40
 
 # Document types a host reads as text and never runs.
 INERT_EXTENSIONS = {
     ".md", ".markdown", ".txt", ".text", ".rst", ".adoc", ".json", ".yaml",
     ".yml", ".toml", ".csv", ".tsv", ".xml", ".html", ".htm", ".css", ".svg",
-    ".ini", ".cfg", ".conf",
+    ".ini", ".cfg", ".conf", ".jsonl", ".ndjson",
 }
-INERT_NAMES = {
-    "license", "licence", "notice", "readme", "changelog", "authors",
-    "contributors", "copying", ".gitignore", ".gitattributes", ".editorconfig",
-    ".gitkeep", ".npmignore",
-}
+INERT_NAME = re.compile(
+    r"^(license|licence|notice|readme|changelog|authors|contributors|copying)([-_.][\w.-]*)?$", re.I)
+INERT_DOTFILES = {".gitignore", ".gitattributes", ".editorconfig", ".gitkeep", ".npmignore"}
 SCRIPT_EXTENSIONS = {
     ".sh", ".bash", ".zsh", ".fish", ".py", ".js", ".mjs", ".cjs", ".ts",
     ".mts", ".cts", ".rb", ".pl", ".php", ".ps1", ".psm1", ".bat", ".cmd",
@@ -49,17 +47,16 @@ PACKAGE_MANIFESTS = {
     "package.json", "pyproject.toml", "requirements.txt", "gemfile",
     "cargo.toml", "go.mod", "pipfile", "composer.json",
 }
-MEDIA_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".icns",
-                    ".woff", ".woff2", ".ttf", ".otf", ".wav", ".pdf"}
-MEDIA_MAGIC = (b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff", b"GIF87a", b"GIF89a",
-               b"RIFF", b"\x00\x00\x01\x00", b"wOFF", b"wOF2", b"\x00\x01\x00\x00",
-               b"OTTO", b"icns", b"%PDF-")
+# Images and web fonts whose structure the scanner validates (see _valid_media).
+# Anything else binary, including PDFs, makes coverage incomplete.
+MEDIA_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".woff", ".woff2"}
 
 # Capability kinds that run code or grant tools. Any of them blocks auto-approval.
 REVIEW_CAPABILITIES = {
     "shell_injection", "allowed_tools", "skill_hooks", "plugin_power",
     "plugin_hooks", "mcp_config", "bin_dir", "script", "executable_bit",
     "skill_dependencies", "package_manifest", "unrecognized_file",
+    "unparsed_frontmatter", "instructs_execution",
 }
 # Plugin-manifest keys that only describe the plugin. A manifest using any
 # other key (hooks, mcpServers, commands, agents, install steps, vendor
@@ -68,14 +65,29 @@ DECLARATIVE_MANIFEST_KEYS = {
     "$schema", "name", "version", "description", "author", "homepage",
     "repository", "license", "keywords", "skills", "displayName", "category", "tags",
 }
-# Keys matched wherever they appear (quoted, indented or inside {flow style}).
-FRONTMATTER_KEYS = [
-    ("allowed_tools", re.compile(r"[\"']?\ballowed[-_]tools\b[\"']?\s*:", re.I)),
-    ("skill_hooks", re.compile(r"[\"']?\bhooks\b[\"']?\s*:", re.I)),
-    ("context_fork", re.compile(r"\bcontext\b[\"']?\s*:\s*[\"']?fork\b", re.I)),
-]
-DEPENDENCY_KEYS = re.compile(
-    r"[\"']?\b(dependencies|mcp|mcp_servers|mcpservers|tools|permissions|install)\b[\"']?\s*:", re.I)
+# Frontmatter keys are allowlisted. A key that grants power is its own
+# blocking capability, and so is frontmatter this parser cannot read line by
+# line (flow style, escaped or unusual keys, an unclosed block). Any other
+# unknown key is listed but does not block: hosts ignore keys they do not
+# define, so it cannot grant power by itself.
+INERT_FRONTMATTER_KEYS = {
+    "name", "description", "license", "version", "metadata", "author", "authors",
+    "tags", "category", "keywords", "compatibility", "argument-hint", "user-invocable",
+    "disable-model-invocation", "model", "effort", "when_to_use", "when-to-use",
+    "homepage", "repository", "agent", "disallowed-tools", "title", "icon",
+}
+POWER_FRONTMATTER_KEYS = {"allowed-tools": "allowed_tools", "allowed_tools": "allowed_tools",
+                          "hooks": "skill_hooks"}
+# Codex agents/*.yaml: only the display block is known to be inert.
+INERT_AGENT_KEYS = {"interface", "display_name", "short_description", "icon_small",
+                    "icon_large", "brand_color", "default_prompt",
+                    "policy", "allow_implicit_invocation"}
+YAML_KEY = re.compile(r"""^(?:"([A-Za-z0-9_-]*)"|'([A-Za-z0-9_-]*)'|([A-Za-z0-9_][A-Za-z0-9_-]*))\s*:(?:\s|$)""")
+YAML_KEY_ANYWHERE = re.compile(r"(^|\s)[\"']?[A-Za-z_][\w-]*[\"']?\s*:(\s|$)")
+BLOCK_STARTS = ("", "|", ">", "|-", ">-", "|+", ">+")
+INTERPRETER_RUN = re.compile(
+    r"\b(python\d?(?:\.\d+)?|node|deno|bun|bash|sh|zsh|fish|ruby|perl|php|g?awk|rscript|julia|lua"
+    r"|osascript|pwsh|powershell)\s+(?:-{1,2}[\w-]+\s+)*[\"'`]?([\w.-]*[./][\w./-]+)", re.I)
 SHELL_INJECTION_INLINE = re.compile(r"(?:^|\s)!`[^`\n]+`")
 SHELL_INJECTION_FENCE = re.compile(r"^\s*(```|~~~)!\s*$")
 
@@ -86,13 +98,19 @@ VERDICT_RANK = {"LIKELY_SAFE": 0, "NEEDS_REVIEW": 1, "UNSAFE": 2}
 # placed inside a word, a bidirectional control, or a Unicode tag character is
 # itself a finding.
 _INVISIBLE_RANGES = (
-    "­͏؜ᅟᅠ឴឵᠋-᠏​-‏"
-    "‪-‮⁠-⁯⠀ㅤ︀-️﻿ﾠ"
+    "\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b-\u200f"
+    "\u202a-\u202e\u2060-\u206f\u2800\u3164\ufe00-\ufe0f\ufeff\uffa0"
     "\U000e0000-\U000e0fff\U0001d173-\U0001d17a"
 )
 INVISIBLE = re.compile(f"[{_INVISIBLE_RANGES}]")
-ALWAYS_SUSPECT = re.compile("[‪-‮⁦-⁩\U000e0000-\U000e007f]")
-INVISIBLE_IN_WORD = re.compile(f"[^\\W\\d_][{_INVISIBLE_RANGES}]+[^\\W\\d_]")
+# Bidirectional overrides and tag characters are never needed in a skill.
+# Soft hyphens and bidi isolates are normal in real text: they are removed
+# before matching (so a phrase hidden with them is still caught) but not
+# flagged on their own.
+ALWAYS_SUSPECT = re.compile("[\u202a-\u202e\U000e0000-\U000e007f]")
+_ZERO_WIDTH = ("\u034f\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b-\u200d\u2060-\u2064"
+               "\u3164\ufe00-\ufe0f\ufeff\uffa0")
+INVISIBLE_IN_WORD = re.compile(f"[^\\W\\d_][{_ZERO_WIDTH}]+[^\\W\\d_]")
 
 # Latin look-alikes from Cyrillic, Greek and IPA, folded before matching so a
 # homoglyph cannot slip a phrase past the catalog.
@@ -125,14 +143,14 @@ def _path_id(rel):
 
 
 def _mixed_script(word):
-    latin = other = False
+    """A Latin word containing a Cyrillic or Greek letter that imitates a Latin one."""
+    latin = lookalike = False
     for ch in word:
-        name = unicodedata.name(ch, "")
-        if name.startswith("LATIN"):
+        if unicodedata.name(ch, "").startswith("LATIN"):
             latin = True
-        elif name.startswith(("CYRILLIC", "GREEK")):
-            other = True
-    return latin and other
+        elif ord(ch) in CONFUSABLES:
+            lookalike = True
+    return latin and lookalike
 
 
 def normalize(text):
@@ -142,7 +160,7 @@ def normalize(text):
 
 # ---------------------------------------------------------------- inventory
 
-def _inventory(root):
+def _inventory(root, exclude=frozenset()):
     """Yield (rel, kind, payload) for every entry under root.
 
     Walks with directory handles, so paths longer than the OS limit are still
@@ -157,8 +175,13 @@ def _inventory(root):
         depth = 0 if rel_dir == "." else rel_dir.count(os.sep) + 1
         keep = []
         for d in dirnames:
-            count += 1
             rel = os.path.normpath(os.path.join(rel_dir, d))
+            if rel in exclude:
+                continue
+            count += 1
+            if count > MAX_ENTRIES:
+                yield rel, "too_many_entries", None
+                return
             try:
                 st = os.stat(d, dir_fd=dirfd, follow_symlinks=False)
             except OSError:
@@ -172,8 +195,10 @@ def _inventory(root):
                 keep.append(d)
         dirnames[:] = keep
         for name in filenames:
-            count += 1
             rel = os.path.normpath(os.path.join(rel_dir, name))
+            if rel in exclude:
+                continue
+            count += 1
             if count > MAX_ENTRIES:
                 yield rel, "too_many_entries", None
                 return
@@ -229,19 +254,111 @@ def _classify(rel, data, executable):
         except UnicodeDecodeError:
             pass
     ext = os.path.splitext(rel)[1].lower()
-    if ext in MEDIA_EXTENSIONS and data.startswith(MEDIA_MAGIC) and not executable:
+    if ext in MEDIA_EXTENSIONS and not executable and _valid_media(ext, data):
         return None, "media"
     return None, "binary"
 
 
+def _valid_media(ext, data):
+    """True only when the bytes parse as the image or font their extension names."""
+    try:
+        if ext == ".png":
+            return _png_ok(data)
+        if ext in (".jpg", ".jpeg"):
+            return _jpeg_ok(data)
+        if ext == ".gif":
+            return _gif_ok(data)
+        if ext == ".webp":
+            return (data[:4] == b"RIFF" and data[8:12] == b"WEBP"
+                    and int.from_bytes(data[4:8], "little") + 8 == len(data))
+        if ext in (".woff", ".woff2"):
+            return (data[:4] == (b"wOFF" if ext == ".woff" else b"wOF2")
+                    and int.from_bytes(data[8:12], "big") == len(data))
+    except IndexError:
+        return False
+    return False
+
+
+def _png_ok(d):
+    """Every chunk's length and CRC check out, ending exactly at IEND."""
+    if not d.startswith(b"\x89PNG\r\n\x1a\n"):
+        return False
+    i = 8
+    while i + 12 <= len(d):
+        n = int.from_bytes(d[i:i + 4], "big")
+        if i + 12 + n > len(d):
+            return False
+        if zlib.crc32(d[i + 4:i + 8 + n]) & 0xFFFFFFFF != int.from_bytes(d[i + 8 + n:i + 12 + n], "big"):
+            return False
+        kind = d[i + 4:i + 8]
+        i += 12 + n
+        if kind == b"IEND":
+            return i == len(d)
+    return False
+
+
+def _jpeg_ok(d):
+    """Marker segments are well formed up to the start of scan; the file ends at EOI."""
+    if not (d.startswith(b"\xff\xd8") and d.endswith(b"\xff\xd9")):
+        return False
+    i = 2
+    while i + 4 <= len(d):
+        if d[i] != 0xFF:
+            return False
+        marker = d[i + 1]
+        if marker == 0x01 or 0xD0 <= marker <= 0xD7:
+            i += 2
+            continue
+        length = int.from_bytes(d[i + 2:i + 4], "big")
+        if length < 2:
+            return False
+        if marker == 0xDA:
+            return True
+        i += 2 + length
+    return False
+
+
+def _gif_ok(d):
+    """Blocks and sub-blocks parse from the header to a trailer at the last byte."""
+    if d[:6] not in (b"GIF87a", b"GIF89a") or len(d) < 14:
+        return False
+    flags, i = d[10], 13
+    if flags & 0x80:
+        i += 3 * (2 ** ((flags & 7) + 1))
+    while i < len(d):
+        block = d[i]
+        if block == 0x3B:
+            return i == len(d) - 1
+        if block == 0x21:
+            i += 2
+        elif block == 0x2C:
+            if i + 10 > len(d):
+                return False
+            image_flags = d[i + 9]
+            i += 10
+            if image_flags & 0x80:
+                i += 3 * (2 ** ((image_flags & 7) + 1))
+            i += 1
+        else:
+            return False
+        while True:
+            if i >= len(d):
+                return False
+            size = d[i]
+            i += 1
+            if size == 0:
+                break
+            i += size
+    return False
+
+
 def _resolve_root(target):
-    """Follow the named target's own links, a bounded number of hops."""
-    path = os.path.abspath(target)
-    for _ in range(MAX_ROOT_LINK_HOPS):
-        if not os.path.islink(path):
-            return path
-        path = os.path.normpath(os.path.join(os.path.dirname(path), os.readlink(path)))
-    return None
+    """Resolve the named target the way the operating system does, or None on a loop."""
+    try:
+        path = os.path.realpath(target)
+    except (OSError, RecursionError, ValueError):
+        return None
+    return None if os.path.islink(path) else path
 
 
 # ------------------------------------------------------------- capabilities
@@ -271,27 +388,81 @@ def _path_capabilities(rel, executable):
 def _content_capabilities(rel, text):
     parts = [p.lower() for p in rel.split(os.sep)]
     base = parts[-1]
-    stem, ext = os.path.splitext(base)
+    ext = os.path.splitext(base)[1]
     caps = []  # (kind, line)
+    # A readme- or license-style name is inert only with no extension or an inert
+    # one: README.awk is still an awk program.
+    inert_name = base in INERT_DOTFILES or bool(INERT_NAME.match(base) and (ext == "" or ext in INERT_EXTENSIONS))
     if text.startswith("#!"):
         caps.append(("script", 1))
-    elif ext not in INERT_EXTENSIONS and ext not in SCRIPT_EXTENSIONS \
-            and base not in INERT_NAMES and stem not in INERT_NAMES:
+    elif ext not in INERT_EXTENSIONS and ext not in SCRIPT_EXTENSIONS and not inert_name:
         caps.append(("unrecognized_file", 0))
     if base == "plugin.json":
         caps.append(("plugin_manifest" if _declarative_manifest(text) else "plugin_power", 0))
-    if len(parts) >= 2 and parts[-2] == "agents" and ext in (".yaml", ".yml") \
-            and DEPENDENCY_KEYS.search(text):
-        caps.append(("skill_dependencies", 0))
+    if len(parts) >= 2 and parts[-2] == "agents" and ext in (".yaml", ".yml"):
+        caps.extend(_agent_metadata_capabilities(text))
     if ext in (".md", ".markdown"):
-        block, first = _frontmatter(text)
-        for kind, rx in FRONTMATTER_KEYS:
-            if rx.search(block):
-                caps.append((kind, first))
+        caps.extend(_frontmatter_capabilities(text))
         for n, line in enumerate(text.splitlines(), start=1):
             if SHELL_INJECTION_INLINE.search(line) or SHELL_INJECTION_FENCE.match(line):
                 caps.append(("shell_injection", n))
+            if INTERPRETER_RUN.search(normalize(line)):
+                caps.append(("instructs_execution", n))
     return caps
+
+
+def _yaml_lines(lines, first_line_no):
+    """(line number, top-level key or None, value, indented) for each meaningful line."""
+    for offset, raw in enumerate(lines):
+        stripped = raw.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        indented = raw[:1] in (" ", "\t")
+        m = YAML_KEY.match(stripped)
+        key = next(g for g in m.groups() if g is not None).lower() if m else None
+        value = stripped[m.end():].strip() if m else stripped
+        yield first_line_no + offset, key, value, indented
+
+
+def _frontmatter_capabilities(text):
+    lines = text.lstrip("\ufeff").splitlines()
+    i = 0
+    while i < len(lines) and not lines[i].strip():
+        i += 1
+    if i >= len(lines) or lines[i].strip() != "---":
+        return []
+    close = next((j for j in range(i + 1, len(lines)) if lines[j].strip() == "---"), None)
+    if close is None:
+        return [("unparsed_frontmatter", i + 1)]
+    caps, block_open = [], False
+    for n, key, value, indented in _yaml_lines(lines[i + 1:close], i + 2):
+        if indented:
+            # Belongs to the previous key: a nested block, or a scalar continuation.
+            # A continuation that itself looks like a key is not valid YAML.
+            if not block_open and YAML_KEY_ANYWHERE.search(value if key is None else f"{key}: {value}"):
+                caps.append(("unparsed_frontmatter", n))
+            continue
+        if key is None:
+            caps.append(("unparsed_frontmatter", n))
+            block_open = False
+            continue
+        bare = value.split(" #", 1)[0].strip()
+        block_open = bare in BLOCK_STARTS
+        if key in POWER_FRONTMATTER_KEYS:
+            caps.append((POWER_FRONTMATTER_KEYS[key], n))
+        elif key == "context":
+            if bare.strip("\"'").lower() == "fork":
+                caps.append(("context_fork", n))
+        elif key not in INERT_FRONTMATTER_KEYS:
+            caps.append(("unknown_frontmatter_key", n))
+    return caps
+
+
+def _agent_metadata_capabilities(text):
+    for n, key, value, indented in _yaml_lines(text.lstrip("\ufeff").splitlines(), 1):
+        if key is None or key not in INERT_AGENT_KEYS:
+            return [("skill_dependencies", n)]
+    return []
 
 
 def _declarative_manifest(text):
@@ -307,30 +478,12 @@ def _declarative_manifest(text):
     return isinstance(skills, list) and all(isinstance(x, str) for x in skills)
 
 
-def _frontmatter(text):
-    """The leading frontmatter block and its first line number, or ('', 0).
-
-    Tolerates a byte-order mark, leading blank lines and an indented fence,
-    because a host that tolerates them would still honor the keys inside.
-    """
-    lines = text.lstrip("﻿").splitlines()
-    i = 0
-    while i < len(lines) and not lines[i].strip():
-        i += 1
-    if i >= len(lines) or lines[i].strip() != "---":
-        return "", 0
-    for j in range(i + 1, min(len(lines), i + 400)):
-        if lines[j].strip() == "---":
-            return "\n".join(lines[i + 1:j]), i + 2
-    return "\n".join(lines[i + 1:i + 400]), i + 2
-
-
 # ------------------------------------------------------------------ threats
 
 def _obfuscation(rel, text):
     findings = []
     for n, line in enumerate(text.splitlines(), start=1):
-        body = line[1:] if n == 1 and line.startswith("﻿") else line
+        body = line[1:] if n == 1 and line.startswith("\ufeff") else line
         if ALWAYS_SUSPECT.search(body) or INVISIBLE_IN_WORD.search(body):
             findings.append(catalog.finding("invisible-character", rel, n, body))
         elif any(_mixed_script(w) for w in WORD.findall(INVISIBLE.sub("", body))):
@@ -345,7 +498,8 @@ def _findings(rel, text):
     lines = [normalize(l) for l in raw_lines]
     for n, line in enumerate(lines, start=1):
         for f in catalog.match_line(rel, n, line, raw_lines[n - 1]):
-            seen.add((f["check_id"], n))
+            if f["severity"] != "info":
+                seen.add((f["check_id"], n))
             findings.append(f)
     # Second pass over paragraphs, so a phrase split across lines still matches.
     for start, end, joined, raw in _paragraphs(lines, raw_lines):
@@ -382,29 +536,35 @@ def _threat_verdict(score):
 
 # --------------------------------------------------------------------- scan
 
-def _entries(target):
+def _entries(target, exclude):
+    """(entries, aliases). aliases maps a scanned name to the other name it has."""
     visible = os.path.basename(os.path.normpath(target)) or target
     root = _resolve_root(target)
     if root is None:
-        return [(visible, "symlink_loop", None)]
+        return [(visible, "symlink_loop", None)], {}
     if os.path.isdir(root):
-        return list(_inventory(root))
+        return list(_inventory(root, frozenset(os.path.normpath(e) for e in exclude))), {}
     if os.path.isfile(root):
         # A named file keeps the name the caller used, even through a link.
+        # Keep both names: a link called notes.txt that points at setup.sh is a script.
         parent = os.open(os.path.dirname(root), os.O_RDONLY)
         try:
-            return [(visible, "file", _read_at(parent, os.path.basename(root)))]
+            entry = (visible, "file", _read_at(parent, os.path.basename(root)))
         finally:
             os.close(parent)
-    return [(visible, "special_file", None)]
+        target_name = os.path.basename(root)
+        return [entry], ({visible: target_name} if target_name != visible else {})
+    return [(visible, "special_file", None)], {}
 
 
-def scan_package(target, excerpts=False):
+def scan_package(target, excerpts=False, exclude=()):
     """Scan a package. `excerpts` reveals attacker-controlled text (matched
-    excerpts and file names) and is for a person's terminal, never an agent."""
+    excerpts, file names and the target path) and is for a person's terminal,
+    never an agent. `exclude` lists paths, relative to a directory target,
+    that belong to other packages and are scanned separately."""
     if not os.path.lexists(target):
         raise PathError(f"no such path: {target}")
-    entries = _entries(target)
+    entries, aliases = _entries(target, exclude)
 
     findings, capabilities, skipped, manifest = [], [], [], []
     scanned = 0
@@ -426,8 +586,11 @@ def scan_package(target, excerpts=False):
                 skipped.append({"path": rel, "reason": reason})
                 manifest.append(f"{rel}\0{reason}\0{_sha(data)}")
                 continue
-            capabilities.extend({"kind": k, "path": rel, "line": line}
-                                for k, line in _content_capabilities(rel, text))
+            for name in [rel] + ([aliases[rel]] if rel in aliases else []):
+                capabilities.extend({"kind": k, "path": rel, "line": 0}
+                                    for k in _path_capabilities(name, executable) if name != rel)
+                capabilities.extend({"kind": k, "path": rel, "line": line}
+                                    for k, line in _content_capabilities(name, text))
             findings.extend(_findings(rel, text))
         except Exception:  # fail closed: an entry we could not analyze counts as unread
             skipped.append({"path": rel, "reason": "unreadable"})
@@ -472,9 +635,9 @@ def scan_package(target, excerpts=False):
         item["path_id"] = _path_id(item["path"])
         if not excerpts:
             del item["path"]
-    return {
+    result = {
         "schema": "canary.scan/1",
-        "target": os.path.abspath(target),
+        "target_id": _path_id(os.path.abspath(target)),
         "package_digest": "sha256:" + _sha("\n".join(sorted(manifest))),
         "verdict": verdict,
         "threat_verdict": threat,
@@ -485,6 +648,11 @@ def scan_package(target, excerpts=False):
         "findings": findings,
         "reasons": reasons,
     }
+    # The target path is caller-supplied but may still carry attacker text
+    # (a downloaded folder's name), so agents see only its id.
+    if excerpts:
+        result["target"] = os.path.abspath(target)
+    return result
 
 
 def render_text(result):
@@ -494,7 +662,7 @@ def render_text(result):
     def where(item):
         return repr(item["path"]) if "path" in item else item["path_id"]
 
-    out = [f"Canary scan: {result['target']}",
+    out = [f"Canary scan: {repr(result['target']) if 'target' in result else result['target_id']}",
            f"Verdict: {result['verdict']}  (threat {result['threat_verdict']}, score {result['score']}; "
            f"{result['coverage']['files_scanned']}/{result['coverage']['files_total']} entries read)"]
     out += [f"  - {r}" for r in result["reasons"]]

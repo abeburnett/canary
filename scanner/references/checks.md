@@ -27,7 +27,7 @@ it. That is a review, not an accusation.
 | PERSISTENCE | medium | writes to agent config (`~/.claude/settings.json`, `~/.codex/hooks.json`), `launchctl`, cron |
 | STEALTH | medium | "do not tell the user", "without the user knowing" |
 | PROMPT_LEAK | medium | "reveal your system prompt" |
-| OBFUSCATION | high | an invisible character inside a word, any bidirectional-control or Unicode tag character, a word mixing Latin with Cyrillic or Greek letters; medium for a long base64 run |
+| OBFUSCATION | high | a zero-width character inside a word, a bidirectional override or Unicode tag character, a Latin word containing a Cyrillic or Greek look-alike letter; medium for a long base64 run. Soft hyphens, bidi isolates and non-look-alike letters (Δx) are normal text and are only removed before matching |
 | EXTERNAL_URL | info | any URL; recorded, never scored |
 
 ## Capabilities
@@ -35,10 +35,10 @@ it. That is a review, not an accusation.
 | Kind | Found by | Blocks auto-approval |
 |---|---|---|
 | `shell_injection` | a `` !`cmd` `` line or a ```` ```! ```` block in any `.md` file; Claude Code runs these before the model sees the skill | yes |
-| `allowed_tools` | an `allowed-tools` key anywhere in the frontmatter, quoted, indented or inside `{…}`, after a byte-order mark or blank lines; it grants tools without a prompt, and workspace trust does not gate it | yes |
-| `skill_hooks` | a `hooks` key anywhere in the frontmatter, in the same spellings; it registers hooks for the rest of the session | yes |
+| `allowed_tools` | an `allowed-tools` key in the frontmatter (plain or quoted, after a byte-order mark or blank lines, anywhere in the block however long); it grants tools without a prompt, and workspace trust does not gate it | yes |
+| `skill_hooks` | a `hooks` key in the frontmatter, same rules; it registers hooks for the rest of the session | yes |
 | `plugin_power` | a `plugin.json` using any key beyond the descriptive ones (so it may declare hooks, MCP servers or commands inline), one that is not valid JSON, or any `marketplace.json` | yes |
-| `skill_dependencies` | an `agents/*.yaml` declaring dependencies, MCP servers, tools, permissions or install steps (Codex can auto-install MCP dependencies) | yes |
+| `skill_dependencies` | an `agents/*.yaml` using any key beyond the display block (`interface` and its display fields) and `policy.allow_implicit_invocation`; Codex can auto-install declared MCP dependencies | yes |
 | `plugin_manifest` | a `plugin.json` using only descriptive keys: name, version, description, author, homepage, repository, license, keywords, skill paths, display name, category, tags | no (listed only) |
 | `plugin_hooks` | any `hooks.json` | yes |
 | `mcp_config` | `.mcp.json` or `mcp.json` | yes |
@@ -46,7 +46,10 @@ it. That is a review, not an accusation.
 | `script` | a script extension or a `#!` first line | yes |
 | `executable_bit` | any other file marked executable | yes |
 | `package_manifest` | `package.json`, `pyproject.toml`, `requirements.txt`, `Gemfile`, `Cargo.toml`, `go.mod` and similar: a package manager runs code or fetches dependencies from these | yes |
-| `unrecognized_file` | a text file whose type is not on the inert-document allowlist (Markdown, plain text, JSON, YAML, TOML, CSV, XML, HTML, CSS, SVG, INI and license or readme files). Unknown means possibly runnable | yes |
+| `unrecognized_file` | a text file whose type is not on the inert-document allowlist (Markdown, plain text, JSON and JSON Lines, YAML, TOML, CSV, XML, HTML, CSS, SVG, INI, and readme- or license-style names with no extension or an inert one; `README.awk` is still an awk program). Unknown means possibly runnable | yes |
+| `instructs_execution` | Markdown telling the agent to run an interpreter on a file (`python3 helper.txt`, `awk -f notes.awk`, `bash setup.sh`): any file can be a program once an interpreter is pointed at it | yes |
+| `unparsed_frontmatter` | frontmatter the scanner cannot read line by line: flow style, quoted keys with escapes or unusual characters, an unclosed block, or an indented continuation that looks like a key | yes |
+| `unknown_frontmatter_key` | a frontmatter key outside the known list; hosts ignore keys they do not define | no (listed only) |
 | `context_fork` | `context: fork` in frontmatter | no (listed only) |
 
 ## Coverage

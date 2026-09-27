@@ -278,3 +278,17 @@ class HostileInputsNeverCrashOrHang(unittest.TestCase):
                 # Harmless text only has to finish; the malformed inputs must not be approved.
                 allowed = (0, 10, 20) if name == "regex_stress" else (10, 20)
                 self.assertIn(proc.returncode, allowed)
+
+
+class ScannerSourceStaysPlainText(unittest.TestCase):
+    def test_no_invisible_or_bidirectional_characters_in_canary_source(self):
+        """Canary flags these characters in skills; its own source must not contain them."""
+        import unicodedata
+        sources = [os.path.join(ROOT, "bin", "canary")]
+        for folder, _, files in os.walk(os.path.join(ROOT, "canary")):
+            sources += [os.path.join(folder, f) for f in files if f.endswith(".py")]
+        for path in sources:
+            with open(path, encoding="utf-8") as fh:
+                for number, line in enumerate(fh, start=1):
+                    bad = [c for c in line if unicodedata.category(c) == "Cf" or ord(c) in (0xAD, 0x34F, 0x3164)]
+                    self.assertFalse(bad, f"{os.path.relpath(path, ROOT)}:{number} has {[hex(ord(c)) for c in bad]}")
