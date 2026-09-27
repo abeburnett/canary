@@ -160,7 +160,7 @@ def external_references(text):
 
 def _frontmatter_problems(text):
     """(declares dependencies, malformed) for Markdown frontmatter."""
-    body = text.lstrip("﻿")
+    body = text.lstrip("\ufeff")
     if not body.startswith("---"):
         return False, False
     end = body.find("\n---", 3)
@@ -205,7 +205,7 @@ def _classify(rel, text, kinds):
     if text is None:
         return "unknown", False, 0, True
     unresolved = 1 if kinds & DEPENDENCY_CAPABILITIES else 0
-    body = text.lstrip("﻿")
+    body = text.lstrip("\ufeff")
     prose = ext in PROSE_EXTENSIONS or (ext == "" and not (kinds & TYPE_CAPABILITIES))
     if (kinds & TYPE_CAPABILITIES) or body.startswith("#!") or ACTIVE_MARKUP.search(body):
         return "unknown", False, unresolved, True

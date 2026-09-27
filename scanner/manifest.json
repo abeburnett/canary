@@ -10,7 +10,7 @@
     "canary/classifiers/openai_api.py": "8f12e081140a78b472788263bc483677dabcdc547082cb034849d7d5cb569dc6",
     "canary/classify.py": "721f07a640928eec3ec4c9198c53ba5fc34870a0125882ba3814570321453e06",
     "canary/cli.py": "568e29a14cfb011b3428ed603fec02e050e21731cf6ccdd0b65ebd096b0f1565",
-    "canary/evidence.py": "d3f2a2e8c89d092a9cfa2ae190d85c98da07b20d7704b93b7385e4ac4d55849e",
+    "canary/evidence.py": "1b56f53f58ce5dd25e1474d46c26a58b25f895698d593bdf846838688808b254",
     "canary/frontdoor.py": "bf1f7211319c250c259cf7657c54232710002ea723be7d9e32cc09eac0542e2c",
     "canary/gate.py": "271ce18fb7a7b2afe0aaa7cb0d5296e1f29e939f6a5f94693ece4b02c19f3595",
     "canary/hosts/claude.py": "61638d14fdf54669a95142ed8105ad932386bf8c5ab701e000cd786bcc7a46e7",
