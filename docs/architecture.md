@@ -163,6 +163,10 @@ def parse_pre_tool_use(payload: dict) -> "ToolCall":
 def deny(reason: str) -> tuple[str, int]:
     """The exact stdout text and exit code that make this host block the call."""
 
+def install_root(home: str) -> str:
+    """The user-level folder `canary add` installs skills into for this
+    host (Claude Code `~/.claude/skills`, Codex `~/.agents/skills`)."""
+
 def managed_install_plan(canary_bin: str) -> list["PlannedFile"]:
     """Root-owned files `canary setup` needs for this host:
     PlannedFile(path, content, mode, action). action is "create" when the
@@ -263,11 +267,94 @@ they appear only with `--excerpts` (as `evidence`, `reasoning`, `summary`),
 which is for a person's terminal, never an agent. A category must be 1 to 60
 letters, digits, spaces, `_`, `/` or `-`, for the same reason.
 
-## `canary add <source>` and `canary setup`
+## `canary add <source> [--host claude|codex]... [--backend <name>] [--model <id>]`
 
-Specified when their slices land (slices 3 and 4). Fixed now: `add` fetches
-into quarantine, scans an immutable snapshot, and installs that exact snapshot
-as one unit; `setup` asks for the user's password once, installs the CLI
+The one supported way to install a skill. The agent passes the link and gets
+back only the outcome; the person decides in a native macOS dialog.
+
+Sources, one skill per link:
+
+- `https://github.com/<owner>/<repo>` (the repository root must be a skill),
+  `…/tree/<ref>/<path>` (a folder), `…/blob/<ref>/<path>/SKILL.md` (that
+  file's folder). `<ref>` is resolved to a commit SHA through the GitHub API
+  first; the tarball is then fetched by SHA from `codeload.github.com`. No
+  redirects are followed and the download is capped at 50 MB.
+- A local folder path, copied without following links and without `.git`.
+
+A link whose folder holds no `SKILL.md` but several subfolders that do is
+exit 2 with the count only ("link the folder you want"): folder names are
+attacker text and never reach the agent.
+
+Steps:
+
+1. Extract by hand into a temporary directory: symlinks, hard links,
+   devices, absolute paths, `..`, NUL in names and more than 5,000 entries
+   refuse the whole package. The selected folder moves into
+   `~/Library/Application Support/Canary/quarantine/<run-id>/`, is made
+   read-only, and the rest is deleted.
+2. `canary check` on that snapshot.
+3. `UNSAFE`: nothing is installed and nobody is asked. Otherwise the dialog
+   asks the person. It shows Canary's verdict and reasons, the source as
+   `owner/repo` at a short commit, and the installed name, with every
+   package-supplied string labelled as such; never the package's description
+   or excerpts, which an attacker writes. `NEEDS_REVIEW` defaults to Cancel.
+   The dialog gives up after 300 seconds, which counts as a decline.
+4. On approval, for each host: copy the snapshot to a staging folder beside
+   the destination, re-scan the staged copy, and `rename` it into place only
+   if its `package_digest` equals the checked snapshot's. Any mismatch aborts
+   and removes the staging folder.
+5. Record the install in the lockfile and delete the quarantine snapshot.
+
+Install roots come from each host adapter's `install_root(home)`: Claude Code
+`~/.claude/skills`, Codex `~/.agents/skills`. Each host gets its own real
+copy, not a link, so every file under a discovery root is a file that was
+scanned. Default hosts: those whose home folder exists (`~/.claude`,
+`~/.codex` or `~/.agents`).
+
+The installed name is the frontmatter `name` if it matches
+`^[a-z0-9][a-z0-9-]{0,63}$`, else the folder name if that matches, else the
+add is refused. An existing folder of that name is never overwritten
+(`canary update` replaces installs).
+
+There is no `--yes`, environment override or typed confirmation: an agent can
+type into a terminal. Approval comes only from the dialog (tests inject an
+approver through the Python API). With no GUI session the outcome is
+`not_installed`, "approve on the Mac's screen".
+
+Exit codes: 0 installed; 10 not installed and waiting on the person (declined,
+dialog unavailable or timed out); 20 refused because `UNSAFE`; 2 usage, link
+or fetch error; 3 internal error.
+
+Output (schema `canary.add/1`, all the agent receives):
+
+```json
+{
+  "schema": "canary.add/1",
+  "outcome": "installed | declined | not_installed | refused",
+  "verdict": "LIKELY_SAFE | NEEDS_REVIEW | UNSAFE",
+  "name": "sanitized-name",
+  "source": {"owner": "…", "repo": "…", "commit": "40-hex"},
+  "installed": ["~/.claude/skills/<name>"],
+  "reasons": ["Canary's own reasons, no package text"]
+}
+```
+
+`owner` and `repo` are GitHub's validated identifiers (letters, digits, `-`,
+`_`, `.`), so they carry no markup.
+
+Lockfile `~/.agents/.canary-lock.json`, written to a temporary file and
+renamed:
+
+```json
+{"schema": "canary.lock/1",
+ "skills": {"<name>": {"source": "<link as given>", "owner": "…", "repo": "…",
+   "ref": "…", "commit": "…", "path": "…", "package_digest": "sha256:…",
+   "verdict": "…", "installed": ["…"], "installed_at": "2026-09-26T00:00:00Z"}}}
+```
+
+## `canary setup`
+
+Specified when slice 4 lands. Fixed now: `setup` asks for the user's password once, installs the CLI
 root-owned, and writes one drop-in per host (Claude Code:
 `/Library/Application Support/ClaudeCode/managed-settings.d/canary.json`). It
 does not set `allowManagedHooksOnly`, because that would disable the user's own
@@ -341,6 +428,10 @@ Public claims follow the layers actually installed:
 | 1 and 2 | "Guards installs by agents in Claude Code and Codex." |
 | 1, 2 and 3 | "Enforces vetting for user-level skill directories on this Mac, and guards repository skills." |
 | any | Cursor, opencode and Gemini: "scanned and monitored, not enforced." |
+
+At Scan and Guard, the `canary add` dialog is the person's checkpoint; an
+agent that can control the screen could click it. Lockdown's Touch ID or
+password step is what closes that, and no claim above says otherwise.
 
 `canary doctor` prints which row applies to the machine it runs on.
 

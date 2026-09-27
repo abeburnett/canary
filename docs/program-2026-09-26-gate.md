@@ -91,3 +91,32 @@ Done when:
     agent to paste a skill into a subagent and no longer say "Jev"; both scan
     `LIKELY_SAFE`.
 12. `python3 -m unittest discover -s tests` passes.
+
+## Slice 3: `canary add`
+
+Done when:
+
+1. `canary add <link>` accepts a GitHub repository, `tree` folder or `blob`
+   SKILL.md link and a local folder; it resolves the ref to a commit SHA
+   before downloading, and records that SHA.
+2. An archive with a symlink, hard link, device, `..` or absolute member is
+   refused whole: nothing installed, nobody asked, quarantine removed
+   (`HostileArchivesAreRefusedWhole`).
+3. `UNSAFE` installs nothing and never calls the approver; a decline installs
+   nothing and writes no lockfile; the CLI has no flag that approves
+   (`OnlyThePersonInstalls`).
+4. An approved install puts a real copy (no links) in each detected host's
+   root and records commit and `package_digest` in
+   `~/.agents/.canary-lock.json`; a package changed after its check is not
+   installed; an existing skill is never overwritten
+   (`ApprovedInstallsAreTheCheckedBytes`).
+5. The agent-facing result carries no package text: a hostile frontmatter
+   name falls back to the folder name, the dialog omits the package's
+   description, and a multi-skill link reports only a count
+   (`TheAgentSeesNoPackageText`).
+6. Deliberate breaks of the re-digest, the link refusal and the UNSAFE rule
+   each turn their named test red.
+7. Live: a real GitHub link fetches, pins a SHA, checks, asks, and leaves
+   nothing behind when declined. The dialog script compiles; showing it on
+   screen is left to the owner or the VM lifecycle tests.
+8. `python3 -m unittest discover -s tests` passes.

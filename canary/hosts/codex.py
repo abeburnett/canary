@@ -15,6 +15,11 @@ _FALLBACK = ('{"hookSpecificOutput":{"hookEventName":"PreToolUse",'
              '"Canary could not validate this call. Use canary add <source>."}}', 0)
 
 
+def install_root(home: str) -> str:
+    """User skills folder Codex discovers (docs/codex-facts.md)."""
+    return os.path.join(home, ".agents", "skills")
+
+
 def deny(reason: str) -> tuple[str, int]:
     """Codex consumes JSON decisions at exit 0, including internal failures."""
     try:
