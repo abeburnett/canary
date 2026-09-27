@@ -1,6 +1,6 @@
-name: Canary Skill Scan
+name: SkillCanary Skill Scan
 description: Scan AI skill files for prompt-injection and malicious-instruction risk.
-author: Canary
+author: SkillCanary
 
 branding:
   icon: shield
@@ -25,14 +25,17 @@ outputs:
     description: Action verdict (safe, review, or unsafe).
     value: ${{ steps.scan.outputs.verdict }}
   layer1_verdict:
-    description: Native deterministic verdict (LIKELY_SAFE, NEEDS_REVIEW, or UNSAFE).
+    description: Strictest scanner verdict across skill folders (LIKELY_SAFE, NEEDS_REVIEW, or UNSAFE).
     value: ${{ steps.scan.outputs.layer1_verdict }}
+  coverage_complete:
+    description: Whether every file was read (true or false). An incomplete scan fails unless fail-on is never.
+    value: ${{ steps.scan.outputs.coverage_complete }}
 
 runs:
   using: composite
   steps:
     - id: scan
-      name: Run bundled Canary scanner
+      name: Run bundled SkillCanary scanner
       shell: bash
       env:
         CANARY_INPUT_PATH: ${{ inputs.path }}

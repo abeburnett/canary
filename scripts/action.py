@@ -1,19 +1,25 @@
 #!/usr/bin/env python3
-"""Run Canary's bundled deterministic scanner for a GitHub Action."""
+"""Run SkillCanary's bundled deterministic scanner for a GitHub Action.
 
-from collections import defaultdict
+Each skill folder (a directory holding SKILL.md) is scanned as one package, so
+findings spread across a skill's files are totalled the way the scanner totals
+them. When the path holds no skill folder, the whole path is one package. The
+Action's verdict is the strictest package verdict.
+"""
+
 import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 
 
 ACTION_ROOT = Path(__file__).resolve().parents[1]
-SCANNER = ACTION_ROOT / "scanner" / "bin" / "jev-scan"
+CANARY = ACTION_ROOT / "bin" / "canary"
 MANIFEST = ACTION_ROOT / "scanner" / "manifest.json"
-SEVERITY_WEIGHT = {"info": 0, "low": 1, "medium": 2, "high": 3}
+SCANNER_EXIT = {0: "LIKELY_SAFE", 10: "NEEDS_REVIEW", 20: "UNSAFE"}
 LAYER1_TO_ACTION = {
     "LIKELY_SAFE": "safe",
     "NEEDS_REVIEW": "review",
@@ -21,32 +27,40 @@ LAYER1_TO_ACTION = {
 }
 VERDICT_RANK = {"LIKELY_SAFE": 0, "NEEDS_REVIEW": 1, "UNSAFE": 2}
 FAIL_RANK = {"never": 3, "unsafe": 2, "review": 1}
-SCANNER_SKIPPED_DIRECTORIES = {"bin", ".git", "__pycache__", "node_modules"}
+SAFE_PATH = re.compile(r"^[A-Za-z0-9._/-]{1,120}$")
 
 
 class ActionError(Exception):
     """An operational error that prevents a complete scan."""
 
 
+def bundled_files():
+    """Every file the scanner runs from, relative to the Action root."""
+    files = {"bin/canary"}
+    files.update(f"canary/{p.name}" for p in (ACTION_ROOT / "canary").glob("*.py"))
+    return files
+
+
 def scanner_manifest():
+    """Check every bundled scanner file against the manifest; return its version."""
     try:
         manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-        expected_hash = manifest["sha256"]
         bundled_version = manifest["version"]
+        expected = manifest["files"]
+        if not isinstance(expected, dict):
+            raise TypeError
     except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
         raise ActionError("the bundled scanner manifest is invalid") from exc
-    actual_hash = hashlib.sha256(SCANNER.read_bytes()).hexdigest()
-    if actual_hash != expected_hash:
-        raise ActionError("the bundled scanner failed its integrity check")
+    if set(expected) != bundled_files():
+        raise ActionError("the bundled scanner files do not match the manifest")
+    for name, digest in expected.items():
+        try:
+            actual = hashlib.sha256((ACTION_ROOT / name).read_bytes()).hexdigest()
+        except OSError as exc:
+            raise ActionError("the bundled scanner failed its integrity check") from exc
+        if actual != digest:
+            raise ActionError("the bundled scanner failed its integrity check")
     return bundled_version
-
-
-def verdict_for_score(score):
-    if score >= 6:
-        return "UNSAFE"
-    if score >= 3:
-        return "NEEDS_REVIEW"
-    return "LIKELY_SAFE"
 
 
 def is_within(path, directory):
@@ -66,15 +80,7 @@ def resolve_target(workspace, supplied_path):
         raise ActionError("the scan path must stay inside GITHUB_WORKSPACE")
     if target.is_dir():
         walk_errors = []
-
-        def remember_walk_error(error):
-            walk_errors.append(error)
-
-        for root, directories, files in os.walk(target, onerror=remember_walk_error):
-            directories[:] = [
-                name for name in directories
-                if name not in SCANNER_SKIPPED_DIRECTORIES
-            ]
+        for root, directories, files in os.walk(target, onerror=walk_errors.append):
             for name in directories + files:
                 candidate = Path(root) / name
                 if not candidate.is_symlink():
@@ -87,53 +93,48 @@ def resolve_target(workspace, supplied_path):
                     raise ActionError("the scan path contains a symlink outside GITHUB_WORKSPACE")
         if walk_errors:
             raise ActionError("the scan path could not be read completely")
+        if not any(files for _, _, files in os.walk(target)):
+            raise ActionError("the scan path contains no files")
     return target
 
 
-def worst_file_verdict(findings):
-    scores = defaultdict(int)
-    for finding in findings:
-        scores[finding["file"]] += SEVERITY_WEIGHT[finding["severity"]]
-    verdicts = [verdict_for_score(score) for score in scores.values()]
-    return max(verdicts, key=VERDICT_RANK.get, default="LIKELY_SAFE")
+def skill_packages(target):
+    """Directories holding a SKILL.md (any case), or the target itself."""
+    if not target.is_dir():
+        return [target]
+    packages = sorted({Path(root) for root, _, files in os.walk(target)
+                       if any(name.lower() == "skill.md" for name in files)})
+    return packages or [target]
 
 
-def validated_report(raw_output):
+def display_path(path, workspace):
+    rel = os.path.relpath(path, workspace)
+    if SAFE_PATH.match(rel):
+        return rel
+    # Repository paths are attacker-controlled in pull requests; never echo odd ones.
+    return "path-sha256:" + hashlib.sha256(rel.encode("utf-8", "replace")).hexdigest()[:12]
+
+
+def scan(package, environment):
+    completed = subprocess.run(
+        [sys.executable, str(CANARY), "scan", str(package), "--json"],
+        env=environment, text=True, capture_output=True, check=False,
+    )
+    if completed.returncode not in SCANNER_EXIT:
+        raise ActionError("the bundled scanner could not complete")
     try:
-        report = json.loads(raw_output)
+        report = json.loads(completed.stdout)
     except (TypeError, json.JSONDecodeError) as exc:
         raise ActionError("the bundled scanner returned malformed JSON") from exc
-    if not isinstance(report, dict):
+    if not isinstance(report, dict) or report.get("schema") != "canary.scan/1":
         raise ActionError("the bundled scanner returned malformed JSON")
-    files_scanned = report.get("files_scanned")
-    findings = report.get("findings")
-    if not isinstance(files_scanned, int) or isinstance(files_scanned, bool):
+    verdict = report.get("verdict")
+    coverage = report.get("coverage")
+    if verdict != SCANNER_EXIT[completed.returncode] or not isinstance(coverage, dict) \
+            or not isinstance(coverage.get("complete"), bool) \
+            or not isinstance(report.get("findings"), list) \
+            or not isinstance(report.get("capabilities"), list):
         raise ActionError("the bundled scanner returned malformed JSON")
-    if files_scanned < 1:
-        raise ActionError("the scan found no supported files")
-    if not isinstance(findings, list):
-        raise ActionError("the bundled scanner returned malformed JSON")
-    if report.get("deterministic_verdict") not in LAYER1_TO_ACTION:
-        raise ActionError("the bundled scanner returned malformed JSON")
-    score = report.get("score")
-    if not isinstance(score, int) or isinstance(score, bool) or score < 0:
-        raise ActionError("the bundled scanner returned malformed JSON")
-    for finding in findings:
-        if not isinstance(finding, dict):
-            raise ActionError("the bundled scanner returned malformed JSON")
-        if finding.get("severity") not in SEVERITY_WEIGHT:
-            raise ActionError("the bundled scanner returned malformed JSON")
-        if not isinstance(finding.get("category"), str):
-            raise ActionError("the bundled scanner returned malformed JSON")
-        if not isinstance(finding.get("check_id"), str):
-            raise ActionError("the bundled scanner returned malformed JSON")
-        if not isinstance(finding.get("file"), str):
-            raise ActionError("the bundled scanner returned malformed JSON")
-        line = finding.get("line")
-        if not isinstance(line, int) or isinstance(line, bool) or line < 0:
-            raise ActionError("the bundled scanner returned malformed JSON")
-        if finding.get("check_id") == "read-error":
-            raise ActionError("the scanner could not read every selected file")
     return report
 
 
@@ -141,7 +142,7 @@ def safe_display(value):
     return str(value).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
 
 
-def write_outputs(layer1_verdict):
+def write_outputs(layer1_verdict, complete):
     output_path = os.environ.get("GITHUB_OUTPUT")
     if not output_path:
         raise ActionError("GITHUB_OUTPUT is not set")
@@ -149,6 +150,7 @@ def write_outputs(layer1_verdict):
     with open(output_path, "a", encoding="utf-8") as output:
         output.write(f"verdict={verdict}\n")
         output.write(f"layer1_verdict={layer1_verdict}\n")
+        output.write(f"coverage_complete={'true' if complete else 'false'}\n")
     return verdict
 
 
@@ -177,38 +179,34 @@ def main():
     target = resolve_target(workspace, os.environ.get("CANARY_INPUT_PATH", "."))
     scanner_environment = os.environ.copy()
     scanner_environment.pop("CANARY_API_TOKEN", None)
-    completed = subprocess.run(
-        [sys.executable, str(SCANNER), str(target)],
-        env=scanner_environment,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    if completed.returncode != 0:
-        raise ActionError("the bundled scanner could not complete")
-    report = validated_report(completed.stdout)
 
-    findings = report["findings"]
-    layer1_verdict = worst_file_verdict(findings)
-    print(
-        f"Canary layer 1: files={report['files_scanned']} "
-        f"findings={len(findings)} verdict={layer1_verdict}"
-    )
-    for finding in findings:
+    overall, complete = "LIKELY_SAFE", True
+    for package in skill_packages(target):
+        report = scan(package, scanner_environment)
+        verdict = report["verdict"]
+        overall = max(overall, verdict, key=VERDICT_RANK.get)
+        complete = complete and report["coverage"]["complete"]
+        categories = sorted({f.get("category", "?") for f in report["findings"]
+                             if f.get("severity") != "info"})
+        kinds = sorted({c.get("kind", "?") for c in report["capabilities"]})
         print(
-            "Canary finding: "
-            f"category={safe_display(finding['category'])} "
-            f"severity={safe_display(finding['severity'])} "
-            f"file={safe_display(finding['file'])} "
-            f"line={safe_display(finding['line'])}"
+            f"SkillCanary: package={safe_display(display_path(package, workspace))} "
+            f"verdict={verdict} score={report.get('score')} "
+            f"coverage_complete={report['coverage']['complete']} "
+            f"threats={safe_display(','.join(categories) or 'none')} "
+            f"capabilities={safe_display(','.join(kinds) or 'none')}"
         )
-    verdict = write_outputs(layer1_verdict)
-    return 1 if FAIL_RANK[fail_on] <= VERDICT_RANK[layer1_verdict] else 0
+    write_outputs(overall, complete)
+    failed = FAIL_RANK[fail_on] <= VERDICT_RANK[overall]
+    if not complete and fail_on != "never":
+        print("SkillCanary: some files could not be read, so this scan cannot pass.")
+        failed = True
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except (ActionError, KeyError, OSError) as exc:
-        print(f"Canary action error: {safe_display(exc)}", file=sys.stderr)
+        print(f"SkillCanary action error: {safe_display(exc)}", file=sys.stderr)
         raise SystemExit(2)

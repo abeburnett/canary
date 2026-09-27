@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Verify a Canary badge against skill bytes and signed revocation state."""
+"""Verify a SkillCanary badge against a skill folder and the signed revocation list.
+
+Only badges signed by the production SkillCanary key verify. The key id is
+built in; a key file shipped next to a badge cannot replace it.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +13,7 @@ import binascii
 import datetime as dt
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import sys
@@ -21,11 +26,18 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 
 UTC = dt.timezone.utc
-BADGE_SCHEMA = "skillcanary.badge.v1"
+BADGE_SCHEMA = "skillcanary.badge.v2"  # v2: skill.sha256 is the skill-folder digest
 REVOCATIONS_SCHEMA = "skillcanary.revocations.v1"
 REVOCATION_REASONS = frozenset({"withdrawn", "changed-content", "review-invalidated"})
 IDENTIFIER_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
 GITHUB_HANDLE_RE = re.compile(r"@[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?\Z")
+
+
+# The production SkillCanary signing key (SHA-256 of its raw Ed25519 bytes).
+TRUSTED_KEY_ID = "e714d1ced919daeea358e9b0d384b083d4d0bdea3aa99b115c64db0d47a47841"
+# A revocation list may claim freshness for at most this long after signing.
+MAX_REVOCATION_WINDOW = dt.timedelta(days=7)
+TREE_DIGEST_PREFIX = b"skillcanary.tree.v1\n"
 
 
 class VerificationError(RuntimeError):
@@ -50,6 +62,32 @@ def sha256_file(path: Path) -> str:
         return sha256_bytes(path.read_bytes())
     except OSError as exc:
         raise VerificationError("required input file could not be read") from exc
+
+
+def skill_digest(path: Path) -> str:
+    """Digest of every file in a skill folder (or of one file), links refused.
+
+    Must match skill_digest() in the issuer (canary-pro badges/canary_badges.py).
+    """
+    lines = []
+    if path.is_symlink():
+        raise VerificationError("the skill path must not be a link")
+    if path.is_file():
+        lines.append(f"{path.name}\0{sha256_file(path)}\n")
+    elif path.is_dir():
+        for root, dirs, files in os.walk(path):
+            for name in dirs + files:
+                full = Path(root) / name
+                if full.is_symlink() or not (full.is_dir() or full.is_file()):
+                    raise VerificationError("the skill folder contains a link or special file")
+            for name in files:
+                full = Path(root) / name
+                lines.append(f"{full.relative_to(path).as_posix()}\0{sha256_file(full)}\n")
+    else:
+        raise VerificationError("the skill path must be a file or folder")
+    if not lines:
+        raise VerificationError("the skill folder is empty")
+    return sha256_bytes(TREE_DIGEST_PREFIX + "".join(sorted(lines)).encode("utf-8"))
 
 
 def load_json(path: Path, label: str) -> dict[str, Any]:
@@ -223,6 +261,8 @@ def validate_revocations(payload: dict[str, Any]) -> list[dict[str, Any]]:
         raise VerificationError("revocation list issue time is in the future")
     if next_update <= issued_at or next_update <= now:
         raise VerificationError("revocation list is stale")
+    if next_update - issued_at > MAX_REVOCATION_WINDOW:
+        raise VerificationError("revocation list claims freshness for more than 7 days")
     entries = payload["entries"]
     if not isinstance(entries, list):
         raise VerificationError("revocation entries are invalid")
@@ -252,10 +292,12 @@ def validate_revocations(payload: dict[str, Any]) -> list[dict[str, Any]]:
 
 def verify(args: argparse.Namespace) -> None:
     public_key = load_public_key(args.public_key)
+    if key_id(public_key) != TRUSTED_KEY_ID:
+        raise VerificationError("public key is not the SkillCanary signing key")
     badge_document = load_json(args.badge, "badge")
     badge = verify_document(badge_document, BADGE_SCHEMA, public_key)
     validate_badge_payload(badge)
-    if sha256_file(args.skill) != badge["skill"]["sha256"]:
+    if skill_digest(args.skill) != badge["skill"]["sha256"]:
         raise VerificationError("skill content does not match the badge")
 
     revocation_document = load_json(args.revocations, "revocation list")
@@ -273,7 +315,7 @@ def verify(args: argparse.Namespace) -> None:
         for entry in entries
     ):
         raise VerificationError("badge is revoked")
-    print("VALID")
+    print(f"VALID (signed by SkillCanary key {TRUSTED_KEY_ID})")
 
 
 def parser() -> argparse.ArgumentParser:
