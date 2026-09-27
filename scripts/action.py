@@ -39,7 +39,10 @@ class ActionError(Exception):
 def bundled_files():
     """Every file the scanner runs from, relative to the Action root."""
     files = {"bin/canary"}
-    files.update(f"canary/{p.name}" for p in (ACTION_ROOT / "canary").glob("*.py"))
+    # Every module, including canary/hosts and canary/classifiers: cli.py
+    # imports them, so an unlisted file would run unchecked.
+    files.update(p.relative_to(ACTION_ROOT).as_posix()
+                 for p in (ACTION_ROOT / "canary").rglob("*.py"))
     return files
 
 

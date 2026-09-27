@@ -14,7 +14,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 if len(sys.argv) != 2:
     sys.exit("usage: update-manifest.py <scanner-source-commit>")
-files = ["bin/canary"] + sorted(f"canary/{p.name}" for p in (ROOT / "canary").glob("*.py"))
+files = ["bin/canary"] + sorted(p.relative_to(ROOT).as_posix()
+                               for p in (ROOT / "canary").rglob("*.py"))
 manifest = {
     "version": sys.argv[1],
     "files": {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in files},

@@ -229,3 +229,19 @@ class CanaryActionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_an_unlisted_module_in_a_subfolder_is_refused(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            (workspace / "SKILL.md").write_text("# Notes\n", encoding="utf-8")
+            script = self.make_action_bundle(
+                root / "action",
+                "import json\nprint(json.dumps({'verdict': 'LIKELY_SAFE'}))\n")
+            extra = root / "action" / "canary" / "hosts" / "extra.py"
+            extra.parent.mkdir(parents=True)
+            extra.write_text("# not in the manifest\n", encoding="utf-8")
+            result, outputs = self.run_action(workspace, path="SKILL.md", script=script)
+            self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+            self.assertIn("do not match the manifest", result.stdout + result.stderr)
