@@ -8,11 +8,13 @@ touches this Mac's real policy folders.
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 
 from canary import setup
 
+MACOS = unittest.skipUnless(sys.platform == "darwin", "setup runs macOS tools (base64 -D, /Library)")
 ME = f"{os.getuid()}:{os.getgid()}"
 
 
@@ -44,6 +46,7 @@ DROP_IN = "/Library/Application Support/ClaudeCode/managed-settings.d/canary.jso
 CODEX = "/etc/codex/requirements.toml"
 
 
+@MACOS
 class GuardInstallsBothHooks(unittest.TestCase):
     def test_guard_then_doctor_finds_no_gaps(self):
         mac = Mac()
@@ -71,6 +74,7 @@ class GuardInstallsBothHooks(unittest.TestCase):
         self.assertFalse(os.path.exists(mac.at(setup.LIB)))
 
 
+@MACOS
 class ThePrivilegedScriptChecksItsPayload(unittest.TestCase):
     def test_a_changed_payload_installs_nothing(self):
         mac = Mac()
@@ -82,6 +86,7 @@ class ThePrivilegedScriptChecksItsPayload(unittest.TestCase):
         self.assertFalse(os.path.exists(mac.at(DROP_IN)))
 
 
+@MACOS
 class AdministratorFilesAreNeverOverwritten(unittest.TestCase):
     def test_existing_codex_requirements_become_a_manual_step(self):
         mac = Mac()
@@ -108,6 +113,7 @@ class AdministratorFilesAreNeverOverwritten(unittest.TestCase):
         self.assertEqual(mac.doctor()[0], "scan")
 
 
+@MACOS
 class DoctorReportsWhatIsWeak(unittest.TestCase):
     def test_a_writable_install_is_a_gap(self):
         mac = Mac()

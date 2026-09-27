@@ -228,6 +228,7 @@ if __name__ == "__main__":
     unittest.main()
 
 
+@unittest.skipUnless(sys.platform == "darwin", "the Lockdown step runs macOS tools")
 class LockdownInstallsThroughTheAdministratorStep(unittest.TestCase):
     def lockdown(self):
         from canary import setup
