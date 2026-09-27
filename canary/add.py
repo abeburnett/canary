@@ -7,6 +7,8 @@ the person's dialog labelled as such, and to the agent only as a sanitized
 name or a validated GitHub identifier.
 """
 
+import fcntl
+import hashlib
 import http.client
 import json
 import os
@@ -59,8 +61,10 @@ def parse_source(source):
         owner, repo, kind, ref, path = m.groups()
         if not repo or repo in (".", ".."):
             raise SourceError("That GitHub link has no repository name.")
+        if ref is not None and (ref.startswith(".") or "%" in ref):
+            raise SourceError("That GitHub link has an unusable branch or tag name.")
         parts = [p for p in (path or "").split("/") if p]
-        if any(p in (".", "..") or "\x00" in p for p in parts):
+        if any(p in (".", "..") or "\x00" in p or "%" in p for p in parts):
             raise SourceError("That GitHub link has an unusable path.")
         if kind == "blob":
             if not parts or parts[-1] != "SKILL.md":
@@ -155,6 +159,24 @@ def _extract(archive, dest):
     return os.path.join(dest, top)
 
 
+def _copy_regular(path, target):
+    """Copy one regular file through a handle opened without following links,
+    so a file swapped for a link after it was listed is refused."""
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError:
+        raise SourceError("The folder changed or contains links or special files.") from None
+    with os.fdopen(fd, "rb") as src:
+        st = os.fstat(src.fileno())
+        if not stat.S_ISREG(st.st_mode):
+            raise SourceError("The folder contains links or special files.")
+        mode = 0o755 if st.st_mode & 0o100 else 0o644
+        out_fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, mode)
+        with os.fdopen(out_fd, "wb") as out:
+            shutil.copyfileobj(src, out)
+            os.fchmod(out.fileno(), mode)
+
+
 def _copy_local(src, dest):
     """Copy a local folder without following links and without .git."""
     count = 0
@@ -171,9 +193,35 @@ def _copy_local(src, dest):
             if stat.S_ISLNK(st.st_mode) or not (stat.S_ISDIR(st.st_mode) or stat.S_ISREG(st.st_mode)):
                 raise SourceError("The folder contains links or special files.")
             if stat.S_ISREG(st.st_mode):
-                shutil.copyfile(path, os.path.join(dest, rel, name), follow_symlinks=False)
-                os.chmod(os.path.join(dest, rel, name), 0o755 if st.st_mode & 0o100 else 0o644)
+                _copy_regular(path, os.path.join(dest, rel, name))
     return dest
+
+
+def tree_digest(root):
+    """A fingerprint of every file's full bytes, path and program bit, read
+    without following links. Unlike the scan digest it has no size or depth
+    limit, so it binds exactly what gets installed. Links or special files
+    raise SourceError."""
+    entries = []
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        dirnames.sort()
+        for name in dirnames + filenames:
+            path = os.path.join(dirpath, name)
+            rel = os.path.relpath(path, root)
+            st = os.lstat(path)
+            if stat.S_ISDIR(st.st_mode):
+                entries.append(f"d\0{rel}")
+                continue
+            if not stat.S_ISREG(st.st_mode):
+                raise SourceError("The package contains links or special files.")
+            h = hashlib.sha256()
+            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+            with os.fdopen(fd, "rb") as fh:
+                for chunk in iter(lambda: fh.read(1 << 16), b""):
+                    h.update(chunk)
+            entries.append(f"f\0{rel}\0{'x' if st.st_mode & 0o100 else '-'}\0{h.hexdigest()}")
+    data = "skillcanary.tree.v1\n" + "\n".join(sorted(entries))
+    return "sha256:" + hashlib.sha256(data.encode("utf-8", "surrogateescape")).hexdigest()
 
 
 def _select(root, path):
@@ -214,11 +262,22 @@ def _name(folder, fallback):
 # ---- filesystem helpers --------------------------------------------------
 
 def _set_modes(root, writable):
-    for dirpath, dirnames, filenames in os.walk(root):
+    """Change modes without following links; a link means the tree changed."""
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        for name in dirnames + filenames:
+            if os.path.islink(os.path.join(dirpath, name)):
+                raise SourceError("The package contains links or special files.")
         for name in filenames:
             path = os.path.join(dirpath, name)
-            x = os.stat(path).st_mode & 0o100
-            os.chmod(path, (0o755 if x else 0o644) if writable else (0o555 if x else 0o444))
+            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            try:
+                st = os.fstat(fd)
+                if not stat.S_ISREG(st.st_mode):
+                    raise SourceError("The package contains links or special files.")
+                x = st.st_mode & 0o100
+                os.fchmod(fd, (0o755 if x else 0o644) if writable else (0o555 if x else 0o444))
+            finally:
+                os.close(fd)
         os.chmod(dirpath, 0o755 if writable else 0o555)
 
 
@@ -237,13 +296,19 @@ def _lock_path(home):
     return os.path.join(home, ".agents", ".canary-lock.json")
 
 
+def _unique_pairs(pairs):
+    if len({k for k, _ in pairs}) != len(pairs):
+        raise ValueError("duplicate key")
+    return dict(pairs)
+
+
 def _read_lock(home):
     path = _lock_path(home)
     if not os.path.exists(path):
         return {"schema": "canary.lock/1", "skills": {}}
     try:
         with open(path, encoding="utf-8") as fh:
-            lock = json.load(fh)
+            lock = json.load(fh, object_pairs_hook=_unique_pairs)
         if lock.get("schema") != "canary.lock/1" or not isinstance(lock.get("skills"), dict):
             raise ValueError
         return lock
@@ -255,10 +320,36 @@ def _write_lock(home, lock):
     path = _lock_path(home)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     fd, tmp = tempfile.mkstemp(prefix=".canary-lock-", dir=os.path.dirname(path))
-    with os.fdopen(fd, "w", encoding="utf-8") as fh:
-        json.dump(lock, fh, indent=2, sort_keys=True)
-        fh.write("\n")
-    os.replace(tmp, path)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(lock, fh, indent=2, sort_keys=True)
+            fh.write("\n")
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+class _Commit:
+    """One install commits at a time: destinations and the lockfile are
+    re-read and written under an exclusive lock, never while the person is
+    still deciding."""
+
+    def __init__(self, home):
+        self.path = _lock_path(home) + ".lock"
+
+    def __enter__(self):
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        self.fd = os.open(self.path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+        fcntl.flock(self.fd, fcntl.LOCK_EX)
+        return self
+
+    def __exit__(self, *exc):
+        fcntl.flock(self.fd, fcntl.LOCK_UN)
+        os.close(self.fd)
 
 
 # ---- the person's approval -------------------------------------------------
@@ -359,6 +450,33 @@ def _admin_install(snapshot, destinations, digest, run_id, canary_bin, owner):
     return "\n".join(lines) + "\n"
 
 
+def _unpack(kind, rest, fetch, work, quarantine):
+    """Fetch or copy the package, select the linked skill, and move it into
+    a read-only quarantine snapshot."""
+    if kind == "github":
+        owner, repo, ref, path = rest
+        archive = os.path.join(work, "package.tar.gz")
+        commit = fetch(owner, repo, ref, archive)
+        if not SHA.fullmatch(commit or ""):
+            raise SourceError("GitHub did not return a commit for that link.")
+        root = _extract(archive, os.path.join(work, "x"))
+        fallback = path.rsplit("/", 1)[-1] if path else repo.lower()
+    else:
+        owner = repo = ref = commit = None
+        path = ""
+        root = _copy_local(rest[0], os.path.join(work, "x"))
+        fallback = os.path.basename(rest[0]).lower()
+    folder = _select(root, path)
+    if folder != root and kind == "github":
+        fallback = os.path.basename(folder).lower()
+    name = _name(folder, fallback)
+    snapshot = os.path.join(quarantine, "package")
+    os.rename(folder, snapshot)
+    _remove(work)
+    _set_modes(snapshot, writable=False)
+    return snapshot, name, owner, repo, ref, commit, path
+
+
 def add(source, *, home=None, support_dir=None, approve=None, fetch=None,
         backend="auto", model=None, timeout_s=classify.DEFAULT_TIMEOUT_S, hosts=None,
         prefix="/", admin=None, admin_owner="root:wheel"):
@@ -376,31 +494,17 @@ def add(source, *, home=None, support_dir=None, approve=None, fetch=None,
 
     run_id = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime()) + "-" + secrets.token_hex(4)
     quarantine = os.path.join(support_dir, "quarantine", run_id)
-    work = tempfile.mkdtemp(prefix="canary-add-")
     os.makedirs(quarantine, mode=0o700)
+    work = None
     try:
-        if kind == "github":
-            owner, repo, ref, path = rest
-            archive = os.path.join(work, "package.tar.gz")
-            commit = fetch(owner, repo, ref, archive)
-            if not SHA.fullmatch(commit or ""):
-                raise SourceError("GitHub did not return a commit for that link.")
-            root = _extract(archive, os.path.join(work, "x"))
-            fallback = path.rsplit("/", 1)[-1] if path else repo.lower()
-        else:
-            owner = repo = ref = commit = None
-            path = ""
-            root = _copy_local(rest[0], os.path.join(work, "x"))
-            fallback = os.path.basename(rest[0]).lower()
-        folder = _select(root, path)
-        if folder != root and kind == "github":
-            fallback = os.path.basename(folder).lower()
-        name = _name(folder, fallback)
-        snapshot = os.path.join(quarantine, "package")
-        os.rename(folder, snapshot)
-        _remove(work)
-        _set_modes(snapshot, writable=False)
-
+        work = tempfile.mkdtemp(prefix="canary-add-")
+        try:
+            snapshot, name, owner, repo, ref, commit, path = _unpack(
+                kind, rest, fetch, work, quarantine)
+        except (OSError, ValueError, UnicodeError, tarfile.TarError):
+            # Error text from the file system can quote package file names.
+            raise SourceError("The package could not be unpacked safely.") from None
+        snapshot_digest = tree_digest(snapshot)
         result = classify.check(snapshot, backend=backend, model=model, timeout_s=timeout_s,
                                 log_dir=os.path.join(support_dir, "logs"))
         verdict, reasons = result["verdict"], result["reasons"]
@@ -430,55 +534,79 @@ def add(source, *, home=None, support_dir=None, approve=None, fetch=None,
                                   "run canary add again and answer the SkillCanary dialog.")
             return out
 
-        if (setup.read_state(prefix) or {}).get("level") == "lockdown":
-            canary_bin = os.path.join(prefix, setup.LIB, "bin", "canary")
-            text = _admin_install(snapshot, destinations, result["package_digest"], run_id,
-                                  canary_bin, admin_owner)
-            if not (admin or setup.run_as_admin)(text):
+        fields = {"source": source if kind == "github" else "local", "owner": owner,
+                  "repo": repo, "ref": ref, "commit": commit, "path": path}
+        with _Commit(home):
+            lock = _read_lock(home)
+            if name in lock["skills"] or any(os.path.lexists(d) for d in destinations):
                 out["outcome"] = "not_installed"
-                out["reasons"].append("The password step was declined, or the copy did not "
-                                      "match what was checked; nothing was installed.")
+                out["reasons"].append(f"A skill named {name} was installed meanwhile; "
+                                      "use canary update to replace it.")
                 return out
-            return _finish(out, lock, home, name, verdict, result, list(destinations),
-                           {"source": source if kind == "github" else "local", "owner": owner,
-                            "repo": repo, "ref": ref, "commit": commit, "path": path})
-        staged = []
-        try:
-            for dest in destinations:
-                parent = os.path.dirname(dest)
-                os.makedirs(parent, exist_ok=True)
-                stage = os.path.join(parent, f".canary-staging-{run_id}-{name}")
-                staged.append((stage, dest))
-                shutil.copytree(snapshot, stage, symlinks=True)
-                _set_modes(stage, writable=True)
-                if scan.scan_package(stage)["package_digest"] != result["package_digest"]:
-                    raise SourceError("changed")
-        except (SourceError, scan.PathError, OSError):
-            for stage, _ in staged:
-                _remove(stage)
-            out["outcome"] = "not_installed"
-            out["reasons"].append("The package changed after it was checked; nothing was installed.")
-            return out
-        done = []
-        try:
-            for stage, dest in staged:
-                os.rename(stage, dest)
-                done.append(dest)
-        except OSError:
-            for dest in done:
-                _remove(dest)
-            for stage, _ in staged:
-                _remove(stage)
-            out["outcome"] = "not_installed"
-            out["reasons"].append("Another install got there first; nothing was installed.")
-            return out
-
-        return _finish(out, lock, home, name, verdict, result, done,
-                       {"source": source if kind == "github" else "local", "owner": owner,
-                        "repo": repo, "ref": ref, "commit": commit, "path": path})
+            if (setup.read_state(prefix) or {}).get("level") == "lockdown":
+                canary_bin = os.path.join(prefix, setup.LIB, "bin", "canary")
+                text = _admin_install(snapshot, destinations, snapshot_digest, run_id,
+                                      canary_bin, admin_owner)
+                if not (admin or setup.run_as_admin)(text):
+                    out["outcome"] = "not_installed"
+                    out["reasons"].append("The password step was declined, or the copy did "
+                                          "not match what was checked; nothing was installed.")
+                    return out
+                done = list(destinations)
+            else:
+                done = _install(snapshot, destinations, snapshot_digest, run_id, name, out)
+                if done is None:
+                    return out
+            try:
+                return _finish(out, lock, home, name, verdict, result, done, fields)
+            except OSError:
+                for dest in done:
+                    _remove(dest)
+                out["outcome"] = "not_installed"
+                out["installed"] = []
+                out["reasons"].append("SkillCanary could not record the install, so it "
+                                      "removed it again.")
+                return out
     finally:
-        _remove(work)
+        if work:
+            _remove(work)
         _remove(quarantine)
+
+
+def _install(snapshot, destinations, digest, run_id, name, out):
+    """Stage a copy beside each destination, confirm each is byte-for-byte
+    the checked snapshot, then rename them in. None when nothing was installed."""
+    staged = []
+    try:
+        for dest in destinations:
+            parent = os.path.dirname(dest)
+            os.makedirs(parent, exist_ok=True)
+            stage = os.path.join(parent, f".canary-staging-{run_id}-{name}")
+            staged.append((stage, dest))
+            shutil.copytree(snapshot, stage, symlinks=True)
+            _set_modes(stage, writable=True)
+            if tree_digest(stage) != digest:
+                raise SourceError("changed")
+    except (SourceError, OSError):
+        for stage, _ in staged:
+            _remove(stage)
+        out["outcome"] = "not_installed"
+        out["reasons"].append("The package changed after it was checked; nothing was installed.")
+        return None
+    done = []
+    try:
+        for stage, dest in staged:
+            os.rename(stage, dest)
+            done.append(dest)
+    except OSError:
+        for dest in done:
+            _remove(dest)
+        for stage, _ in staged:
+            _remove(stage)
+        out["outcome"] = "not_installed"
+        out["reasons"].append("Another install got there first; nothing was installed.")
+        return None
+    return done
 
 
 def _finish(out, lock, home, name, verdict, result, done, source_fields):

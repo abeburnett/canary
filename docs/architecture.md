@@ -316,7 +316,12 @@ Sources, one skill per link:
   file's folder). `<ref>` is resolved to a commit SHA through the GitHub API
   first; the tarball is then fetched by SHA from `codeload.github.com`. No
   redirects are followed and the download is capped at 50 MB.
-- A local folder path, copied without following links and without `.git`.
+- A local folder path, copied through file handles opened without following
+  links, and without `.git`.
+
+Links with `%` in the ref or path, and refs starting with `.`, are refused
+before anything is fetched: an encoded path could name a different folder
+from the one the person sees.
 
 A link whose folder holds no `SKILL.md` but several subfolders that do is
 exit 2 with the count only ("link the folder you want"): folder names are
@@ -336,10 +341,15 @@ Steps:
    package-supplied string labelled as such; never the package's description
    or excerpts, which an attacker writes. `NEEDS_REVIEW` defaults to Cancel.
    The dialog gives up after 300 seconds, which counts as a decline.
-4. On approval, for each host: copy the snapshot to a staging folder beside
-   the destination, re-scan the staged copy, and `rename` it into place only
-   if its `package_digest` equals the checked snapshot's. Any mismatch aborts
-   and removes the staging folder.
+4. On approval, one install at a time (an exclusive lock beside the
+   lockfile, never held while the person decides): re-read the lockfile and
+   destinations, copy the snapshot to a staging folder beside each
+   destination, and `rename` it into place only if its tree digest equals
+   the checked snapshot's. The tree digest (`canary digest`) hashes every
+   file's full bytes, path and program bit with no size or depth limit,
+   unlike the scan's `package_digest`, so it binds exactly what lands. Any
+   mismatch aborts and removes the staging folders; a failure to write the
+   lockfile removes the install again.
 5. Record the install in the lockfile and delete the quarantine snapshot.
 
 Install roots come from each host adapter's `install_root(home)`: Claude Code
@@ -357,6 +367,9 @@ There is no `--yes`, environment override or typed confirmation: an agent can
 type into a terminal. Approval comes only from the dialog (tests inject an
 approver through the Python API). With no GUI session the outcome is
 `not_installed`, "approve on the Mac's screen".
+
+Errors from unpacking never quote file-system messages, which can contain
+package file names; the agent sees a fixed sentence.
 
 Exit codes: 0 installed; 10 not installed and waiting on the person (declined,
 dialog unavailable or timed out); 20 refused because `UNSAFE`; 2 usage, link
@@ -414,7 +427,7 @@ returns the roots to the person.
 
 At Lockdown, `canary add` copies the checked snapshot into a root-owned
 staging folder inside the root, has the root-owned `canary digest` confirm the
-staged copy's `package_digest`, and only then renames it into place, all in
+staged copy's tree digest, and only then renames it into place, all in
 one administrator step.
 
 `canary doctor` reads `state.json` and checks the machine against it: the

@@ -208,7 +208,11 @@ def _digest(args):
     if len(args) != 1 or not os.path.isdir(args[0]):
         print(USAGE, file=sys.stderr)
         return EXIT_USAGE
-    print(scan.scan_package(args[0])["package_digest"])
+    try:
+        print(add.tree_digest(args[0]))
+    except add.SourceError as exc:
+        print(f"canary: {exc}", file=sys.stderr)
+        return EXIT_USAGE
     return 0
 
 
@@ -233,7 +237,8 @@ def main(argv):
         if command == "digest":
             return _digest(rest)
     except Exception as exc:  # fail closed: callers treat 3 as NEEDS_REVIEW
-        print(f"canary: internal error: {exc}", file=sys.stderr)
+        # Exception text can quote file names from the package being checked.
+        print(f"canary: internal error ({type(exc).__name__})", file=sys.stderr)
         return EXIT_INTERNAL
     print(USAGE, file=sys.stderr)
     return EXIT_USAGE
