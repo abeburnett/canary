@@ -104,7 +104,7 @@ class AdministratorFilesAreNeverOverwritten(unittest.TestCase):
         mac.setup("scan")
         self.assertTrue(os.path.exists(mac.at(DROP_IN)))
         self.assertFalse(os.path.exists(mac.at(CODEX)))
-        self.assertFalse(os.path.exists(mac.at(setup.LIB)))
+        self.assertTrue(os.path.exists(mac.at(setup.LIB + "/bin/canary")))
         self.assertEqual(mac.doctor()[0], "scan")
 
 

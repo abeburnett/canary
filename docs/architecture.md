@@ -423,7 +423,8 @@ travel inside it as a base64 archive whose SHA-256 the script checks before
 extracting. The script records the level and every file it created in
 `/usr/local/lib/skillcanary/state.json` (root-owned). Moving to a lower level
 removes only files Canary created and that still match what it wrote, and
-returns the roots to the person.
+returns the roots to the person. The program itself stays installed at every
+level, since the Mac installer may have put it there.
 
 At Lockdown, `canary add` copies the checked snapshot into a root-owned
 staging folder inside the root, has the root-owned `canary digest` confirm the

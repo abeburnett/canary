@@ -145,12 +145,12 @@ def script(p, prefix="/", owner="root:wheel", person=None):
     for root in p["unlock"]:
         if person:
             lines.append(f"[ ! -e {q(root)} ] || chown -R {q(person)} {q(root)}")
-    if p["level"] == "scan":
-        lines += [f"rm -f {q(link)}", f"rm -rf {q(lib)}"]
-    else:
-        state = base64.b64encode(json.dumps(p["state"], indent=2).encode()).decode("ascii")
-        lines += [f"printf %s {q(state)} | /usr/bin/base64 -D > {q(lib + '/state.json')}",
-                  f"chown -R {q(owner)} {q(lib)}", f"chmod -R go-w {q(lib)}"]
+    # Scan keeps the program (the Mac installer may have put it there) and
+    # records the level; only the protection is removed.
+    state = base64.b64encode(json.dumps(p["state"], indent=2).encode()).decode("ascii")
+    lines += [f"[ ! -d {q(lib)} ] || printf %s {q(state)} | /usr/bin/base64 -D > {q(lib + '/state.json')}",
+              f"[ ! -d {q(lib)} ] || chown -R {q(owner)} {q(lib)}",
+              f"[ ! -d {q(lib)} ] || chmod -R go-w {q(lib)}"]
     return "\n".join(lines) + "\n"
 
 
