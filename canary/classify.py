@@ -33,7 +33,10 @@ CATEGORIES = ("instruction_override", "approval_bypass", "exfiltration",
               "credential_harvesting", "persistence", "stealth",
               "prompt_extraction", "obfuscation", "remote_code_execution",
               "social_engineering", "other")
+# Display lengths: longer text is shortened, since it never affects the
+# verdict. Text past MAX_FIELD means the model went off course: invalid.
 FIELD_LIMITS = {"evidence": 200, "reasoning": 200, "summary": 300}
+MAX_FIELD = 4000
 FENCE_WRAPPER = re.compile(r"\A\s*```json[ \t]*\r?\n(.*)\r?\n```\s*\Z", re.S)
 
 SYSTEM_PROMPT = """\
@@ -139,8 +142,9 @@ def validate(raw):
     conf = answer["confidence"]
     if not isinstance(conf, decimal.Decimal) or not conf.is_finite() or not 0 <= conf <= 1:
         raise InvalidAnswer("bad confidence")
-    if not isinstance(answer["summary"], str) or len(answer["summary"]) > FIELD_LIMITS["summary"]:
+    if not isinstance(answer["summary"], str) or len(answer["summary"]) > MAX_FIELD:
         raise InvalidAnswer("bad summary")
+    answer["summary"] = answer["summary"][:FIELD_LIMITS["summary"]]
     if not isinstance(answer["findings"], list) or len(answer["findings"]) > 50:
         raise InvalidAnswer("bad findings")
     for f in answer["findings"]:
@@ -151,8 +155,9 @@ def validate(raw):
         if f["severity"] not in ("high", "medium", "low"):
             raise InvalidAnswer("bad severity")
         for key in ("evidence", "reasoning"):
-            if not isinstance(f[key], str) or len(f[key]) > FIELD_LIMITS[key]:
+            if not isinstance(f[key], str) or len(f[key]) > MAX_FIELD:
                 raise InvalidAnswer(f"bad {key}")
+            f[key] = f[key][:FIELD_LIMITS[key]]
     return answer
 
 

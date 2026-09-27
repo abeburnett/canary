@@ -27,6 +27,11 @@ mkdir -p /usr/local/bin
 ln -sfn /usr/local/lib/skillcanary/bin/canary /usr/local/bin/canary
 chown -R root:wheel /usr/local/lib/skillcanary
 chmod -R go-w /usr/local/lib/skillcanary
+# Open the Get Started page for the person at the screen, if there is one.
+PERSON=$(stat -f %Su /dev/console 2>/dev/null)
+if [ -n "$PERSON" ] && [ "$PERSON" != root ] && [ "$PERSON" != loginwindow ]; then
+  launchctl asuser "$(id -u "$PERSON")" sudo -u "$PERSON" open "https://skillcanary.com/start" || true
+fi
 exit 0
 SH
 chmod 755 "$WORK/scripts/postinstall"
@@ -34,9 +39,18 @@ COPYFILE_DISABLE=1 pkgbuild --root "$WORK/payload" --scripts "$WORK/scripts" --o
   --identifier com.skillcanary.canary --version "$VERSION" --install-location / \
   "$WORK/canary-component.pkg" >/dev/null
 PRODUCT="$OUT/SkillCanary-$VERSION.pkg"
-if [ -n "$IDENTITY" ]; then
-  productbuild --package "$WORK/canary-component.pkg" --sign "$IDENTITY" "$PRODUCT"
-else
-  productbuild --package "$WORK/canary-component.pkg" "$PRODUCT"
-fi
+# A distribution adds the title and the final "what next" screen.
+productbuild --synthesize --package "$WORK/canary-component.pkg" "$WORK/distribution.xml" >/dev/null
+/usr/bin/python3 - "$WORK/distribution.xml" <<'PY'
+import re, sys
+p = sys.argv[1]; s = open(p).read()
+s, n = re.subn(r'(<installer-gui-script[^>]*>)',
+               r'\1\n    <title>SkillCanary</title>\n    <conclusion file="conclusion.html" mime-type="text/html"/>', s, count=1)
+assert n == 1, "distribution has no installer-gui-script element"
+open(p, "w").write(s)
+PY
+SIGN=()
+if [ -n "$IDENTITY" ]; then SIGN=(--sign "$IDENTITY"); fi
+productbuild --distribution "$WORK/distribution.xml" --resources "$ROOT/packaging/resources" \
+  --package-path "$WORK" ${SIGN[@]+"${SIGN[@]}"} "$PRODUCT"
 shasum -a 256 "$PRODUCT"

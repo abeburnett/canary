@@ -138,3 +138,43 @@ class DoctorReportsWhatIsWeak(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@MACOS
+class SetupTeachesAgentsAboutSkillCanary(unittest.TestCase):
+    """0.1.1: setup installs the SkillCanary skill so "use Canary to install"
+    works in Claude Code and Codex without a plugin."""
+
+    def skill_paths(self, mac):
+        return [os.path.join(mac.home, root, "canary", "SKILL.md")
+                for root in (".claude/skills", ".agents/skills")]
+
+    def test_each_level_installs_the_skill_in_both_hosts(self):
+        from canary import frontdoor
+        for level in ("scan", "guard", "lockdown"):
+            with self.subTest(level):
+                mac = Mac()
+                out, code = mac.setup(level)
+                self.assertEqual(code, 0)
+                for path in self.skill_paths(mac):
+                    with open(path) as fh:
+                        self.assertEqual(fh.read(), frontdoor.installed_text())
+                if level == "lockdown":
+                    self.assertEqual(mac.doctor()[1], [])
+
+    def test_a_canary_skill_someone_else_put_there_is_left_alone(self):
+        mac = Mac()
+        theirs = self.skill_paths(mac)[0]
+        os.makedirs(os.path.dirname(theirs))
+        with open(theirs, "w") as fh:
+            fh.write("---\nname: canary\ndescription: someone else's\n---\n")
+        mac.setup("guard")
+        with open(theirs) as fh:
+            self.assertIn("someone else's", fh.read())
+        self.assertTrue(os.path.exists(self.skill_paths(mac)[1]))
+
+    def test_the_shipped_skill_file_is_the_one_setup_installs(self):
+        from canary import frontdoor
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(root, "skills", "canary", "SKILL.md")) as fh:
+            self.assertEqual(fh.read(), frontdoor.SKILL_TEXT)

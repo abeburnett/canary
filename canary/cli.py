@@ -217,6 +217,10 @@ def _digest(args):
 
 
 def main(argv):
+    if argv[:1] == ["--version"]:
+        from canary import __version__
+        print(f"canary {__version__}")
+        return 0
     if argv[:1] == ["hook"]:
         return _hook(argv[1:])
     if not argv or argv[0] in ("-h", "--help", "help"):

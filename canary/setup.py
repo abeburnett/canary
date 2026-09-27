@@ -19,6 +19,7 @@ import sys
 import tarfile
 import time
 
+from canary import frontdoor
 from canary.hosts import claude as claude_host
 from canary.hosts import codex as codex_host
 
@@ -112,6 +113,7 @@ def plan(level, home, prefix="/"):
         p: s for p, s in previous.get("created", {}).items() if p in keep and _sha_file(p) == s}
     created.update({f["path"]: hashlib.sha256(f["content"].encode()).hexdigest() for f in files})
     return {"level": level, "files": files, "remove": remove, "manual": manual,
+            "frontdoor": frontdoor.targets(home, lock_roots(home)),
             "lock": lock_roots(home) if level == "lockdown" else [],
             "unlock": [r for r in previous.get("locked", []) if level != "lockdown"],
             "state": {"level": level, "created": created,
@@ -139,6 +141,12 @@ def script(p, prefix="/", owner="root:wheel", person=None):
                   f"chmod 644 {q(f['path'] + '.canary-new')}",
                   f"mv {q(f['path'] + '.canary-new')} {q(f['path'])}"]
     lines += [f"rm -f {q(path)}" for path in p["remove"]]
+    if p["lock"]:
+        # Lockdown: write the SkillCanary skill before the roots are locked.
+        skill = base64.b64encode(frontdoor.installed_text().encode()).decode("ascii")
+        for folder in p.get("frontdoor", []):
+            lines += [f"mkdir -p {q(folder)}",
+                      f"printf %s {q(skill)} | /usr/bin/base64 -D > {q(folder + '/SKILL.md')}"]
     for root in p["lock"]:
         lines += [f"mkdir -p {q(root)}", f"chown -R {q(owner)} {q(root)}",
                   f"chmod -R go-w {q(root)}", f"chmod 755 {q(root)}"]
@@ -202,6 +210,12 @@ def setup(level=None, *, home=None, prefix="/", runner=run_as_admin, chooser=cho
     needs_admin = level != "scan" or previous != "scan"
     if needs_admin and not runner(script(p, prefix, owner, person)):
         return {"outcome": "not_changed", "level": previous, "manual": []}, 10
+    if level != "lockdown":
+        for folder in p["frontdoor"]:
+            try:
+                frontdoor.write(folder)
+            except OSError:
+                pass  # the skill is a convenience; protection does not depend on it
     return {"outcome": "done", "level": level,
             "manual": [{"path": m["path"], "block": m["block"]} for m in p["manual"]]}, 0
 

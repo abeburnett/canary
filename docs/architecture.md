@@ -261,8 +261,10 @@ truncated, because a truncated payload can hide at the tail.
 
 The model must answer with one JSON object in the shape
 `references/classifier-prompt.md` defines. One wrapping ```` ```json ````
-fence is tolerated; any other text, an extra key, a wrong type or an
-over-long field fails validation. The raw answer is written, mode 0600, to
+fence is tolerated; any other text, an extra key or a wrong type fails
+validation. Summary, evidence and reasoning are display text: longer than
+300, 200 and 200 characters they are shortened, and past 4,000 characters the
+answer is invalid. The raw answer is written, mode 0600, to
 `~/Library/Application Support/Canary/logs/`, outside every discovery root.
 
 The combiner (`verdict`) is the strictest of: the layer-1 `verdict`; the
@@ -437,6 +439,13 @@ each host's policy file carries the hook, Lockdown roots are root-owned, and
 the hook's Python runs. It prints the level, every gap in plain words, and the
 public-claims row that applies. Exit 0 when the machine matches its level, 10
 when there is a gap.
+
+At every level, setup also installs the SkillCanary skill
+(`canary/frontdoor.py`, the same text as `skills/canary/SKILL.md`) as
+`canary/SKILL.md` in `~/.claude/skills` and `~/.agents/skills`, so an agent
+knows to route installs through `canary add`. It writes only a folder that is
+missing or that it wrote before (its last line is a marker), and at Lockdown it
+writes through the privileged step before the roots are locked.
 
 Setup never sets `allowManagedHooksOnly`, because that would disable the
 person's own hooks; a managed hook cannot be disabled from user settings

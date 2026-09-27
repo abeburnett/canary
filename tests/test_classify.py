@@ -114,6 +114,26 @@ class AnythingButAValidAnswerFailsClosed(unittest.TestCase):
         self.assertEqual(result["verdict"], "NEEDS_REVIEW")
 
 
+class LongDisplayTextDoesNotChangeTheVerdict(unittest.TestCase):
+    """0.1.1: a clean SAFE answer with a 380-character summary came back
+    NEEDS_REVIEW. Summary, evidence and reasoning are display text only."""
+
+    def test_long_display_text_is_shortened_not_rejected(self):
+        pkg = make_package({"SKILL.md": SKILL})
+        finding = {"category": "other", "severity": "low",
+                   "evidence": "e" * 250, "reasoning": "r" * 250}
+        reply = answer("SAFE", 0.9, [finding], summary="s" * 380)
+        result = check(pkg, Recorder(reply), excerpts=True)
+        self.assertEqual(result["verdict"], "LIKELY_SAFE")
+        self.assertEqual(len(result["classifier"]["summary"]), 300)
+        self.assertEqual(len(result["classifier"]["findings"][0]["evidence"]), 200)
+
+    def test_absurdly_long_text_is_still_invalid(self):
+        pkg = make_package({"SKILL.md": SKILL})
+        result = check(pkg, Recorder(answer(summary="s" * 5000)))
+        self.assertEqual(result["classifier"]["status"], "invalid")
+
+
 class LayerTwoOnlyTightens(unittest.TestCase):
     def test_a_confident_safe_answer_does_not_clear_a_layer_one_unsafe(self):
         result = check(NASTY, Recorder(answer(confidence=0.99)))
