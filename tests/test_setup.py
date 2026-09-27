@@ -136,8 +136,6 @@ class DoctorReportsWhatIsWeak(unittest.TestCase):
         self.assertTrue(any(".agents/skills" in g for g in mac.doctor()[1]))
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 @MACOS
@@ -178,3 +176,53 @@ class SetupTeachesAgentsAboutSkillCanary(unittest.TestCase):
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         with open(os.path.join(root, "skills", "canary", "SKILL.md")) as fh:
             self.assertEqual(fh.read(), frontdoor.SKILL_TEXT)
+
+    def test_the_privileged_step_never_writes_the_skill(self):
+        mac = Mac()
+        mac.setup("lockdown")
+        self.assertTrue(mac.scripts)
+        for text in mac.scripts:
+            self.assertNotIn("SKILL.md", text)
+
+    def test_a_folder_swapped_for_a_link_during_setup_is_not_followed(self):
+        for level in ("guard", "lockdown"):
+            with self.subTest(level):
+                mac = Mac()
+                outside = os.path.join(mac.prefix, "outside")
+                os.makedirs(outside)
+                victim = os.path.join(outside, "SKILL.md")
+                with open(victim, "w") as fh:
+                    fh.write("KEEP\n")
+                folder = os.path.join(mac.home, ".claude", "skills", "canary")
+
+                def swap_then_run(text):
+                    if not os.path.lexists(folder):
+                        os.symlink(outside, folder)
+                    return mac.run_script(text)
+
+                if level == "lockdown":
+                    # At Lockdown the skill is written before the privileged
+                    # step; swap before setup starts instead.
+                    os.symlink(outside, folder)
+                    mac.setup(level)
+                else:
+                    mac.setup(level, runner=swap_then_run)
+                with open(victim) as fh:
+                    self.assertEqual(fh.read(), "KEEP\n")
+
+    def test_a_linked_skill_file_is_not_followed(self):
+        mac = Mac()
+        outside = os.path.join(mac.prefix, "outside.md")
+        from canary import frontdoor
+        with open(outside, "w") as fh:
+            fh.write("KEEP" + frontdoor.MARKER)
+        folder = os.path.join(mac.home, ".claude", "skills", "canary")
+        os.makedirs(folder)
+        os.symlink(outside, os.path.join(folder, "SKILL.md"))
+        mac.setup("guard")
+        with open(outside) as fh:
+            self.assertEqual(fh.read(), "KEEP" + frontdoor.MARKER)
+
+
+if __name__ == "__main__":
+    unittest.main()

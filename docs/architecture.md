@@ -443,9 +443,12 @@ when there is a gap.
 At every level, setup also installs the SkillCanary skill
 (`canary/frontdoor.py`, the same text as `skills/canary/SKILL.md`) as
 `canary/SKILL.md` in `~/.claude/skills` and `~/.agents/skills`, so an agent
-knows to route installs through `canary add`. It writes only a folder that is
-missing or that it wrote before (its last line is a marker), and at Lockdown it
-writes through the privileged step before the roots are locked.
+knows to route installs through `canary add`. It writes only a `canary`
+folder that is missing or holds just a SKILL.md ending in SkillCanary's marker
+line. A marker can be copied, so this keeps setup from replacing other skills;
+it is not proof of who wrote the folder. The skill is always written as the
+person, through open folder handles that never follow links, and never by the
+privileged step: at Lockdown it is written before the roots are locked.
 
 Setup never sets `allowManagedHooksOnly`, because that would disable the
 person's own hooks; a managed hook cannot be disabled from user settings

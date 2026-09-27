@@ -141,12 +141,6 @@ def script(p, prefix="/", owner="root:wheel", person=None):
                   f"chmod 644 {q(f['path'] + '.canary-new')}",
                   f"mv {q(f['path'] + '.canary-new')} {q(f['path'])}"]
     lines += [f"rm -f {q(path)}" for path in p["remove"]]
-    if p["lock"]:
-        # Lockdown: write the SkillCanary skill before the roots are locked.
-        skill = base64.b64encode(frontdoor.installed_text().encode()).decode("ascii")
-        for folder in p.get("frontdoor", []):
-            lines += [f"mkdir -p {q(folder)}",
-                      f"printf %s {q(skill)} | /usr/bin/base64 -D > {q(folder + '/SKILL.md')}"]
     for root in p["lock"]:
         lines += [f"mkdir -p {q(root)}", f"chown -R {q(owner)} {q(root)}",
                   f"chmod -R go-w {q(root)}", f"chmod 755 {q(root)}"]
@@ -197,6 +191,14 @@ def choose_level():
     return None
 
 
+def _write_frontdoor(p):
+    for root in p["frontdoor"]:
+        try:
+            frontdoor.write(root)
+        except OSError:
+            pass  # the skill is a convenience; protection does not depend on it
+
+
 def setup(level=None, *, home=None, prefix="/", runner=run_as_admin, chooser=choose_level,
           owner="root:wheel", person=None):
     """Move this Mac to `level`. Returns (outcome dict, exit code)."""
@@ -208,14 +210,16 @@ def setup(level=None, *, home=None, prefix="/", runner=run_as_admin, chooser=cho
     p = plan(level, home, prefix)
     previous = (read_state(prefix) or {}).get("level", "scan")
     needs_admin = level != "scan" or previous != "scan"
+    # The SkillCanary skill is written as the person, never by the root step.
+    # At Lockdown that happens before the roots are locked (a Mac already at
+    # Lockdown keeps the copy it has); otherwise after the root step, which
+    # may have just unlocked them.
+    if level == "lockdown" and previous != "lockdown":
+        _write_frontdoor(p)
     if needs_admin and not runner(script(p, prefix, owner, person)):
         return {"outcome": "not_changed", "level": previous, "manual": []}, 10
     if level != "lockdown":
-        for folder in p["frontdoor"]:
-            try:
-                frontdoor.write(folder)
-            except OSError:
-                pass  # the skill is a convenience; protection does not depend on it
+        _write_frontdoor(p)
     return {"outcome": "done", "level": level,
             "manual": [{"path": m["path"], "block": m["block"]} for m in p["manual"]]}, 0
 
