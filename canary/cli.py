@@ -131,7 +131,7 @@ def _add(args):
     return add.EXIT_FOR_OUTCOME[out["outcome"]]
 
 
-CANARY_BIN = "/usr/local/lib/skillcanary/bin/canary"
+CANARY_BIN = "/Library/Application Support/SkillCanary/bin/canary"
 
 
 def _hook(args):
@@ -217,6 +217,10 @@ def _digest(args):
 
 
 def main(argv):
+    if argv[:1] == ["--version"]:
+        from canary import __version__
+        print(f"canary {__version__}")
+        return 0
     if argv[:1] == ["hook"]:
         return _hook(argv[1:])
     if not argv or argv[0] in ("-h", "--help", "help"):
@@ -236,6 +240,9 @@ def main(argv):
             return _doctor(rest)
         if command == "digest":
             return _digest(rest)
+        if command == "_roots" and len(rest) >= 5 and rest[0] in ("lock", "unlock"):
+            # Internal: run by the privileged setup step only.
+            return setup.change_roots(rest[0], rest[1], rest[2], rest[3], rest[4:])
     except Exception as exc:  # fail closed: callers treat 3 as NEEDS_REVIEW
         # Exception text can quote file names from the package being checked.
         print(f"canary: internal error ({type(exc).__name__})", file=sys.stderr)

@@ -9,6 +9,7 @@ and /etc policy files, the real hook command, a real GitHub download.
 """
 import json
 import os
+import shlex
 import subprocess
 import sys
 
@@ -31,7 +32,7 @@ def sudo(script):
 
 
 def hook(host, tool, tool_input, cwd=HOME):
-    cmd = setup.hook_command("/", host).split()
+    cmd = shlex.split(setup.hook_command("/", host))
     payload = json.dumps({"hook_event_name": "PreToolUse", "tool_name": tool,
                           "tool_input": tool_input, "cwd": cwd})
     p = subprocess.run(cmd, input=payload, capture_output=True, text=True)
@@ -67,12 +68,12 @@ for d in (".claude", ".agents/skills", ".codex"):
 # 1. Scan level: nothing machine-wide, no password
 out, code = setup.setup("scan", runner=lambda t: False)
 step("scan: completes without a password", out["outcome"] == "done" and code == 0)
-step("scan: nothing installed machine-wide", not os.path.exists("/usr/local/lib/skillcanary"))
+step("scan: nothing installed machine-wide", not os.path.exists("/Library/Application Support/SkillCanary"))
 
 # 2. Guard
 out, code = setup.setup("guard", runner=sudo)
 step("guard: setup completes", out["outcome"] == "done", json.dumps(out)[:200])
-step("guard: Canary installed root-owned", owner("/usr/local/lib/skillcanary/bin/canary") == 0)
+step("guard: Canary installed root-owned", owner("/Library/Application Support/SkillCanary/bin/canary") == 0)
 step("guard: Claude Code drop-in present",
      os.path.exists("/Library/Application Support/ClaudeCode/managed-settings.d/canary.json"))
 step("guard: Codex requirements.toml present", os.path.exists("/etc/codex/requirements.toml"))
@@ -86,7 +87,7 @@ step("guard: hook denies npx skills add (Codex)",
 step("guard: hook allows ordinary work (Codex)",
      hook("codex", "Bash", {"command": "cd /tmp && ls"}) == "allow")
 step("guard: an agent cannot edit the installed hook",
-     not writable_by_me("/usr/local/lib/skillcanary/canary"))
+     not writable_by_me("/Library/Application Support/SkillCanary/canary"))
 
 # 3. canary add from a real GitHub link
 r = add.add(LINK, approve=lambda s: True, backend="none")

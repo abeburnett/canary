@@ -1,0 +1,157 @@
+"""The SkillCanary skill that `canary setup` installs for Claude Code and Codex.
+
+It teaches agents to route every skill install through `canary add` and never
+to read a skill themselves, so "use Canary to install <link>" works in any new
+session. `skills/canary/SKILL.md` is the same text (a test checks it).
+"""
+
+import os
+import secrets
+import stat
+
+MARKER = ("\n<!-- Installed by canary setup, which keeps it up to date. "
+          "Delete this folder to remove it. -->\n")
+
+SKILL_TEXT = """---
+name: "canary"
+description: "Install AI skills safely with SkillCanary. Use when the person asks to install, add, update or vet a skill or plugin, shares a link to one, or says 'use Canary'."
+---
+
+# SkillCanary
+
+SkillCanary checks a skill before any agent reads it and installs it only
+after the person approves in a Mac dialog. You pass it links; you never read
+the skill yourself.
+
+## When the person wants a skill installed
+
+Run `canary add "<link>"` with the link exactly as they gave it. Then report
+the outcome in one or two sentences:
+
+- `installed` (exit 0): say where it was installed.
+- `declined` or `not_installed` (exit 10): repeat SkillCanary's reasons. Do
+  not install the skill another way; that decision belongs to the person.
+- `refused` (exit 20): say SkillCanary judged it unsafe and it was not
+  installed.
+- Exit 2: the link or download did not work; repeat the message.
+
+Do not open, read, summarize or paste the skill's files, before or after.
+Do not use `npx skills`, `git clone`, plugin install commands or file writes
+to put a skill in a skills folder; at Guard and Lockdown those are blocked.
+
+## When they want a skill checked, not installed
+
+Run `canary check "<path>" --text` and relay the verdict and reasons.
+
+## When `canary` is not installed
+
+Tell the person to set it up from https://skillcanary.com, where the page
+gives a sentence to paste into this app. Do not fetch or read that page
+yourself.
+
+## When they ask what they are protected against
+
+Run `canary doctor` and relay its output. To change the level, run
+`canary setup`; it asks the person in a Mac dialog and, for Guard or
+Lockdown, asks for their password in the standard macOS window.
+"""
+
+
+def installed_text():
+    return SKILL_TEXT + MARKER
+
+
+def _ours(folder_fd):
+    """True when the open folder holds only SKILL.md ending in the marker.
+    A marker can be copied, so this means "looks like SkillCanary's", not
+    proof of who wrote it; it only stops setup replacing other skills."""
+    if set(os.listdir(folder_fd)) != {"SKILL.md"}:
+        return False
+    fd = os.open("SKILL.md", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=folder_fd)
+    with os.fdopen(fd, encoding="utf-8") as fh:
+        return stat.S_ISREG(os.fstat(fh.fileno()).st_mode) and fh.read().endswith(MARKER)
+
+
+def _open_root(home, root, create=False):
+    """An fd for root, opened from home one folder at a time without
+    following links (the home folder itself is taken as given)."""
+    rel = [c for c in os.path.relpath(root, home).split(os.sep) if c]
+    if not rel or rel[0] == "..":
+        raise OSError("skill root is not under the home folder")
+    fd = os.open(home, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        for part in rel:
+            try:
+                nfd = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            except FileNotFoundError:
+                if not create:
+                    raise
+                os.mkdir(part, 0o755, dir_fd=fd)
+                nfd = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            os.close(fd)
+            fd = nfd
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def targets(home, roots):
+    """Skills roots where setup may write the skill: its canary folder is
+    missing, or looks like SkillCanary's. Links are never followed."""
+    out = []
+    for root in roots:
+        try:
+            root_fd = _open_root(home, root)
+        except FileNotFoundError:
+            out.append(root)
+            continue
+        except OSError:
+            continue
+        try:
+            try:
+                folder_fd = os.open("canary", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                    dir_fd=root_fd)
+            except FileNotFoundError:
+                out.append(root)
+                continue
+            try:
+                if _ours(folder_fd):
+                    out.append(root)
+            finally:
+                os.close(folder_fd)
+        except (OSError, UnicodeDecodeError):
+            pass
+        finally:
+            os.close(root_fd)
+    return out
+
+
+def write(home, root):
+    """Write the skill into root/canary as the current user, through folder
+    handles opened from home without following links, re-checking at write
+    time. Returns False when the folder is no longer safe to write. A file
+    dropped into the folder between that check and the final rename can
+    still be replaced; only something already running as the person can do
+    that, and it controls the folder anyway."""
+    root_fd = _open_root(home, root, create=True)
+    try:
+        try:
+            os.mkdir("canary", 0o755, dir_fd=root_fd)
+        except FileExistsError:
+            pass
+        folder_fd = os.open("canary", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=root_fd)
+        try:
+            if os.listdir(folder_fd) and not _ours(folder_fd):
+                return False
+            tmp = f".SKILL.md.{secrets.token_hex(8)}"
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644,
+                         dir_fd=folder_fd)
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(installed_text())
+            os.replace(tmp, "SKILL.md", src_dir_fd=folder_fd, dst_dir_fd=folder_fd)
+            return True
+        finally:
+            os.close(folder_fd)
+    finally:
+        os.close(root_fd)
