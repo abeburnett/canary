@@ -306,6 +306,14 @@ list (`instruction_override`, `approval_bypass`, `exfiltration`,
 for anything else. Validation rejects duplicate keys, `NaN` and `Infinity`,
 and compares confidence as an exact decimal.
 
+## `canary evidence <skill-folder>`
+
+Deterministic evidence for hosted automated badges, schema `canary.evidence/1`
+under policy `text-only/1`. The contract, shared with the hosted service, is
+`docs/evidence-contract.md`; the identities and shared vectors are in
+`canary/evidence.py` and `tests/vectors/evidence-v1.json`. It prints no file
+names, paths or text.
+
 ## `canary add <source> [--host claude|codex]... [--backend <name>] [--model <id>]`
 
 The one supported way to install a skill. The agent passes the link and gets

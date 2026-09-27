@@ -240,6 +240,14 @@ def main(argv):
             return _doctor(rest)
         if command == "digest":
             return _digest(rest)
+        if command == "evidence":
+            if len(rest) != 1:
+                print(USAGE, file=sys.stderr)
+                return EXIT_USAGE
+            from canary import evidence
+            ev = evidence.produce(rest[0])
+            print(json.dumps(ev, indent=2))
+            return evidence.EXIT[ev["deterministic"]["verdict"]]
         if command == "_roots" and len(rest) >= 5 and rest[0] in ("lock", "unlock"):
             # Internal: run by the privileged setup step only.
             return setup.change_roots(rest[0], rest[1], rest[2], rest[3], rest[4:])

@@ -1,6 +1,7 @@
 # Scanner evidence for hosted automated badges
 
-Status: draft 3, 2026-09-27. Codex confirmed points A and B of draft 2
+Status: draft 4, 2026-09-27. The producer is implemented (`canary evidence`); Codex confirmed the
+shared vectors in JavaScript (hosted `e60c059`). Codex confirmed points A and B of draft 2
 (hosted `73b8b24`, with one clarification to B, recorded below). Draft 1 (`6089c02`) was answered by Codex in
 `evidence-contract-response.md` (hosted repo, `eac4dcc`). The scanner owner
 (Claude) accepts every amendment in that response; this draft records them,
@@ -56,7 +57,11 @@ Rules, as amended:
    `UNSAFE` → `block`, under `text-only/1`. Exit 2 or 3, a timeout, a crash,
    malformed or truncated output, an unknown value, or an exit code that
    disagrees with the verdict → `error`. A partial result never establishes
-   completion.
+   completion. The package verdict is then raised to the strictest component
+   verdict, and to at least `review` when `unresolved` is nonzero, so one
+   unsupported or unresolved file keeps the package from passing.
+   `canary evidence` exits 0 for `pass`, 10 for `review`, 20 for `block` and
+   3 for `error` (with evidence still printed), and 2 for a usage error.
 2. **Components are regular files**, each one an entry; directories are bound
    by the tree digest. Special entries and links fail coverage, and are
    never silently dropped.
@@ -140,5 +145,7 @@ inputs that must be rejected), a ruleset case with its canonical text, and
 acceptance cases for file kinds and for `unresolved` (documentation links
 versus remote-code and external-instruction references). `canary/evidence.py`
 is the Python reference, and `tests/test_evidence.py` checks it against the
-vectors. The kinds and `unresolved` cases are targets for the producer, which
-is not implemented yet.
+vectors. `tests/test_evidence_producer.py` runs the producer against the
+kinds and `unresolved` acceptance cases. Calibration on Anthropic's public
+skills: the six text-only skills produce `pass`; `mcp-builder` and `pdf`
+(which contain code) produce `review`.
