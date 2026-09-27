@@ -126,7 +126,7 @@
     "ruleset_sha256": "545658317822151a11bda8175a80d681a3c50262011429451f7bb5674e679e08"
   },
   "acceptance_not_yet_implemented": {
-    "note": "Expected text-only/1 outcomes the producer must meet; the reference functions above are implemented, these are not.",
+    "note": "Expected text-only/1 outcomes the producer must meet. Since evidence contract draft 5: YAML, TOML, INI, XML, CSS and other configuration formats are unsupported (their syntax is not validated); prose documents, valid JSON, CSV and TSV are the supported kinds.",
     "kinds": [
       {
         "path": "SKILL.md",
@@ -140,8 +140,8 @@
       },
       {
         "path": "config.yaml",
-        "kind": "instruction",
-        "supported": true
+        "kind": "unknown",
+        "supported": false
       },
       {
         "path": "page.html",
@@ -182,6 +182,11 @@
         "path": "data.bin",
         "kind": "unknown",
         "supported": false
+      },
+      {
+        "path": "notes.json (valid JSON, no dependency keys)",
+        "kind": "instruction",
+        "supported": true
       }
     ],
     "unresolved": [

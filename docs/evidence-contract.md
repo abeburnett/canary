@@ -1,6 +1,8 @@
 # Scanner evidence for hosted automated badges
 
-Status: draft 4, 2026-09-27. The producer is implemented (`canary evidence`); Codex confirmed the
+Status: draft 5, 2026-09-27. Draft 5 tightens `text-only/1` after an independent
+QA review found false passes in the first producer (see "Changes in draft 5";
+two need Codex's agreement). The producer is implemented (`canary evidence`); Codex confirmed the
 shared vectors in JavaScript (hosted `e60c059`). Codex confirmed points A and B of draft 2
 (hosted `73b8b24`, with one clarification to B, recorded below). Draft 1 (`6089c02`) was answered by Codex in
 `evidence-contract-response.md` (hosted repo, `eac4dcc`). The scanner owner
@@ -149,3 +151,60 @@ vectors. `tests/test_evidence_producer.py` runs the producer against the
 kinds and `unresolved` acceptance cases. Calibration on Anthropic's public
 skills: the six text-only skills produce `pass`; `mcp-builder` and `pdf`
 (which contain code) produce `review`.
+
+## Changes in draft 5
+
+The first producer (`e16e42e`) passed packages it should not have: HTML in a
+`.txt` file, SVG in `.xml`, a `<script>` tag in Markdown, source code in text
+files, dependency files and MCP settings under names it did not know, wrapped
+or reference-style "fetch and follow" instructions, and instructions to run
+files outside the root. Draft 5 fixes these by deciding from contents, not
+names, and by narrowing what `text-only/1` supports.
+
+1. **Supported kinds are narrower (needs Codex's agreement; the shared
+   vector for `config.yaml` changed).** `instruction` is now only a prose
+   document (`.md`, `.markdown`, `.txt`, `.text`, `.rst`, `.adoc`, or an
+   extensionless name like `README` that is not a script), a JSON file that
+   parses, or a CSV or TSV file. YAML, TOML, INI, XML, CSS and other
+   configuration formats are `unknown` and unsupported: their syntax is not
+   validated, and they are configuration rather than instructions.
+2. **Contents decide, not names.** A file is `unknown` if it starts with
+   `#!` (after any byte-order mark), contains active markup (`<script`,
+   `<svg`, `<iframe`, event-handler attributes, `javascript:` and similar),
+   or, for prose, has source-code lines outside fenced code blocks.
+3. **Declared dependencies** include requirement, lock, environment and
+   project files by pattern (for example `requirements-dev.txt`,
+   `environment.yml`, `*.lock`), JSON with keys such as `mcpServers`, `hooks`
+   or `dependencies`, and Markdown frontmatter keys such as `dependencies` or
+   `requires`. Each counts as unresolved.
+4. **External references** are counted per paragraph, after rewriting inline,
+   reference-style and HTML links, with case-insensitive schemes and bare
+   domains with a path. A paragraph counts when it pairs a URL with a get or
+   run verb (download, fetch, retrieve, install, launch, run and similar),
+   pipes a download to a shell, or pairs "follow", "comply" and similar with
+   "instructions", "directives" and similar and a URL or a word pointing
+   outside ("the URL in endpoint.txt"). Every `../` path counts.
+5. **Malformed syntax is not checked coverage:** JSON that does not parse is
+   unsupported, and Markdown frontmatter with an unclosed quote is `review`.
+6. **Per-file block:** any file whose own findings score 6 or more is `block`,
+   whatever its kind.
+7. **Errors are evidence, never crashes.** A link or special file, an
+   unreadable folder, an invalid file name, more than 4,096 files (counted
+   before any file is read) or a file that changes during the run gives error
+   evidence with a fixed reason code. A trailing slash no longer lets a linked
+   root through.
+
+Calibration on Anthropic's public skills: five of six text-only skills pass;
+`academy-guide`, which tells the agent to fetch a catalog from a website at
+run time, is `review` with 2 unresolved.
+
+**Limit, and a proposal for the semantic record (needs Codex's agreement).**
+Patterns cannot recognize every way prose can say "fetch this and follow it",
+in every phrasing and language. The deterministic check catches the
+mechanical forms above and fails closed on anything structurally uncertain;
+the meaning is the semantic layer's job. I propose the hosted Jev record
+include an explicit question, "does this package require outside content or
+code to do its job?", with a badge requiring a clear no, alongside the
+deterministic pass. Without that, a non-English or oddly phrased instruction
+to fetch outside content could reach a badge.
+

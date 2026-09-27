@@ -61,49 +61,171 @@ def ruleset_sha256():
 
 
 # ---- the text-only/1 producer (`canary evidence`) --------------------------
+#
+# text-only/1 passes a file only when it is plainly an instruction document.
+# It is deliberately narrower than `canary scan`'s inert allowlist: evidence
+# decides a public badge with no person in the loop, so anything uncertain is
+# unsupported rather than guessed. Recognizing instructions in prose ("fetch
+# this and follow it") is a question of meaning; the patterns below catch the
+# mechanical forms, and the hosted semantic check must cover the rest.
 
 POLICY = "text-only/1"
 MAX_COMPONENTS = 4096
 EXIT = {"pass": 0, "review": 10, "block": 20, "error": 3}
 RANK = {"pass": 0, "review": 1, "block": 2, "error": 3}
-# HTML and SVG can carry scripts when a person opens them, so text-only/1
-# does not count reading them as analysing them.
-ACTIVE_TEXT = {".html", ".htm", ".svg"}
-# Capabilities that describe what kind of file this is, rather than what an
-# instruction file says. Any of them means the file is not an instruction.
+
+PROSE_EXTENSIONS = {".md", ".markdown", ".txt", ".text", ".rst", ".adoc"}
+DATA_EXTENSIONS = {".json", ".csv", ".tsv"}
 TYPE_CAPABILITIES = {"script", "unrecognized_file", "executable_bit", "bin_dir",
                      "package_manifest", "plugin_power", "plugin_hooks", "mcp_config"}
-# Declared dependencies: the package needs something outside itself.
 DEPENDENCY_CAPABILITIES = {"package_manifest", "mcp_config", "skill_dependencies"}
+DEPENDENCY_NAME = re.compile(
+    r"(^|/)(requirements[\w.-]*\.(txt|in)|constraints[\w.-]*\.txt|environment\.ya?ml|"
+    r"pipfile(\.lock)?|pyproject\.toml|setup\.(py|cfg)|package(-lock)?\.json|"
+    r"(yarn|pnpm-lock|bun|deno|poetry|cargo|gemfile|composer)\.(lock|lockb|yaml|json)|"
+    r"gemfile|cargo\.toml|go\.(mod|sum)|composer\.json|deno\.jsonc?|\.mcp\.json|mcp\.json|"
+    r"[\w.-]*\.lock)$", re.I)
+DEPENDENCY_KEYS = {"mcpservers", "mcp_servers", "mcp", "hooks", "dependencies",
+                   "devdependencies", "peerdependencies", "requires", "commands", "plugins"}
+FRONTMATTER_DEPENDENCY_KEYS = {"dependencies", "requires", "mcp", "mcpservers",
+                               "mcp_servers", "tools", "install", "setup"}
 
-URL = r"https?://\S+"
-MD_LINK = re.compile(r"\[([^\]]*)\]\((https?://[^)\s]+)\)")
-# "download … and run it", "install from <url>", "curl <url> | sh" ...
-RUN_REMOTE = re.compile(
-    r"\b(run|execute|exec|install|source|eval|pipe|bash|sh|zsh|python3?|node)\b", re.I)
+ACTIVE_MARKUP = re.compile(
+    r"<\s*/?\s*(script|iframe|object|embed|svg|html|body|form|style|meta|link|base|applet)\b"
+    r"|\bon[a-z]+\s*=\s*[\"']|javascript\s*:|data\s*:\s*text/html", re.I)
+SOURCE_LINE = re.compile(
+    r"^\s*(import\s+[\w.]+|from\s+[\w.]+\s+import\b|def\s+\w+\s*\(|class\s+\w+\s*[:(]"
+    r"|function\s+\w+\s*\(|(const|let|var)\s+\w+\s*=|console\.\w+\s*\(|print\s*\("
+    r"|require\s*\(|#include\b|package\s+\w+\s*;|fn\s+\w+\s*\(|public\s+(static\s+)?\w+"
+    r"|export\s+\w+=|sudo\s|chmod\s|rm\s+-\w|\$\s*\(|eval\s)", re.M)
+FENCE = re.compile(r"^\s*(```|~~~)")
+
+SCHEME_URL = r"[a-z][a-z0-9+.-]*://[^\s<>\"')\]]+"
+BARE_URL = r"\b(?:[a-z0-9-]+\.)+[a-z]{2,}(?:/[^\s<>\"')\]]*)"
+URLISH = re.compile(rf"{SCHEME_URL}|{BARE_URL}", re.I)
+MD_LINK = re.compile(r"\[([^\]]*)\]\(\s*<?([^)\s>]+)>?[^)]*\)")
+REF_DEF = re.compile(r"^\s{0,3}\[([^\]]+)\]:\s*<?(\S+?)>?(?:\s.*)?$", re.M)
+REF_USE = re.compile(r"\[([^\]]*)\]\[([^\]]*)\]")
+HTML_ANCHOR = re.compile(r"<a\b[^>]*?\bhref\s*=\s*[\"']?([^\"'\s>]+)[^>]*>(.*?)</a\s*>", re.I | re.S)
+GET_OR_RUN = re.compile(
+    r"\b(run|runs|execute|exec|install|source|eval|pipe|launch|start|download|fetch|retrieve|"
+    r"curl|wget|clone|pull|load|import|bash|sh|zsh|python3?|node)\b", re.I)
+FOLLOW = re.compile(r"\b(follow|obey|comply|adhere|apply|act on|carry out|do what|execute)\b", re.I)
+DIRECTIVES = re.compile(r"\b(instructions?|steps|directions|directives|rules|guidance|commands?|"
+                        r"exactly|whatever|everything)\b", re.I)
+# Words that point outside the package ("the URL in endpoint.txt"); a file
+# inside the package is not a reference to fetch.
+POINTER = re.compile(r"\b(urls?|links?|endpoints?|address|websites?|site|server|domain)\b", re.I)
 PIPE_TO_SHELL = re.compile(r"\b(curl|wget)\b[^|\n]*\|\s*(sudo\s+)?(ba|z|da)?sh\b", re.I)
-# "fetch … and follow its instructions", "follow the [latest instructions](url)"
-FOLLOW = re.compile(r"\b(follow|obey|apply|execute|carry out)\b", re.I)
-INSTRUCTIONS = re.compile(r"\b(instructions?|steps|directions|rules|exactly|commands?)\b", re.I)
+OUTSIDE_ROOT = re.compile(r"(^|[\s`'\"(=])\.\./")
 
 
-def _sentences(text):
-    flat = MD_LINK.sub(lambda m: f"{m.group(1)} {m.group(2)}", text)
-    return [s for s in re.split(r"(?<=[.!?])\s+|\n", flat) if s.strip()]
+def _outside_fences(text):
+    out, fenced = [], False
+    for line in text.splitlines():
+        if FENCE.match(line):
+            fenced = not fenced
+            continue
+        if not fenced:
+            out.append(line)
+    return "\n".join(out)
+
+
+def _link_text(text):
+    """Markdown and HTML links rewritten as "text URL", reference links resolved."""
+    refs = {k.strip().lower(): v for k, v in REF_DEF.findall(text)}
+    text = REF_DEF.sub("", text)
+    text = HTML_ANCHOR.sub(lambda m: f"{m.group(2)} {m.group(1)}", text)
+    text = MD_LINK.sub(lambda m: f"{m.group(1)} {m.group(2)}", text)
+    return REF_USE.sub(lambda m: f"{m.group(1)} {refs.get((m.group(2) or m.group(1)).strip().lower(), '')}",
+                       text)
 
 
 def external_references(text):
-    """How many sentences tell the agent to run remote code or to fetch and
-    follow external instructions. Plain documentation links do not count."""
-    count = 0
-    for sentence in _sentences(text):
-        if PIPE_TO_SHELL.search(sentence):
+    """Paragraphs that tell the agent to run remote code, fetch and follow
+    outside instructions, or use files outside the package. Paragraphs, not
+    lines or sentences, so wrapping or splitting a sentence does not hide it.
+    Plain documentation links do not count."""
+    count = len(OUTSIDE_ROOT.findall(text))
+    for para in re.split(r"\n\s*\n", _link_text(text)):
+        flat = " ".join(para.split())
+        if PIPE_TO_SHELL.search(flat):
             count += 1
-        elif re.search(URL, sentence) and (
-                RUN_REMOTE.search(sentence)
-                or (FOLLOW.search(sentence) and INSTRUCTIONS.search(sentence))):
+        elif URLISH.search(flat) and GET_OR_RUN.search(flat):
+            count += 1
+        elif FOLLOW.search(flat) and DIRECTIVES.search(flat) and (URLISH.search(flat) or POINTER.search(flat)):
             count += 1
     return count
+
+
+def _frontmatter_problems(text):
+    """(declares dependencies, malformed) for Markdown frontmatter."""
+    body = text.lstrip("﻿")
+    if not body.startswith("---"):
+        return False, False
+    end = body.find("\n---", 3)
+    if end < 0:
+        return False, True
+    declares, malformed = False, False
+    for line in body[3:end].splitlines():
+        key, sep, value = line.partition(":")
+        if sep and not line[:1].isspace() and key.strip().lower() in FRONTMATTER_DEPENDENCY_KEYS:
+            declares = True
+        v = value.strip()
+        if v and v[0] in "\"'" and (len(v) < 2 or v[-1] != v[0]):
+            malformed = True
+    return declares, malformed
+
+
+def _json_problems(text):
+    """(declares dependencies, malformed) for a JSON file."""
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return False, True
+    stack = [data]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, dict):
+            if any(str(k).lower() in DEPENDENCY_KEYS for k in item):
+                return True, False
+            stack.extend(item.values())
+        elif isinstance(item, list):
+            stack.extend(item)
+    return False, False
+
+
+def _classify(rel, text, kinds):
+    """(kind, supported, unresolved count, forced review) for one file."""
+    lower = rel.lower()
+    base = lower.rsplit("/", 1)[-1]
+    ext = os.path.splitext(base)[1]
+    if DEPENDENCY_NAME.search(lower):
+        return "unknown", False, 1, True
+    if text is None:
+        return "unknown", False, 0, True
+    unresolved = 1 if kinds & DEPENDENCY_CAPABILITIES else 0
+    body = text.lstrip("﻿")
+    prose = ext in PROSE_EXTENSIONS or (ext == "" and not (kinds & TYPE_CAPABILITIES))
+    if (kinds & TYPE_CAPABILITIES) or body.startswith("#!") or ACTIVE_MARKUP.search(body):
+        return "unknown", False, unresolved, True
+    if prose:
+        visible = _outside_fences(body) if ext in (".md", ".markdown") else body
+        if SOURCE_LINE.search(visible):
+            return "unknown", False, unresolved, True
+        declares, malformed = _frontmatter_problems(body) if ext in (".md", ".markdown") else (False, False)
+        unresolved += declares + external_references(body)
+        review = malformed or any(scan.INTERPRETER_RUN.search(scan.normalize(line))
+                                  for line in body.splitlines())
+        return "instruction", True, unresolved, review
+    if ext == ".json":
+        declares, malformed = _json_problems(body)
+        if malformed:
+            return "unknown", False, unresolved, True
+        return "instruction", True, unresolved + declares + external_references(body), False
+    if ext in (".csv", ".tsv"):
+        return "instruction", True, unresolved + external_references(body), False
+    return "unknown", False, unresolved, True
 
 
 def _error(reason_code):
@@ -117,51 +239,75 @@ def _error(reason_code):
             "components": []}
 
 
+class _Stop(Exception):
+    def __init__(self, reason):
+        self.reason = reason
+
+
+def _raise(err):
+    raise _Stop("unreadable")
+
+
 def _inventory(root):
     """[(relative posix path, executable, content sha256)] for every regular
-    file, read without following links; None if a link or special file exists."""
-    out = []
-    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
-        dirnames.sort()
+    file, read without following links. Counts before hashing, so an
+    oversized package is refused without reading it."""
+    entries = []
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False, onerror=_raise):
         for name in dirnames + filenames:
             path = os.path.join(dirpath, name)
             st = os.lstat(path)
             if stat.S_ISDIR(st.st_mode):
                 continue
             if not stat.S_ISREG(st.st_mode):
-                return None
-            h = hashlib.sha256()
-            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
-            with os.fdopen(fd, "rb") as fh:
-                for chunk in iter(lambda: fh.read(1 << 16), b""):
-                    h.update(chunk)
-            rel = os.path.relpath(path, root).replace(os.sep, "/")
-            out.append((rel, bool(st.st_mode & 0o100), h.hexdigest()))
-            if len(out) > MAX_COMPONENTS:
-                return "too_many"
+                raise _Stop("link_or_special_file")
+            entries.append((path, st))
+            if len(entries) > MAX_COMPONENTS:
+                raise _Stop("too_many_files")
+    out = []
+    for path, st in entries:
+        h = hashlib.sha256()
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(fd, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 16), b""):
+                h.update(chunk)
+        rel = os.path.relpath(path, root).replace(os.sep, "/")
+        out.append((rel, bool(st.st_mode & 0o100), h.hexdigest()))
     return sorted(out)
 
 
 def produce(root):
-    """canary.evidence/1 for the package folder `root` (deterministic only)."""
-    from canary import add
-    if not os.path.isdir(root) or os.path.islink(root):
-        return _error("not_a_folder")
+    """canary.evidence/1 for the package folder `root` (deterministic only).
+    Never raises: every failure is error evidence with a fixed reason."""
     try:
-        inventory = _inventory(root)
-        tree = add.tree_digest(root)
-    except (OSError, add.SourceError):
+        return _produce(root)
+    except _Stop as stop:
+        return _error(stop.reason)
+    except ValueError:
+        return _error("invalid_name")
+    except Exception:  # OSError, PathError, SourceError, anything unforeseen
         return _error("unreadable")
-    if inventory is None:
-        return _error("link_or_special_file")
-    if inventory == "too_many":
-        return _error("too_many_files")
+
+
+def _produce(root):
+    from canary import add
+    root = os.path.normpath(root)
+    if os.path.islink(root) or not os.path.isdir(root):
+        return _error("not_a_folder")
+    before = add.tree_digest(root)
+    inventory = _inventory(root)
     if not inventory:
         return _error("empty")
-
     texts = []
     result = scan.scan_package(root, excerpts=True, texts=texts)
+    after = add.tree_digest(root)
     text_of = {rel.replace(os.sep, "/"): t for rel, t in texts}
+    sha_of = {rel: sha for rel, _, sha in inventory}
+    if before != after or any(
+            hashlib.sha256(t.encode("utf-8", "surrogateescape")).hexdigest() != sha_of.get(rel)
+            for rel, t in text_of.items()):
+        return _error("changed_during_run")
+
     caps, findings, skipped = {}, {}, {}
     for c in result["capabilities"]:
         caps.setdefault(c["path"].replace(os.sep, "/"), set()).add(c["kind"])
@@ -173,42 +319,34 @@ def produce(root):
 
     components, unsupported, unresolved, checked = [], 0, 0, 0
     for rel, executable, sha in inventory:
-        ext = os.path.splitext(rel.lower())[1]
+        component_key = component_id(rel, executable, sha)
         kinds = caps.get(rel, set())
-        if rel in skipped:
-            kind = "binary" if skipped[rel] == "media" else "unknown"
-        elif rel in text_of and not (kinds & TYPE_CAPABILITIES) and ext not in ACTIVE_TEXT:
-            kind = "instruction"
+        if skipped.get(rel) == "media":
+            kind, supported, refs, review = "binary", False, 0, True
         else:
-            kind = "unknown"
-        supported = kind == "instruction"
+            kind, supported, refs, review = _classify(rel, text_of.get(rel), kinds)
+        weights = {}
+        for f in findings.get(rel, []):
+            w = scan.SEVERITY_WEIGHT[f["severity"]]
+            weights[f["check_id"]] = max(w, weights.get(f["check_id"], 0))
+        score = sum(weights.values())
         complete = supported and rel in text_of
         if skipped.get(rel) in ("unreadable", "too_large"):
             verdict = "error"
-        elif not complete:
+        elif score >= 6:
+            verdict = "block"
+        elif (not complete or review or score or refs
+              or (kinds & scan.REVIEW_CAPABILITIES)):
             verdict = "review"
         else:
-            weights = {}
-            for f in findings.get(rel, []):
-                w = scan.SEVERITY_WEIGHT[f["severity"]]
-                weights[f["check_id"]] = max(w, weights.get(f["check_id"], 0))
-            score = sum(weights.values())
-            refs = external_references(text_of[rel])
-            unresolved += refs
-            verdict = ("block" if score >= 6 else
-                       "review" if score or (kinds & scan.REVIEW_CAPABILITIES) or refs
-                       else "pass")
-        if kinds & DEPENDENCY_CAPABILITIES:
-            unresolved += 1
+            verdict = "pass"
+        unresolved += refs
         unsupported += not supported
         checked += complete
-        components.append({"id": component_id(rel, executable, sha), "kind": kind,
-                           "supported": supported, "complete": complete,
-                           "deterministic": verdict})
+        components.append({"id": component_key, "kind": kind, "supported": supported,
+                           "complete": complete, "deterministic": verdict})
 
     package = {"LIKELY_SAFE": "pass", "NEEDS_REVIEW": "review", "UNSAFE": "block"}[result["verdict"]]
-    # Strictest of the package scan and every component: one unsupported or
-    # unresolved file keeps the package from passing.
     for c in components:
         if RANK[c["deterministic"]] > RANK[package]:
             package = c["deterministic"]
@@ -216,11 +354,12 @@ def produce(root):
         package = "review"
     total = len(inventory)
     coverage = {"complete": (result["coverage"]["complete"] and checked == total
-                             and not unsupported and not unresolved),
+                             and not unsupported and not unresolved
+                             and all(c["deterministic"] == "pass" for c in components)),
                 "files_total": total, "files_checked": checked,
                 "unsupported": unsupported, "unresolved": unresolved}
     return {"schema": "canary.evidence/1", "policy_version": POLICY,
             "scanner_version": __version__, "ruleset_sha256": ruleset_sha256(),
-            "tree_sha256": tree.split(":", 1)[1], "deterministic": {"verdict": package},
+            "tree_sha256": before.split(":", 1)[1], "deterministic": {"verdict": package},
             "coverage": coverage,
             "components": sorted(components, key=lambda c: c["id"])}
