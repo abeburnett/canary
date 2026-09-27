@@ -10,6 +10,11 @@ import shutil
 import subprocess
 import tempfile
 
+# The child gets only what login and locale need: an exported
+# ANTHROPIC_API_KEY would switch billing to that key, and a parent agent's
+# CLAUDE_* variables would leak its session into the classifier.
+ENV_KEYS = ("HOME", "USER", "LOGNAME", "PATH", "LANG", "LC_ALL", "TMPDIR")
+
 
 def classify(system_prompt: str, fenced_skill_text: str, timeout_s: int, *, model: str) -> str:
     """Return the model's unmodified answer text, or raise RuntimeError
@@ -30,7 +35,8 @@ def classify(system_prompt: str, fenced_skill_text: str, timeout_s: int, *, mode
                     "--output-format", "json", "--model", model,
                     "--system-prompt-file", prompt_file]
             try:
-                proc = subprocess.run(argv, cwd=workdir, input=fenced_skill_text,
+                env = {k: os.environ[k] for k in ENV_KEYS if k in os.environ}
+                proc = subprocess.run(argv, cwd=workdir, input=fenced_skill_text, env=env,
                                       capture_output=True, text=True, timeout=timeout_s)
             except Exception:
                 raise RuntimeError("claude did not finish") from None

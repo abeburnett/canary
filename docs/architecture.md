@@ -188,7 +188,10 @@ the system prompt and the fenced text and nothing else, and has no tools.
 - `claude`: `claude -p` from a fresh empty temporary directory with
   `--disable-slash-commands --tools "" --strict-mcp-config --setting-sources ""
   --no-session-persistence --max-turns 1 --output-format json
-  --system-prompt-file`, skill text on stdin. Verified 2026-09-26 on the
+  --system-prompt-file`, skill text on stdin, and an environment reduced to
+  `HOME`, `USER`, `LOGNAME`, `PATH`, `LANG`, `LC_ALL` and `TMPDIR` (an
+  exported `ANTHROPIC_API_KEY` would otherwise switch billing to that key;
+  subscription login still works without it). Verified 2026-09-26 on the
   user's subscription login, with a positive control: no tools, MCP servers,
   skills, hooks, advisor or `CLAUDE.md` (the same question without
   `--setting-sources ""` found the global `CLAUDE.md`). The model still sees

@@ -167,7 +167,8 @@ class ClaudeBackendRunsIsolated(unittest.TestCase):
                 seen["system"] = fh.read()
             return completed
 
-        with mock.patch.object(claude_cli.subprocess, "run", fake_run), \
+        with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-x", "CLAUDE_SESSION": "s"}), \
+                mock.patch.object(claude_cli.subprocess, "run", fake_run), \
                 mock.patch.object(claude_cli.shutil, "which", lambda name: "/opt/fake/claude"):
             try:
                 return seen, claude_cli.classify("SYSTEM", "FENCED", 30, model="sonnet")
@@ -190,6 +191,7 @@ class ClaudeBackendRunsIsolated(unittest.TestCase):
         self.assertEqual(seen["kw"]["input"], "FENCED")
         self.assertEqual(seen["system"], "SYSTEM")
         self.assertEqual(seen["kw"]["timeout"], 30)
+        self.assertLessEqual(set(seen["kw"]["env"]), set(claude_cli.ENV_KEYS))
 
     def test_errors_raise_without_output(self):
         for completed in (mock.Mock(returncode=1, stdout="secret-ish"),
