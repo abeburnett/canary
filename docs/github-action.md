@@ -40,14 +40,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: abeburnett/canary@REPLACE_WITH_FULL_COMMIT_SHA
+      - uses: abeburnett/canary@e81f825cf36abe0add5503a20ff698233d9837f9
         with:
           path: skills
           fail-on: unsafe
 ```
 
-Replace `REPLACE_WITH_FULL_COMMIT_SHA` with the immutable full commit SHA for
-the Canary release you reviewed. A moving branch or tag is convenient, but a
+This example pins the tested launch candidate by its full commit SHA. A moving branch or tag is convenient, but a
 commit pin prevents the action code from changing between workflow runs.
 
 ## Private repositories
@@ -56,7 +55,7 @@ Private repositories must provide `CANARY_API_TOKEN` through the step
 environment:
 
 ```yaml
-      - uses: abeburnett/canary@REPLACE_WITH_FULL_COMMIT_SHA
+      - uses: abeburnett/canary@e81f825cf36abe0add5503a20ff698233d9837f9
         env:
           CANARY_API_TOKEN: ${{ secrets.CANARY_API_TOKEN }}
 ```

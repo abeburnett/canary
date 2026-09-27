@@ -25,14 +25,13 @@ Public repositories can run the bundled deterministic scanner in CI:
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: abeburnett/canary@REPLACE_WITH_FULL_COMMIT_SHA
+- uses: abeburnett/canary@e81f825cf36abe0add5503a20ff698233d9837f9
   with:
     path: skills
     fail-on: unsafe
 ```
 
-Replace the placeholder with the immutable full commit SHA of the Canary
-release you reviewed. See [the Action guide](docs/github-action.md) for inputs,
+The example pins the tested launch candidate by its full commit SHA. See [the Action guide](docs/github-action.md) for inputs,
 outputs, private-repository setup, and the scope of a `safe` result.
 
 ## Model
