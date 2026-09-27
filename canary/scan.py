@@ -557,11 +557,13 @@ def _entries(target, exclude):
     return [(visible, "special_file", None)], {}
 
 
-def scan_package(target, excerpts=False, exclude=()):
+def scan_package(target, excerpts=False, exclude=(), texts=None):
     """Scan a package. `excerpts` reveals attacker-controlled text (matched
     excerpts, file names and the target path) and is for a person's terminal,
     never an agent. `exclude` lists paths, relative to a directory target,
-    that belong to other packages and are scanned separately."""
+    that belong to other packages and are scanned separately. When `texts` is
+    a list, each file read as text is appended as (relative path, text), so
+    layer 2 classifies exactly the bytes layer 1 read."""
     if not os.path.lexists(target):
         raise PathError(f"no such path: {target}")
     entries, aliases = _entries(target, exclude)
@@ -597,6 +599,8 @@ def scan_package(target, excerpts=False, exclude=()):
             manifest.append(f"{rel}\0unreadable")
             continue
         scanned += 1
+        if texts is not None:
+            texts.append((rel, text))
         manifest.append(f"{rel}\0file\0{'x' if executable else '-'}\0{_sha(data)}")
 
     blocking = [x for x in skipped if x["reason"] != "media"]

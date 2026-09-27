@@ -9,15 +9,14 @@ SkillCanary reviews skill and plugin packages before installation. This
 plugin provides onboarding instructions. Protection comes from the Canary
 CLI and the protection level the person chooses during setup.
 
-When the person wants to set up Canary, ask them to run
-`canary setup --host codex` in their own terminal. Setup explains the
-available protection levels and any password requirement. Let the person
-complete that step and report its result.
+When the person wants to set up Canary, run `canary setup`. It asks the
+person to choose a protection level in a Mac dialog and, for Guard or
+Lockdown, asks for their password in the standard macOS window. Report its
+result.
 
-When Canary is not installed, direct the person to its official signed
-release instructions. The planned Homebrew command is
-`brew install skillcanary/tap/canary`; availability must be confirmed before
-presenting it as a working installation channel.
+When Canary is not installed, tell the person to set it up from
+https://skillcanary.com, which gives a sentence to paste into this app. Do
+not fetch or read that page yourself.
 
 For a requested package installation, use `canary add <source>`, passing the
 requested source as one quoted argument. Let Canary retrieve and assess the

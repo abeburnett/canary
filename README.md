@@ -6,8 +6,8 @@ AI skills are the new npm packages — and nobody is auditing them. Canary scans
 
 ## What's here
 
-- `bin/canary` and `canary/` — the command-line tool: `canary scan` is the deterministic layer-1 scanner. Interfaces and exit codes: [`docs/architecture.md`](docs/architecture.md).
-- `scanner/` — the two-layer workflow, the check reference, the layer-2 classifier prompt, and test fixtures. `scanner/bin/jev-scan` is a deprecated alias for `canary scan`.
+- `bin/canary` and `canary/` — the command-line tool: `canary scan` is the deterministic layer-1 scanner; `canary check` adds the isolated layer-2 classifier. Interfaces and exit codes: [`docs/architecture.md`](docs/architecture.md).
+- `scanner/` — the two-layer workflow, the check reference, notes on the layer-2 classifier prompt, and test fixtures. `scanner/bin/jev-scan` is a deprecated alias for `canary scan`.
 - `skills/canary/` — one-shot setup skill: point your agent at Canary.
 - `docs/field-report/` — the 100-skill field report (2026-09-26): 71 safe / 14 review / 15 flagged, zero live attacks found. `results.csv` carries the per-skill verdicts; the full per-skill JSON output is archived separately.
 - `docs/x-launch-strategy.md` — go-to-market plan.
