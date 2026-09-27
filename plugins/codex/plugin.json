@@ -1,0 +1,6 @@
+{
+  "name": "skillcanary",
+  "version": "0.1.0",
+  "description": "Onboarding for SkillCanary package review and installation.",
+  "skills": ["./skills/canary"]
+}

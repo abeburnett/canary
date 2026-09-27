@@ -1,32 +1,120 @@
 # Codex gate facts — 2026-09-26
 
-## Status: stop before implementation
+## Current adapter handoff
 
-Rebased `program/2026-09-26-canary-codex` onto `f8c5b87`. The content of facts
-commit `a8c6b88` is preserved as rebased commit `9e081b4`. All five original
-requests are settled by the new baseline; the old manifest reproduction is
-superseded by the successful checks below.
+The owner corrected the deny contract and removed `codex exec` as a classifier
+backend in `3a9febd`. This branch is rebased onto that commit. Original facts
+commit `a8c6b88` is now `65f1954`; the experiment commit is now `5dadc42`.
+The historical classifier experiments below remain evidence, not pending
+classifier work. No classifier code is being added.
 
-**The complete classifier isolation requirement is not proven.** A custom
-model catalog can produce a tool-free request in the local experiment, but
-the tested instruction-suppression settings still load global `AGENTS.md`.
-An empty temporary home avoids that file; that is a fixture condition, not
-proof of suppression. Enforced administrator configuration and approved-login
-operation remain unverified. This is not a claim that every possible Codex
-configuration is impossible to isolate. It is a refusal to certify an
-unproven one or implement the classifier on that assumption.
+Built the five functions in `canary/hosts/codex.py`, captured-payload tests in
+`tests/test_host_codex.py`, and a descriptive plugin in `plugins/codex/`.
+`canary.gate` is not on this base: the tests supply temporary dataclass
+stand-ins through the module boundary. The adapter imports the shared types
+only when parsing or planning; `deny()` has no shared-core dependency.
 
-**A newly demonstrated interface mismatch also requires Claude's decision:**
-Codex accepts deny JSON on stdout with exit **0**. JSON on stdout with exit
-**2**, without a stderr reason, **fails open**. Architecture lines 105–109
-currently say to print host deny JSON and exit 2. The existing
-`deny(reason) -> (stdout, exit_code)` interface can express the working JSON /
-exit-0 protocol without expansion, but the blanket exit-2 instruction must
-be corrected before implementing against it.
+Owner-approved scope decision: **implement verified local roots and document
+exclusions**. Configured external paths, nondefault project markers and
+instruction fallback filenames, extra executor roots, and remote/resource
+skills remain outside discovery coverage. No partial TOML parser or new
+library was introduced. Shared integration must not claim exhaustive roots.
 
-No host adapter, classifier backend, or plugin was added. No real hooks,
-settings, credentials, system policy, other worktrees, or published state
-were changed.
+Local discovery includes default skill roots, CODEX_HOME, plugin caches,
+repository `.agents`/`.codex` ancestors through `.git` (cwd only without a
+root marker), global/repository AGENTS files, and nested symlink targets.
+Individual instruction and project policy files are protected paths in the
+root list; protecting their parent directory would block unrelated repo work.
+The configuration directory itself is protected so a newly created named
+profile cannot escape an inventory of existing profile files. Existing
+profile files are also resolved individually to include symlink destinations.
+Paths are absolute, resolved and deduplicated; platform case folding remains
+the shared gate's responsibility, as specified in architecture.
+
+`parse_pre_tool_use` handles captured `Bash` and `apply_patch` shapes. Shell
+paths are hints from common file commands, redirects and explicit path
+operands; the full command is preserved for the shared decision logic.
+Expansion, multiline/compound shell commands and indirect shell builtins
+raise `ValueError` for review. Opaque MCP calls and unknown tools also raise
+`ValueError`, rather than inventing read/write semantics. These conservative
+refusals may block benign calls. This is not universal shell enforcement.
+
+`deny()` returns the verified JSON / exit-0 pair. A constant valid denial is
+the fallback for invalid reasons or any exception, including serializer
+failure. Its module needs only the standard library. This does not protect
+against the hook executable being missing, import-time interpreter failure,
+process termination, or an error in the shared CLI before/after calling it.
+
+`managed_install_plan()` reads only metadata at
+`/etc/codex/requirements.toml`. Absent means `create`; any existing entry,
+including a symlink, means `manual`. It returns one root-owned-mode (0644)
+requirements block with a feature pin and PreToolUse command. It never writes
+files or disables the user's hooks. `manual` means the administrator merges
+the block into existing TOML tables, not that setup blindly appends duplicate
+table headers. Real managed installation remains unverified and unperformed.
+
+### Acceptance evidence for this continuation
+
+- Initial denial scaffold: named test failed `2 != 0` at the exit-code
+  assertion. Parser and discovery/plan scaffolds then failed missing-path
+  assertions. No import failure was counted as red evidence.
+- Focused command: `python3 -B -m unittest discover -s tests -p
+  test_host_codex.py -v`; three public-boundary risk groups pass.
+- Counterfactual: changed only the successful `deny()` result from exit 0 to
+  exit 2. `test_deny_stays_valid_even_when_reason_or_serializer_fails` failed
+  `2 != 0`; the two neighboring tests passed. Original bytes were restored.
+  Artifact: `/private/tmp/canary-codex-probes/adapter-counterfactual.txt`.
+- Real installed Codex demo: `adapter_probe.py adapter-deny-v2 deny` imports
+  the actual worktree adapter and emits its `deny()` result. A requested
+  `/usr/bin/touch` inside fake HOME's `.agents/skills` is blocked, with the
+  adapter reason returned to the model endpoint and the marker absent.
+  `adapter-allow-v2 allow` creates the corresponding marker. Both temporary
+  skill directories are included by the actual `discovery_roots()` function.
+  Captures and harness: `/private/tmp/canary-codex-probes/`.
+- Plugin scan: `python3 -B bin/canary scan plugins/codex --json` exits 0,
+  `LIKELY_SAFE`, score 0, complete coverage of two files, only the nonblocking
+  `plugin_manifest` capability. No hooks, scripts, MCP or dependency metadata.
+- Profile regression: adding the expected protected CODEX_HOME directory to
+  the existing root/plan test failed its missing-path assertion. Including
+  that directory in `config_files()` restored all three focused tests.
+- Final aggregate on Python 3.10.3:
+  `/Users/abrahamburnett/.pyenv/versions/3.10.3/bin/python3 -B -m unittest discover -s tests -v`
+  — **21 tests passed**. Plugin scan was repeated with the same interpreter:
+  exit 0, `LIKELY_SAFE`, complete coverage. `git diff --check` passed.
+- Fresh-context implementation review (Terra/high, same family) found no
+  remaining must-fix issue and approved the targeted profile-directory fix.
+  This is not cross-family certification. No rendered UI is part of this slice.
+
+### Review reconciliation and delegation record
+
+- **Must fix, resolved:** protect future named profile files, not only an
+  existing-files inventory. The minimal directory-protection correction has
+  a red/green assertion and passed targeted review; the aggregate ran after it.
+- **Accepted known risk:** a literal command inside `/bin/sh -c` can hide its
+  target from path hints; the complete command is preserved. This is within
+  the frozen architecture's hidden-shell-target exclusion. Shared gate
+  integration must not equate empty path hints with permission.
+- **Rejected reproduction:** the review's exact `$HOME` shell-wrapper example
+  raises `ValueError` in the actual adapter. A literal absolute-path variant
+  does reproduce the documented shell limitation; both were executed through
+  the public parser without executing their shell commands.
+- **Integration evidence gap:** future-profile protection needs the shared
+  gate's directory-prefix matching test after `canary.gate` lands.
+
+2026-09-26 delegation outcomes, recorded here because writes outside the
+worktree/temp directories are forbidden: Claude Opus 5/high through the
+isolated CLI, outcome 1/5 (not logged in; zero API tokens, no review obtained);
+Terra `gpt-5.6-terra`/high through the native read-only implementation reviewer,
+outcome 5/5 (fresh-context review plus targeted correction review; 3 adapter
+tests and plugin scan independently passed; no boundary incident). Adapter
+SHA-256 after correction:
+`7951987955be7f1d6bc6a1d02536e45b8e4a9956798815d2fcf32b761831f109`.
+
+
+The real deny demo uses the same credential-free loopback protocol fixture
+and temporary-only subprocess environment described below. It proves the
+adapter's denial protocol in Codex, not a complete `canary hook` integration:
+the shared gate and CLI hook dispatch are not on this branch.
 
 ## Evidence and reproducibility
 
@@ -383,32 +471,28 @@ managed-policy and resource-backed sources. No live authenticated request
 was made. No classifier backend will be implemented on the strength of the
 partial local success alone.
 
-## Required handoff decisions
+## Integration boundaries still unverified
 
-1. **Correct the Codex denial contract.** Recommend host-specific JSON /
-   exit 0, which fits the existing tuple interface and has an executed deny
-   control. Reject blanket JSON / exit 2 because it demonstrably executes the
-   supposedly denied call. The alternative, stderr / exit 2, works but needs
-   an interface or emission change to carry stderr.
-2. **Keep the classifier stopped pending a complete isolation proof.** The
-   custom-catalog experiment is a useful candidate, not certification.
-   Evidence that would change this is a demonstrated clean request and
-   absence of discovery/hook loading under the intended authentication and
-   managed installation. Reject treating read-only sandboxing, fresh
-   CODEX_HOME alone, or an empty advertised tool list as the whole guarantee.
-3. **Retain the runtime-unverified labels above.** Managed installation and
-   exhaustive discovery have not passed their acceptance boundary. Do not
-   replace them with assumed facts to unblock coding.
-
-No implementation suite or counterfactual mutation was run: there is no
-adapter implementation yet. The 44 assertions check executed experiment
-artifacts; they are not the future adapter's acceptance suite.
+- Shared `canary.gate` dataclasses and `canary hook` dispatch must be connected
+  and tested by their owner. The command must honor the adapter's exit 0 and
+  catch parser/decision errors before emitting the adapter's deny response.
+- Root-owned requirements installation, managed precedence/trust and hook
+  crash behavior under enforced policy were not exercised on a disposable
+  managed host. No sudo or system-policy write was authorized here.
+- Exhaustive remote/external discovery and mid-session reload are excluded
+  or unverified as individually marked in the historical evidence above.
+- The planned Homebrew distribution and shared setup/add workflows are not
+  established by this adapter/plugin slice. Plugin copy states this limit.
+- Fresh isolated Claude/Opus review was attempted with no tools, temporary
+  HOME and CLAUDE_CONFIG_DIR, no credential copying and no persistence. It
+  returned `Not logged in` before a model call. No cross-family certification
+  is claimed. The owner integrating in Claude must retain that review gap.
 
 ## Deviations
 
-None from this continuation's agreed scope. The rebase changes the facts
-commit ID while preserving its change. Source inspection and experimental
-writes stayed in temporary directories; the only worktree content change is
-this owned facts document. Routine Git metadata changed for the requested
-rebase/commit. No sudo, publishing, privileged installation, credential copy,
-or adapter code.
+Owner-approved narrowing: discovery covers verified default local roots;
+configured external and resource-backed roots are explicitly excluded pending
+integration. The attempted cross-family review could not authenticate in the
+required isolated environment; no credentials were copied to work around it.
+No classifier, paid-launch edits, publishing, sudo, real configuration writes,
+or writes outside this worktree and temporary directories were performed.
