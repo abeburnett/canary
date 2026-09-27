@@ -46,20 +46,20 @@ CHECKS = [
       (r"requestbin\.(com|net)|requestcatcher\.com|webhook\.site|pipedream\.net|interact\.sh", False),
       (r"[a-z0-9-]+\.ngrok(-free)?\.(io|app|dev)", False),
       (r"(send|post|upload|forward|exfiltrate|transmit)\s+.{0,60}?\s+to\s+https?://", False),
-      (r"curl\s+[^\n]*(-d\b|--data|--data-binary|-F\b|--form|-T\b|--upload-file)", False)]),
+      (r"curl\s+[^\n]{0,300}?(-d\b|--data|--data-binary|-F\b|--form|-T\b|--upload-file)", False)]),
     ("shell-pipe", "SHELL_PIPE", "high",
-     "Runs a remote download straight in a shell or interpreter", False,
-     [(r"(curl|wget|iwr|invoke-webrequest)\b[^|\n]*\|\s*(sudo\s+)?(sh|bash|zsh|fish|dash|ksh|python\d?|node|perl|ruby|iex)\b", False),
+     "Runs a remote download straight in a shell or interpreter", True,
+     [(r"(curl|wget|iwr|invoke-webrequest)\b[^|\n]{0,300}\|\s*(sudo\s+)?(sh|bash|zsh|fish|dash|ksh|python\d?|node|perl|ruby|iex)\b", False),
       (r"\b(sh|bash|zsh|source|\.)\s+<\(\s*(curl|wget)", False),
       (r"\$\(\s*(curl|wget)\b", False),
       (r"\beval\s+[\"']?\$\(", False)]),
     ("credential-access", "CREDENTIAL_ACCESS", "high",
-     "Reaches for secrets, keys, or credentials on the machine", False,
+     "Reaches for secrets, keys, or credentials on the machine", True,
      [(r"~/\.ssh|/\.ssh/|\bid_(rsa|ed25519|ecdsa|dsa)\b", False),
       (r"~/\.aws|aws_secret_access_key|~/\.config/gcloud|~/\.kube/config|~/\.netrc|~/\.docker/config\.json", False),
       (r"(keychain|security\s+find-(generic|internet)-password|login\.keychain)", False),
       (r"\.pem\b", True),
-      (r"\.env\b.*(read|load|cat|send|upload)", True),
+      (r"\.env\b.{0,200}?(read|load|cat|send|upload)", True),
       (r"(api[_-]?key|secret[_-]?key|auth[_-]?token|password).{0,30}(send|post|upload|exfiltrate)", True),
       (r"(enter|paste|type)\s+(your|the)\s+(password|passphrase|seed\s+phrase|private\s+key)", False)]),
     ("persistence", "PERSISTENCE", "medium",
@@ -93,9 +93,9 @@ CHECKS = [
 ]
 
 EXTRA = {
-    "invisible-character": ("OBFUSCATION", "medium",
-                            "Invisible or bidirectional-control character in text"),
-    "mixed-script-word": ("OBFUSCATION", "medium",
+    "invisible-character": ("OBFUSCATION", "high",
+                            "Invisible character inside a word, or a bidirectional or tag character"),
+    "mixed-script-word": ("OBFUSCATION", "high",
                           "Word mixes Latin with Cyrillic or Greek look-alike letters"),
 }
 
@@ -118,14 +118,24 @@ def _clip(text):
 
 
 def match_line(path, line_no, line, raw_line):
+    """One finding per check, at the strictest severity any of its patterns gives.
+
+    Every pattern is tried, so a documentation-shaped decoy early in the list
+    cannot mask an attack pattern later in the same check.
+    """
     out = []
     doc_context = DOC_CONTEXT.search(line) is not None
     for cid, _, sev, _, _, patterns in _COMPILED:
+        hit = dampened = False
         for rx, doc in patterns:
             if rx.search(line):
-                severity = "info" if (doc and doc_context) else None
-                out.append(finding(cid, path, line_no, raw_line, severity))
-                break
+                if doc and doc_context:
+                    dampened = True
+                else:
+                    hit = True
+                    break
+        if hit or dampened:
+            out.append(finding(cid, path, line_no, raw_line, None if hit else "info"))
     return out
 
 

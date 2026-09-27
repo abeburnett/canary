@@ -1,14 +1,17 @@
 """Layer 1: deterministic package scanner.
 
 Reads every entry in a package without executing, importing or installing
-anything. Produces three separate things, combined into one verdict:
+anything, and reports three things that combine into one verdict:
 
 - threat findings from the pattern catalog (catalog.py);
 - capabilities: each way the package can run code or grant itself power;
 - coverage: whether every entry was actually read.
 
-Anything the scanner could not read, and any capability that runs code,
-blocks automatic approval. The interface is fixed in docs/architecture.md.
+The scanner allowlists what it knows is inert rather than listing what is
+dangerous: a text file that is not a recognized document type counts as
+possibly runnable, an entry it could not read makes coverage incomplete, and
+links inside a package are never followed. Any of these blocks automatic
+approval. The interface is fixed in docs/architecture.md.
 """
 
 import hashlib
@@ -22,18 +25,41 @@ from canary import catalog
 
 MAX_FILE_BYTES = 2 * 1024 * 1024
 MAX_ENTRIES = 5000
-IGNORED_DIRS = {".git"}  # version-control metadata; no agent loads skills from it
+MAX_DEPTH = 64
+MAX_ROOT_LINK_HOPS = 40
 
+# Document types a host reads as text and never runs.
+INERT_EXTENSIONS = {
+    ".md", ".markdown", ".txt", ".text", ".rst", ".adoc", ".json", ".yaml",
+    ".yml", ".toml", ".csv", ".tsv", ".xml", ".html", ".htm", ".css", ".svg",
+    ".ini", ".cfg", ".conf",
+}
+INERT_NAMES = {
+    "license", "licence", "notice", "readme", "changelog", "authors",
+    "contributors", "copying", ".gitignore", ".gitattributes", ".editorconfig",
+    ".gitkeep", ".npmignore",
+}
 SCRIPT_EXTENSIONS = {
     ".sh", ".bash", ".zsh", ".fish", ".py", ".js", ".mjs", ".cjs", ".ts",
     ".mts", ".cts", ".rb", ".pl", ".php", ".ps1", ".psm1", ".bat", ".cmd",
     ".swift", ".go", ".lua", ".applescript", ".scpt", ".command",
 }
+# Files that make a package manager run code or fetch dependencies.
+PACKAGE_MANIFESTS = {
+    "package.json", "pyproject.toml", "requirements.txt", "gemfile",
+    "cargo.toml", "go.mod", "pipfile", "composer.json",
+}
+MEDIA_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".icns",
+                    ".woff", ".woff2", ".ttf", ".otf", ".wav", ".pdf"}
+MEDIA_MAGIC = (b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff", b"GIF87a", b"GIF89a",
+               b"RIFF", b"\x00\x00\x01\x00", b"wOFF", b"wOF2", b"\x00\x01\x00\x00",
+               b"OTTO", b"icns", b"%PDF-")
+
 # Capability kinds that run code or grant tools. Any of them blocks auto-approval.
 REVIEW_CAPABILITIES = {
     "shell_injection", "allowed_tools", "skill_hooks", "plugin_power",
     "plugin_hooks", "mcp_config", "bin_dir", "script", "executable_bit",
-    "skill_dependencies",
+    "skill_dependencies", "package_manifest", "unrecognized_file",
 }
 # Plugin-manifest keys that only describe the plugin. A manifest using any
 # other key (hooks, mcpServers, commands, agents, install steps, vendor
@@ -42,27 +68,39 @@ DECLARATIVE_MANIFEST_KEYS = {
     "$schema", "name", "version", "description", "author", "homepage",
     "repository", "license", "keywords", "skills", "displayName", "category", "tags",
 }
-DEPENDENCY_KEYS = re.compile(r"^\s*(dependencies|mcp|mcp_servers|mcpServers|tools|permissions|install)\s*:", re.M)
+# Keys matched wherever they appear (quoted, indented or inside {flow style}).
+FRONTMATTER_KEYS = [
+    ("allowed_tools", re.compile(r"[\"']?\ballowed[-_]tools\b[\"']?\s*:", re.I)),
+    ("skill_hooks", re.compile(r"[\"']?\bhooks\b[\"']?\s*:", re.I)),
+    ("context_fork", re.compile(r"\bcontext\b[\"']?\s*:\s*[\"']?fork\b", re.I)),
+]
+DEPENDENCY_KEYS = re.compile(
+    r"[\"']?\b(dependencies|mcp|mcp_servers|mcpservers|tools|permissions|install)\b[\"']?\s*:", re.I)
+SHELL_INJECTION_INLINE = re.compile(r"(?:^|\s)!`[^`\n]+`")
+SHELL_INJECTION_FENCE = re.compile(r"^\s*(```|~~~)!\s*$")
 
-# Images and fonts, recognized by content, not name. They are listed as
-# unscanned assets but do not make coverage incomplete.
-MEDIA_MAGIC = (b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff", b"GIF87a", b"GIF89a",
-               b"RIFF", b"\x00\x00\x01\x00", b"wOFF", b"wOF2", b"\x00\x01\x00\x00",
-               b"OTTO", b"icns")
-MEDIA_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".icns",
-                    ".woff", ".woff2", ".ttf", ".otf", ".wav"}
 SEVERITY_WEIGHT = {"high": 3, "medium": 2, "low": 1, "info": 0}
 VERDICT_RANK = {"LIKELY_SAFE": 0, "NEEDS_REVIEW": 1, "UNSAFE": 2}
 
-# Invisible and bidirectional-control characters. A byte-order mark at the
-# very start of a file is the one legitimate use and is allowed.
-INVISIBLE = re.compile("[­​-‏‪-‮⁠-⁤⁦-⁩﻿]")
+# Characters that render as nothing. They are removed before matching; one
+# placed inside a word, a bidirectional control, or a Unicode tag character is
+# itself a finding.
+_INVISIBLE_RANGES = (
+    "­͏؜ᅟᅠ឴឵᠋-᠏​-‏"
+    "‪-‮⁠-⁯⠀ㅤ︀-️﻿ﾠ"
+    "\U000e0000-\U000e0fff\U0001d173-\U0001d17a"
+)
+INVISIBLE = re.compile(f"[{_INVISIBLE_RANGES}]")
+ALWAYS_SUSPECT = re.compile("[‪-‮⁦-⁩\U000e0000-\U000e007f]")
+INVISIBLE_IN_WORD = re.compile(f"[^\\W\\d_][{_INVISIBLE_RANGES}]+[^\\W\\d_]")
 
-# Latin look-alikes from Cyrillic and Greek, folded before matching so a
+# Latin look-alikes from Cyrillic, Greek and IPA, folded before matching so a
 # homoglyph cannot slip a phrase past the catalog.
 CONFUSABLES = str.maketrans({
     "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "у": "y", "х": "x",
-    "і": "i", "ј": "j", "ѕ": "s", "ԁ": "d", "һ": "h", "ӏ": "l", "ɡ": "g",
+    "і": "i", "ј": "j", "ѕ": "s", "ԁ": "d", "һ": "h", "ӏ": "l", "т": "t",
+    "к": "k", "м": "m", "н": "h", "в": "b", "п": "n", "г": "r", "ш": "w",
+    "ԛ": "q", "ԝ": "w", "ь": "b", "ɡ": "g", "ɑ": "a", "ı": "i",
     "А": "A", "Е": "E", "О": "O", "Р": "P", "С": "C", "Т": "T", "Х": "X",
     "І": "I", "Ј": "J", "Ѕ": "S", "К": "K", "М": "M", "Н": "H", "В": "B",
     "ο": "o", "α": "a", "ε": "e", "ι": "i", "κ": "k", "ν": "v", "τ": "t",
@@ -70,8 +108,6 @@ CONFUSABLES = str.maketrans({
     "Ν": "N", "Τ": "T", "Ρ": "P",
 })
 WORD = re.compile(r"[^\W\d_]+")
-SHELL_INJECTION_INLINE = re.compile(r"(?:^|\s)!`[^`\n]+`")
-SHELL_INJECTION_FENCE = re.compile(r"^\s*(```|~~~)!\s*$")
 
 
 class PathError(Exception):
@@ -84,8 +120,8 @@ def _sha(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def _script_like(rel, data):
-    return os.path.splitext(rel)[1].lower() in SCRIPT_EXTENSIONS or data.startswith(b"#!")
+def _path_id(rel):
+    return "f:" + _sha(rel)[:12]
 
 
 def _mixed_script(word):
@@ -104,93 +140,164 @@ def normalize(text):
     return INVISIBLE.sub("", unicodedata.normalize("NFKC", text)).translate(CONFUSABLES)
 
 
-def _inventory(root):
-    """Yield (rel, kind, abs_path) for every entry under root, never following links.
+# ---------------------------------------------------------------- inventory
 
-    kind is 'file', 'symlink_file', or a skip reason.
+def _inventory(root):
+    """Yield (rel, kind, payload) for every entry under root.
+
+    Walks with directory handles, so paths longer than the OS limit are still
+    read, and never follows links. For kind 'file' the payload is what
+    _read_at returned; any other kind is a skip reason with payload None.
     """
-    real_root = os.path.realpath(root)
+    errors = []
     count = 0
-    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+    for dirpath, dirnames, filenames, dirfd in os.fwalk(
+            root, follow_symlinks=False, onerror=errors.append):
         rel_dir = os.path.relpath(dirpath, root)
+        depth = 0 if rel_dir == "." else rel_dir.count(os.sep) + 1
         keep = []
         for d in dirnames:
-            full = os.path.join(dirpath, d)
+            count += 1
             rel = os.path.normpath(os.path.join(rel_dir, d))
-            if d in IGNORED_DIRS and not os.path.islink(full):
+            try:
+                st = os.stat(d, dir_fd=dirfd, follow_symlinks=False)
+            except OSError:
+                yield rel, "unreadable", None
                 continue
-            if os.path.islink(full):
-                target = os.path.realpath(full)
-                inside = target == real_root or target.startswith(real_root + os.sep)
-                yield rel, ("symlink_dir" if inside else "symlink_escape"), full
-                continue
-            keep.append(d)
+            if stat.S_ISLNK(st.st_mode):
+                yield rel, "symlink", None
+            elif depth + 1 > MAX_DEPTH:
+                yield rel, "too_deep", None
+            else:
+                keep.append(d)
         dirnames[:] = keep
         for name in filenames:
             count += 1
-            if count > MAX_ENTRIES:
-                yield os.path.normpath(os.path.join(rel_dir, name)), "too_many_entries", None
-                return
-            full = os.path.join(dirpath, name)
             rel = os.path.normpath(os.path.join(rel_dir, name))
-            st = os.lstat(full)
-            if stat.S_ISLNK(st.st_mode):
-                target = os.path.realpath(full)
-                inside = target.startswith(real_root + os.sep)
-                if not inside:
-                    yield rel, "symlink_escape", full
-                elif not os.path.isfile(target):
-                    yield rel, "special_file", full
-                else:
-                    yield rel, "symlink_file", target
-            elif stat.S_ISREG(st.st_mode):
-                yield rel, "file", full
-            else:
-                yield rel, "special_file", full
+            if count > MAX_ENTRIES:
+                yield rel, "too_many_entries", None
+                return
+            yield rel, "file", _read_at(dirfd, name)
+    for exc in errors:
+        name = getattr(exc, "filename", None)
+        yield (os.path.relpath(name, root) if name else "?"), "unreadable", None
 
 
-def _read(path):
-    """Return (bytes, text) or (None, skip_reason). Never blocks on special files."""
+def _read_at(dirfd, name):
+    """(bytes, executable) for a regular file, or a skip reason string.
+
+    Never follows links and never blocks on FIFOs or devices.
+    """
     try:
-        st = os.stat(path)
+        st = os.stat(name, dir_fd=dirfd, follow_symlinks=False)
+        if stat.S_ISLNK(st.st_mode):
+            return "symlink"
         if not stat.S_ISREG(st.st_mode):
-            return None, "special_file"
+            return "special_file"
         if st.st_size > MAX_FILE_BYTES:
-            return None, "too_large"
-        with open(path, "rb") as fh:
-            data = fh.read(MAX_FILE_BYTES + 1)
+            return "too_large"
+        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dirfd)
+        try:
+            if not stat.S_ISREG(os.fstat(fd).st_mode):
+                return "special_file"
+            chunks, total = [], 0
+            while total <= MAX_FILE_BYTES:
+                chunk = os.read(fd, 1 << 20)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                total += len(chunk)
+        finally:
+            os.close(fd)
+        data = b"".join(chunks)
+        if len(data) > MAX_FILE_BYTES:
+            return "too_large"
+        return data, bool(st.st_mode & 0o111)
     except OSError:
-        return None, "unreadable"
-    ext = os.path.splitext(path)[1].lower()
-    if ext in MEDIA_EXTENSIONS and data.startswith(MEDIA_MAGIC) and not os.access(path, os.X_OK):
+        return "unreadable"
+
+
+def _classify(rel, data, executable):
+    """(text, None) for readable text, else (None, skip reason).
+
+    Anything that decodes as text is scanned as text, whatever its name or
+    first bytes, so a payload cannot pass itself off as an image or font.
+    """
+    if b"\x00" not in data[:8192]:
+        try:
+            return data.decode("utf-8"), None
+        except UnicodeDecodeError:
+            pass
+    ext = os.path.splitext(rel)[1].lower()
+    if ext in MEDIA_EXTENSIONS and data.startswith(MEDIA_MAGIC) and not executable:
         return None, "media"
-    if b"\x00" in data[:8192]:
-        return None, "binary"
-    try:
-        return data, data.decode("utf-8")
-    except UnicodeDecodeError:
-        return None, "binary"
+    return None, "binary"
 
 
-def _frontmatter(text):
-    """Top-level keys and values of a leading YAML block, without a YAML parser."""
-    lines = text.splitlines()
-    if not lines or lines[0].strip() != "---":
-        return {}
-    keys = {}
-    for i, line in enumerate(lines[1:], start=2):
-        if line.strip() == "---":
-            break
-        m = re.match(r"^([A-Za-z][\w-]*)\s*:\s*(.*)$", line)
-        if m:
-            keys[m.group(1).lower()] = (m.group(2).strip(), i)
-    return keys
+def _resolve_root(target):
+    """Follow the named target's own links, a bounded number of hops."""
+    path = os.path.abspath(target)
+    for _ in range(MAX_ROOT_LINK_HOPS):
+        if not os.path.islink(path):
+            return path
+        path = os.path.normpath(os.path.join(os.path.dirname(path), os.readlink(path)))
+    return None
+
+
+# ------------------------------------------------------------- capabilities
+
+def _path_capabilities(rel, executable):
+    parts = [p.lower() for p in rel.split(os.sep)]
+    base = parts[-1]
+    ext = os.path.splitext(base)[1]
+    caps = []
+    if "bin" in parts[:-1]:
+        caps.append("bin_dir")
+    if ext in SCRIPT_EXTENSIONS:
+        caps.append("script")
+    elif executable:
+        caps.append("executable_bit")
+    if base == "hooks.json":
+        caps.append("plugin_hooks")
+    if base in (".mcp.json", "mcp.json"):
+        caps.append("mcp_config")
+    if base == "marketplace.json":  # lists plugin sources, which may be commands
+        caps.append("plugin_power")
+    if base in PACKAGE_MANIFESTS:
+        caps.append("package_manifest")
+    return caps
+
+
+def _content_capabilities(rel, text):
+    parts = [p.lower() for p in rel.split(os.sep)]
+    base = parts[-1]
+    stem, ext = os.path.splitext(base)
+    caps = []  # (kind, line)
+    if text.startswith("#!"):
+        caps.append(("script", 1))
+    elif ext not in INERT_EXTENSIONS and ext not in SCRIPT_EXTENSIONS \
+            and base not in INERT_NAMES and stem not in INERT_NAMES:
+        caps.append(("unrecognized_file", 0))
+    if base == "plugin.json":
+        caps.append(("plugin_manifest" if _declarative_manifest(text) else "plugin_power", 0))
+    if len(parts) >= 2 and parts[-2] == "agents" and ext in (".yaml", ".yml") \
+            and DEPENDENCY_KEYS.search(text):
+        caps.append(("skill_dependencies", 0))
+    if ext in (".md", ".markdown"):
+        block, first = _frontmatter(text)
+        for kind, rx in FRONTMATTER_KEYS:
+            if rx.search(block):
+                caps.append((kind, first))
+        for n, line in enumerate(text.splitlines(), start=1):
+            if SHELL_INJECTION_INLINE.search(line) or SHELL_INJECTION_FENCE.match(line):
+                caps.append(("shell_injection", n))
+    return caps
 
 
 def _declarative_manifest(text):
     try:
         manifest = json.loads(text)
-    except ValueError:
+    except (ValueError, RecursionError):
         return False
     if not isinstance(manifest, dict) or not set(manifest) <= DECLARATIVE_MANIFEST_KEYS:
         return False
@@ -200,48 +307,33 @@ def _declarative_manifest(text):
     return isinstance(skills, list) and all(isinstance(x, str) for x in skills)
 
 
-def _capabilities(rel, abs_path, data, text):
-    caps = []
-    parts = rel.split(os.sep)
-    base = parts[-1].lower()
-    if "bin" in parts[:-1]:
-        caps.append({"kind": "bin_dir", "path": rel, "line": 0})
-    if _script_like(rel, data):
-        caps.append({"kind": "script", "path": rel, "line": 0})
-    elif os.access(abs_path, os.X_OK):
-        caps.append({"kind": "executable_bit", "path": rel, "line": 0})
-    if base in ("hooks.json",):
-        caps.append({"kind": "plugin_hooks", "path": rel, "line": 0})
-    if base in (".mcp.json", "mcp.json"):
-        caps.append({"kind": "mcp_config", "path": rel, "line": 0})
-    if base == "plugin.json":
-        kind = "plugin_manifest" if _declarative_manifest(text) else "plugin_power"
-        caps.append({"kind": kind, "path": rel, "line": 0})
-    if base == "marketplace.json":  # lists plugin sources, which may be commands
-        caps.append({"kind": "plugin_power", "path": rel, "line": 0})
-    if len(parts) >= 2 and parts[-2] == "agents" and base.endswith((".yaml", ".yml")) \
-            and DEPENDENCY_KEYS.search(text):
-        caps.append({"kind": "skill_dependencies", "path": rel, "line": 0})
-    if base.endswith(".md"):
-        front = _frontmatter(text)
-        for key, kind in (("allowed-tools", "allowed_tools"), ("hooks", "skill_hooks")):
-            if key in front:
-                caps.append({"kind": kind, "path": rel, "line": front[key][1]})
-        if "context" in front and front["context"][0].strip("'\"").lower() == "fork":
-            caps.append({"kind": "context_fork", "path": rel, "line": front["context"][1]})
-        for n, line in enumerate(text.splitlines(), start=1):
-            if SHELL_INJECTION_INLINE.search(line) or SHELL_INJECTION_FENCE.match(line):
-                caps.append({"kind": "shell_injection", "path": rel, "line": n})
-    return caps
+def _frontmatter(text):
+    """The leading frontmatter block and its first line number, or ('', 0).
 
+    Tolerates a byte-order mark, leading blank lines and an indented fence,
+    because a host that tolerates them would still honor the keys inside.
+    """
+    lines = text.lstrip("﻿").splitlines()
+    i = 0
+    while i < len(lines) and not lines[i].strip():
+        i += 1
+    if i >= len(lines) or lines[i].strip() != "---":
+        return "", 0
+    for j in range(i + 1, min(len(lines), i + 400)):
+        if lines[j].strip() == "---":
+            return "\n".join(lines[i + 1:j]), i + 2
+    return "\n".join(lines[i + 1:i + 400]), i + 2
+
+
+# ------------------------------------------------------------------ threats
 
 def _obfuscation(rel, text):
     findings = []
     for n, line in enumerate(text.splitlines(), start=1):
         body = line[1:] if n == 1 and line.startswith("﻿") else line
-        if INVISIBLE.search(body):
+        if ALWAYS_SUSPECT.search(body) or INVISIBLE_IN_WORD.search(body):
             findings.append(catalog.finding("invisible-character", rel, n, body))
-        elif any(_mixed_script(w) for w in WORD.findall(body)):
+        elif any(_mixed_script(w) for w in WORD.findall(INVISIBLE.sub("", body))):
             findings.append(catalog.finding("mixed-script-word", rel, n, body))
     return findings
 
@@ -288,36 +380,61 @@ def _threat_verdict(score):
     return "LIKELY_SAFE"
 
 
+# --------------------------------------------------------------------- scan
+
+def _entries(target):
+    visible = os.path.basename(os.path.normpath(target)) or target
+    root = _resolve_root(target)
+    if root is None:
+        return [(visible, "symlink_loop", None)]
+    if os.path.isdir(root):
+        return list(_inventory(root))
+    if os.path.isfile(root):
+        # A named file keeps the name the caller used, even through a link.
+        parent = os.open(os.path.dirname(root), os.O_RDONLY)
+        try:
+            return [(visible, "file", _read_at(parent, os.path.basename(root)))]
+        finally:
+            os.close(parent)
+    return [(visible, "special_file", None)]
+
+
 def scan_package(target, excerpts=False):
+    """Scan a package. `excerpts` reveals attacker-controlled text (matched
+    excerpts and file names) and is for a person's terminal, never an agent."""
     if not os.path.lexists(target):
         raise PathError(f"no such path: {target}")
-    # The target the user named is followed once (installed skills are often
-    # symlinks into ~/.agents/skills); links inside the package are not.
-    root = os.path.realpath(target)
-    if os.path.isdir(root):
-        entries = list(_inventory(root))
-    elif os.path.isfile(root) and not os.path.islink(root):
-        entries = [(os.path.basename(root), "file", root)]
-    else:
-        entries = [(os.path.basename(root), "special_file", root)]
+    entries = _entries(target)
 
     findings, capabilities, skipped, manifest = [], [], [], []
     scanned = 0
-    for rel, kind, abs_path in entries:
-        if kind not in ("file", "symlink_file"):
+    for rel, kind, payload in entries:
+        if kind == "file" and isinstance(payload, str):
+            kind, payload = payload, None
+        if kind != "file":
             skipped.append({"path": rel, "reason": kind})
             manifest.append(f"{rel}\0{kind}")
+            capabilities.extend({"kind": k, "path": rel, "line": 0}
+                                for k in _path_capabilities(rel, False))
             continue
-        data, text = _read(abs_path)
-        if data is None:
-            skipped.append({"path": rel, "reason": text})
-            manifest.append(f"{rel}\0{text}")
+        data, executable = payload
+        try:
+            capabilities.extend({"kind": k, "path": rel, "line": 0}
+                                for k in _path_capabilities(rel, executable))
+            text, reason = _classify(rel, data, executable)
+            if text is None:
+                skipped.append({"path": rel, "reason": reason})
+                manifest.append(f"{rel}\0{reason}\0{_sha(data)}")
+                continue
+            capabilities.extend({"kind": k, "path": rel, "line": line}
+                                for k, line in _content_capabilities(rel, text))
+            findings.extend(_findings(rel, text))
+        except Exception:  # fail closed: an entry we could not analyze counts as unread
+            skipped.append({"path": rel, "reason": "unreadable"})
+            manifest.append(f"{rel}\0unreadable")
             continue
         scanned += 1
-        mode = "x" if os.access(abs_path, os.X_OK) else "-"
-        manifest.append(f"{rel}\0{kind}\0{mode}\0{_sha(data)}")
-        capabilities.extend(_capabilities(rel, abs_path, data, text))
-        findings.extend(_findings(rel, text))
+        manifest.append(f"{rel}\0file\0{'x' if executable else '-'}\0{_sha(data)}")
 
     blocking = [x for x in skipped if x["reason"] != "media"]
     complete = scanned > 0 and not blocking
@@ -335,8 +452,8 @@ def scan_package(target, excerpts=False):
         reasons.append(f"Threat patterns found ({', '.join(cats)}), score {score}.")
     if not complete:
         verdict = max(verdict, "NEEDS_REVIEW", key=VERDICT_RANK.get)
-        if scanned == 0 and not skipped:
-            reasons.append("Nothing to scan: the package is empty.")
+        if scanned == 0 and not blocking:
+            reasons.append("Nothing to scan: the package has no readable text.")
         else:
             why = sorted({s["reason"] for s in blocking})
             reasons.append(f"Scan incomplete: {len(blocking)} entries not read ({', '.join(why)}).")
@@ -350,9 +467,14 @@ def scan_package(target, excerpts=False):
         f["excerpt_sha256"] = _sha(excerpt)
         if excerpts:
             f["excerpt"] = excerpt
+    # File names are attacker-controlled text too: agents see opaque ids only.
+    for item in findings + capabilities + skipped:
+        item["path_id"] = _path_id(item["path"])
+        if not excerpts:
+            del item["path"]
     return {
         "schema": "canary.scan/1",
-        "target": root,
+        "target": os.path.abspath(target),
         "package_digest": "sha256:" + _sha("\n".join(sorted(manifest))),
         "verdict": verdict,
         "threat_verdict": threat,
@@ -366,15 +488,23 @@ def scan_package(target, excerpts=False):
 
 
 def render_text(result):
+    items = result["capabilities"] + result["coverage"]["skipped"] + result["findings"]
+    revealed = any("path" in i for i in items)
+
+    def where(item):
+        return repr(item["path"]) if "path" in item else item["path_id"]
+
     out = [f"Canary scan: {result['target']}",
            f"Verdict: {result['verdict']}  (threat {result['threat_verdict']}, score {result['score']}; "
            f"{result['coverage']['files_scanned']}/{result['coverage']['files_total']} entries read)"]
     out += [f"  - {r}" for r in result["reasons"]]
     for c in result["capabilities"]:
-        out.append(f"  [CODE  ] {c['kind']} {c['path']}" + (f":{c['line']}" if c["line"] else ""))
+        out.append(f"  [CODE  ] {c['kind']} {where(c)}" + (f":{c['line']}" if c["line"] else ""))
     for s in result["coverage"]["skipped"]:
-        out.append(f"  [SKIP  ] {s['reason']} {s['path']}")
+        out.append(f"  [SKIP  ] {s['reason']} {where(s)}")
     for f in result["findings"]:
-        out.append(f"  [{f['severity'].upper():6}] {f['category']} {f['path']}:{f['line']}"
-                   + (f"  {f['excerpt']}" if "excerpt" in f else ""))
+        out.append(f"  [{f['severity'].upper():6}] {f['category']} {where(f)}:{f['line']}"
+                   + (f"  {f['excerpt']!r}" if "excerpt" in f else ""))
+    if items and not revealed:
+        out.append("  File names and excerpts are hidden. Run with --excerpts in your own terminal to see them.")
     return "\n".join(out)

@@ -57,11 +57,11 @@ Exit codes (every Canary command uses these):
     "complete": true,
     "files_total": 3,
     "files_scanned": 3,
-    "skipped": [{"path": "rel/path", "reason": "binary | too_large | unreadable | special_file | symlink_escape"}]
+    "skipped": [{"path_id": "f:…", "reason": "…"}]
   },
-  "capabilities": [{"kind": "…", "path": "rel/path", "line": 12}],
+  "capabilities": [{"kind": "…", "path_id": "f:…", "line": 12}],
   "findings": [{"check_id": "…", "category": "…", "severity": "high|medium|low|info",
-                "path": "rel/path", "line": 5, "excerpt_sha256": "…"}],
+                "path_id": "f:…", "line": 5, "excerpt_sha256": "…"}],
   "reasons": ["plain-language reason for the verdict"]
 }
 ```
@@ -75,11 +75,14 @@ Rules the verdict follows:
   coverage is incomplete (including an empty package); `NEEDS_REVIEW` when any
   capability that runs code is present.
 - Skip reasons: `binary`, `too_large`, `unreadable`, `special_file`,
-  `symlink_escape`, `symlink_dir`, `too_many_entries`, and `media`. Every reason
-  except `media` makes coverage incomplete. `media` needs both an image or font
-  extension and matching first bytes.
-- Findings carry no attacker text by default. Excerpts appear only with
-  `--excerpts`, which is for a human's terminal, never for an agent.
+  `symlink` (links inside a package are never followed), `symlink_loop`,
+  `too_deep` (over 64 levels), `too_many_entries` (over 5,000), and `media`.
+  Every reason except `media` makes coverage incomplete. `media` needs an
+  image, font or PDF extension, matching first bytes, and content that does
+  not decode as text; anything that decodes as text is scanned as text.
+- Attacker-controlled text stays out of default output: no excerpts, and file
+  names appear only as opaque `path_id` values. `--excerpts` adds `path` and
+  `excerpt` fields and is for a person's terminal, never an agent.
 
 Capability kinds that block auto-approval: `shell_injection` (a `` !`cmd` ``
 line or a ```` ```! ```` block in a skill), `allowed_tools`, `skill_hooks`
@@ -88,7 +91,11 @@ the declarative set below, one that is not valid JSON, or any
 `marketplace.json`), `plugin_hooks` (any `hooks.json`), `mcp_config`
 (`.mcp.json`, `mcp.json`), `skill_dependencies` (an `agents/*.yaml` that
 declares dependencies, MCP servers, tools, permissions or install steps),
-`bin_dir`, `script` (a script extension or a shebang), `executable_bit`.
+`bin_dir` (any path segment named `bin`, any case), `script` (a script
+extension or a shebang), `executable_bit`, `package_manifest`
+(`package.json`, `pyproject.toml`, `requirements.txt` and similar), and
+`unrecognized_file` (a text file whose type is not on the inert-document
+allowlist in `canary/scan.py`; unknown means possibly runnable).
 
 Listed but not blocking: `plugin_manifest` (a `plugin.json` using only
 `$schema`, `name`, `version`, `description`, `author`, `homepage`,
@@ -103,11 +110,19 @@ Reads the host's pre-tool-use JSON on stdin (the shape both hosts share:
 call installs, writes into, or reads from a protected location.
 
 - Allow: exit 0 with no output. The host's normal permission flow continues.
-- Deny: print the host's deny JSON and exit 2. For Claude Code:
-  `{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision":
-  "deny", "permissionDecisionReason": "<reason pointing at canary add>"}}`.
-- Any internal error: deny. The hook fails closed, because a hook that fails
-  to start fails open in the host.
+- Deny: print exactly what the adapter's `deny(reason)` returns and exit with
+  its code. The hosts differ, and a wrong pairing fails open:
+  - Claude Code: deny JSON on stdout, exit 2 (exit 2 always blocks).
+  - Codex: deny JSON on stdout with **exit 0**, or a reason on stderr with
+    exit 2. Deny JSON with exit 2 and empty stderr **runs the command**
+    (verified on Codex 0.157.1, `docs/codex-facts.md`).
+  Both shapes: `{"hookSpecificOutput": {"hookEventName": "PreToolUse",
+  "permissionDecision": "deny", "permissionDecisionReason": "<reason pointing
+  at canary add>"}}`.
+- Any internal error: the hook still prints its host's deny. In both hosts a
+  missing hook command, a crash or malformed output lets the call run, so the
+  hook catches every exception, and `canary` is installed root-owned where an
+  agent cannot remove it.
 
 Protected: every discovery root of every supported host (resolved, case-folded
 on macOS), the quarantine directory, the lockfile, and Canary's own install.
@@ -156,6 +171,18 @@ Layer-2 backends follow the same pattern in `canary/classifiers/<backend>.py`:
 `classify(system_prompt: str, fenced_skill_text: str, timeout_s: int) -> str`
 returns the model's raw text; `canary/classify.py` owns fencing, schema
 validation and the fail-closed rules, so a backend never decides a verdict.
+
+A backend ships only when its isolation is demonstrated: the model receives
+the system prompt and the fenced text and nothing else, and has no tools.
+- `claude`: `claude -p` from an empty directory with `--disable-slash-commands
+  --tools "" --strict-mcp-config --setting-sources "" --no-session-persistence
+  --system-prompt-file`. Verified on the user's login: zero tools, MCP servers,
+  skills and hooks. Still to verify: the user's global `CLAUDE.md`.
+  (`--bare` is not usable: it drops subscription login.)
+- `openai_api` and `anthropic_api`: a direct API request with the user's own
+  key. No agent harness, so nothing else can load.
+- `codex exec` is **not** a backend: it still loads the global `AGENTS.md`
+  under every suppression setting tried (`docs/codex-facts.md`).
 
 ## `canary add <source>` and `canary setup`
 
