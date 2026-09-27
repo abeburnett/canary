@@ -65,7 +65,7 @@ CHECKS = [
      [(r"discord(app)?\.com/api/webhooks", False),
       (r"hooks\.slack\.com/services", False),
       (r"requestbin\.(com|net)|requestcatcher\.com|webhook\.site|pipedream\.net|interact\.sh", False),
-      (r"[a-z0-9-]+\.ngrok(-free)?\.(io|app|dev)", False),
+      (r"(?<![a-z0-9-])[a-z0-9-]+\.ngrok(-free)?\.(io|app|dev)", False),
       (r"(send|post|upload|forward|exfiltrate|transmit)\s+.{0,60}?\s+to\s+https?://", False),
       (_curl_upload, False)]),
     ("shell-pipe", "SHELL_PIPE", "high",

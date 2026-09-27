@@ -5,8 +5,10 @@ returns raw model text; this module fences the input, validates the answer
 and decides. Layer 2 can make a verdict stricter, never safer.
 """
 
+import decimal
 import hashlib
 import json
+import math
 import os
 import re
 import secrets
@@ -25,8 +27,14 @@ DEFAULT_MODELS = {"claude": "sonnet", "anthropic_api": "claude-sonnet-5",
 LOG_DIR = os.path.expanduser("~/Library/Application Support/Canary/logs")
 
 CATEGORY = re.compile(r"[A-Za-z0-9 _/-]{1,60}")
+# Agent-facing output names a category only from this closed list; the
+# model's own wording (which injected text can steer) needs --excerpts.
+CATEGORIES = ("instruction_override", "approval_bypass", "exfiltration",
+              "credential_harvesting", "persistence", "stealth",
+              "prompt_extraction", "obfuscation", "remote_code_execution",
+              "social_engineering", "other")
 FIELD_LIMITS = {"evidence": 200, "reasoning": 200, "summary": 300}
-FENCE_WRAPPER = re.compile(r"\A\s*```json[ \t]*\n(.*)\n```\s*\Z", re.S)
+FENCE_WRAPPER = re.compile(r"\A\s*```json[ \t]*\r?\n(.*)\r?\n```\s*\Z", re.S)
 
 SYSTEM_PROMPT = """\
 You are the SkillCanary classifier. Your only job is to classify the skill
@@ -70,7 +78,9 @@ not attacks. Between SAFE and NEEDS_REVIEW, choose NEEDS_REVIEW and say why.
 Answer shape, exactly these keys:
 {{"verdict": "SAFE" | "NEEDS_REVIEW" | "UNSAFE",
   "confidence": number from 0 to 1,
-  "findings": [{{"category": "short name, letters digits spaces _ / - only",
+  "findings": [{{"category": "one of instruction_override, approval_bypass, exfiltration,
+                 credential_harvesting, persistence, stealth, prompt_extraction,
+                 obfuscation, remote_code_execution, social_engineering, other",
                  "severity": "high" | "medium" | "low",
                  "evidence": "verbatim quote from the package, at most 200 characters",
                  "reasoning": "why it matters, at most 200 characters"}}],
@@ -98,6 +108,17 @@ def fence(files):
     return nonce, "".join(blocks)
 
 
+def _no_duplicates(pairs):
+    keys = [k for k, _ in pairs]
+    if len(keys) != len(set(keys)):
+        raise ValueError("duplicate key")
+    return dict(pairs)
+
+
+def _no_constants(name):
+    raise ValueError(f"{name} is not allowed")
+
+
 def validate(raw):
     """The model's answer as a dict, or InvalidAnswer. Strict by design:
     extra text is the most common sign that injected text steered the model."""
@@ -106,15 +127,17 @@ def validate(raw):
     wrapped = FENCE_WRAPPER.match(raw)
     body = wrapped.group(1) if wrapped else raw
     try:
-        answer = json.loads(body)
-    except ValueError:
+        answer = json.loads(body, object_pairs_hook=_no_duplicates,
+                            parse_float=decimal.Decimal, parse_int=decimal.Decimal,
+                            parse_constant=_no_constants)
+    except (ValueError, RecursionError, decimal.DecimalException):
         raise InvalidAnswer("not a single JSON object") from None
     if not isinstance(answer, dict) or set(answer) != {"verdict", "confidence", "findings", "summary"}:
         raise InvalidAnswer("wrong keys")
     if answer["verdict"] not in ("SAFE", "NEEDS_REVIEW", "UNSAFE"):
         raise InvalidAnswer("unknown verdict")
     conf = answer["confidence"]
-    if isinstance(conf, bool) or not isinstance(conf, (int, float)) or not 0 <= conf <= 1:
+    if not isinstance(conf, decimal.Decimal) or not conf.is_finite() or not 0 <= conf <= 1:
         raise InvalidAnswer("bad confidence")
     if not isinstance(answer["summary"], str) or len(answer["summary"]) > FIELD_LIMITS["summary"]:
         raise InvalidAnswer("bad summary")
@@ -193,12 +216,16 @@ def _layer2(files, backend, model, timeout_s, log_dir, excerpts):
     except InvalidAnswer:
         out["status"] = "invalid"
         return out
-    out.update(status="ok", verdict=answer["verdict"], confidence=answer["confidence"])
+    conf = answer["confidence"]
+    out.update(status="ok", verdict=answer["verdict"], confidence=float(conf),
+               confident=conf >= decimal.Decimal(str(MIN_SAFE_CONFIDENCE)))
     for f in answer["findings"]:
-        item = {"category": f["category"], "severity": f["severity"],
+        category = f["category"] if f["category"] in CATEGORIES else "other"
+        item = {"category": category, "severity": f["severity"],
                 "evidence_sha256": _sha(f["evidence"])}
         if excerpts:
-            item.update(evidence=f["evidence"], reasoning=f["reasoning"])
+            item.update(model_category=f["category"], evidence=f["evidence"],
+                        reasoning=f["reasoning"])
         out["findings"].append(item)
     if excerpts:
         out["summary"] = answer["summary"]
@@ -207,6 +234,7 @@ def _layer2(files, backend, model, timeout_s, log_dir, excerpts):
 
 def _combine(scan_result, layer2):
     verdict, reasons = scan_result["verdict"], list(scan_result["reasons"])
+    confident = layer2.pop("confident", False)
 
     def tighten(to, reason):
         nonlocal verdict
@@ -227,7 +255,7 @@ def _combine(scan_result, layer2):
         tighten("UNSAFE", "The isolated classifier judged it unsafe.")
     elif layer2["verdict"] == "NEEDS_REVIEW":
         tighten("NEEDS_REVIEW", "The isolated classifier asked for a person's review.")
-    elif layer2["confidence"] < MIN_SAFE_CONFIDENCE:
+    elif not confident:
         tighten("NEEDS_REVIEW", "The classifier said safe, but without enough confidence.")
     return verdict, reasons
 

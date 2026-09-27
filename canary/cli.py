@@ -1,6 +1,7 @@
 """Command-line entry point. Exit codes are fixed in docs/architecture.md."""
 
 import json
+import math
 import sys
 
 from canary import add, classify, scan
@@ -66,7 +67,8 @@ def _check(args):
         timeout = float(values.get("--timeout", classify.DEFAULT_TIMEOUT_S))
     except ValueError:
         timeout = -1
-    if (len(paths) != 1 or flags - {"--json", "--text", "--excerpts"} or timeout <= 0
+    if (len(paths) != 1 or flags - {"--json", "--text", "--excerpts"}
+            or not math.isfinite(timeout) or timeout <= 0
             or backend not in ("auto", "claude", "anthropic_api", "openai_api", "none")):
         print(USAGE, file=sys.stderr)
         return EXIT_USAGE
@@ -106,7 +108,8 @@ def _add(args):
     except ValueError:
         timeout = -1
     # No flag approves an install: only the person, in the dialog.
-    if (len(sources) != 1 or flags - {"--json", "--text"} or timeout <= 0
+    if (len(sources) != 1 or flags - {"--json", "--text"}
+            or not math.isfinite(timeout) or timeout <= 0
             or set(hosts) - set(add.HOSTS)
             or backend not in ("auto", "claude", "anthropic_api", "openai_api", "none")):
         print(USAGE, file=sys.stderr)

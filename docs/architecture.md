@@ -262,10 +262,15 @@ a valid answer for any reason (`unavailable`, `too_large`, `failed`,
 }
 ```
 
-The model's `evidence`, `reasoning` and `summary` are attacker-influenced, so
-they appear only with `--excerpts` (as `evidence`, `reasoning`, `summary`),
-which is for a person's terminal, never an agent. A category must be 1 to 60
-letters, digits, spaces, `_`, `/` or `-`, for the same reason.
+The model's `evidence`, `reasoning`, `summary` and own category wording are
+attacker-influenced, so they appear only with `--excerpts` (as `evidence`,
+`reasoning`, `summary`, `model_category`), which is for a person's terminal,
+never an agent. Default output names each finding's category from a closed
+list (`instruction_override`, `approval_bypass`, `exfiltration`,
+`credential_harvesting`, `persistence`, `stealth`, `prompt_extraction`,
+`obfuscation`, `remote_code_execution`, `social_engineering`), and `other`
+for anything else. Validation rejects duplicate keys, `NaN` and `Infinity`,
+and compares confidence as an exact decimal.
 
 ## `canary add <source> [--host claude|codex]... [--backend <name>] [--model <id>]`
 

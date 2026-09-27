@@ -292,3 +292,17 @@ class ScannerSourceStaysPlainText(unittest.TestCase):
                 for number, line in enumerate(fh, start=1):
                     bad = [c for c in line if unicodedata.category(c) == "Cf" or ord(c) in (0xAD, 0x34F, 0x3164)]
                     self.assertFalse(bad, f"{os.path.relpath(path, ROOT)}:{number} has {[hex(ord(c)) for c in bad]}")
+
+
+class LongTokensScanInLinearTime(unittest.TestCase):
+    """Astra slice-2 QA F4: the ngrok pattern backtracked quadratically on
+    one long word, so a 262 KB file never finished scanning."""
+
+    def test_a_long_unbroken_word_finishes_quickly(self):
+        pkg = make_package({"SKILL.md": FRONTMATTER + "x" * 200000 + "\n"})
+        try:
+            proc = subprocess.run([sys.executable, CANARY, "scan", pkg, "--json"],
+                                  capture_output=True, text=True, timeout=15)
+        except subprocess.TimeoutExpired:
+            self.fail("scanning a 200 KB word took longer than 15 seconds")
+        self.assertEqual(json.loads(proc.stdout)["verdict"], "LIKELY_SAFE")
