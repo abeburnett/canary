@@ -155,7 +155,8 @@ def managed_install_plan(canary_bin: str):
     if type(canary_bin) is not str or not os.path.isabs(canary_bin) or any(
             char in canary_bin for char in ("\x00", "\n", "\r")):
         raise ValueError("Expected an absolute Canary executable path")
-    command = shlex.quote(canary_bin) + " hook --host codex"
+    # -I: the hook ignores PYTHONPATH and user site-packages an agent could set.
+    command = "/usr/bin/python3 -I -B " + shlex.quote(canary_bin) + " hook --host codex"
     content = ('[features]\nhooks = true\n\n[hooks]\nmanaged_dir = "/etc/codex"\n'
                '\n[[hooks.PreToolUse]]\nmatcher = ".*"\n'
                '\n[[hooks.PreToolUse.hooks]]\ntype = "command"\ncommand = '

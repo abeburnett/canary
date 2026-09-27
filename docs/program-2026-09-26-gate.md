@@ -120,3 +120,36 @@ Done when:
    nothing behind when declined. The dialog script compiles; showing it on
    screen is left to the owner or the VM lifecycle tests.
 8. `python3 -m unittest discover -s tests` passes.
+
+## Slice 4: enforcement (`canary hook`, `setup`, `doctor`)
+
+Done when:
+
+1. `canary hook --host claude|codex` denies writes into (or above) every
+   protected location, reads of the quarantine, and installer commands, with
+   the right contract per host (Claude Code: exit 2 with stderr; Codex: deny
+   JSON at exit 0), and allows ordinary work, including compound commands
+   that name no protected location (`tests/test_gate.py`).
+2. Garbage, missing fields and internal errors deny; deliberate breaks (a
+   crash exiting 3, no text screening, a Codex deny at exit 2) turn named
+   tests red.
+3. Live: real Claude Code with the hook blocks a Write into a project
+   `.claude/skills` and allows an ordinary Write.
+4. `canary setup --level guard` installs Canary and both hooks through one
+   privileged script that checks its payload's SHA-256; a changed payload
+   installs nothing (`tests/test_setup.py`, run for real under a temporary
+   prefix).
+5. Scan asks for no password; an administrator's existing Codex
+   `requirements.toml` is never overwritten and becomes a printed manual
+   step; going back to Scan removes only unchanged files Canary created.
+6. Lockdown locks both user skill roots; `canary add` then installs only a
+   copy the root-owned `canary digest` confirmed inside the administrator
+   step, and a package changed before that step is not installed.
+7. `canary doctor` reports a writable install, a missing hook and an
+   unlocked Lockdown root as gaps, and prints the claim for the level only
+   when there are none.
+8. The suite passes on Python 3.10 and on macOS's `/usr/bin/python3` (3.9).
+
+Not verified on this Mac by design: the real administrator dialog, real root
+ownership, and Claude Code and Codex reading the installed managed policy.
+Those belong to the VM lifecycle tests.

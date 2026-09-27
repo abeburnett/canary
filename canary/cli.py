@@ -5,7 +5,7 @@ import math
 import os
 import sys
 
-from canary import add, classify, scan
+from canary import add, classify, scan, setup
 
 EXIT_FOR_VERDICT = {"LIKELY_SAFE": 0, "NEEDS_REVIEW": 10, "UNSAFE": 20}
 EXIT_USAGE = 2
@@ -17,7 +17,10 @@ USAGE = ("usage: canary scan <skill-file-or-directory> [--json | --text] [--exce
          " [--backend auto|claude|anthropic_api|openai_api|none] [--model <id>]"
          " [--timeout <seconds>]\n"
          "       canary add <github-link-or-folder> [--host claude|codex]... [--json | --text]"
-         " [--backend <name>] [--model <id>] [--timeout <seconds>]")
+         " [--backend <name>] [--model <id>] [--timeout <seconds>]\n"
+         "       canary setup [--level scan|guard|lockdown]\n"
+         "       canary doctor [--json]\n"
+         "       canary digest <folder>")
 VALUE_FLAGS = {"--backend", "--model", "--timeout"}
 
 
@@ -167,6 +170,48 @@ def _hook(args):
     return code
 
 
+def _setup(args):
+    level = None
+    if args[:1] == ["--level"] and len(args) == 2 and args[1] in setup.LEVELS:
+        level = args[1]
+    elif args:
+        print(USAGE, file=sys.stderr)
+        return EXIT_USAGE
+    out, code = setup.setup(level)
+    if out["outcome"] == "cancelled":
+        print("Setup cancelled; nothing changed.")
+    elif out["outcome"] == "not_changed":
+        print(f"The password step was not completed; this Mac stays at {out['level']}.")
+    else:
+        print(f"SkillCanary is set to {out['level']}: {setup.CLAIMS[out['level']]}")
+        for m in out["manual"]:
+            print(f"\n{m['path']} already exists and belongs to an administrator. "
+                  "Add this block to it, then run canary doctor:\n" + m["block"])
+    return code
+
+
+def _doctor(args):
+    if args not in ([], ["--json"]):
+        print(USAGE, file=sys.stderr)
+        return EXIT_USAGE
+    level, gaps, claim = setup.doctor()
+    if args:
+        print(json.dumps({"level": level, "gaps": gaps, "claim": claim}, indent=2))
+    else:
+        print(f"Protection level: {level}\nWhat SkillCanary can claim here: {claim}")
+        for g in gaps:
+            print(f"  Gap: {g}")
+    return 10 if gaps else 0
+
+
+def _digest(args):
+    if len(args) != 1 or not os.path.isdir(args[0]):
+        print(USAGE, file=sys.stderr)
+        return EXIT_USAGE
+    print(scan.scan_package(args[0])["package_digest"])
+    return 0
+
+
 def main(argv):
     if argv[:1] == ["hook"]:
         return _hook(argv[1:])
@@ -181,6 +226,12 @@ def main(argv):
             return _check(rest)
         if command == "add":
             return _add(rest)
+        if command == "setup":
+            return _setup(rest)
+        if command == "doctor":
+            return _doctor(rest)
+        if command == "digest":
+            return _digest(rest)
     except Exception as exc:  # fail closed: callers treat 3 as NEEDS_REVIEW
         print(f"canary: internal error: {exc}", file=sys.stderr)
         return EXIT_INTERNAL

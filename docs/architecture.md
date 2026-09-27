@@ -389,13 +389,44 @@ renamed:
    "verdict": "…", "installed": ["…"], "installed_at": "2026-09-26T00:00:00Z"}}}
 ```
 
-## `canary setup`
+## `canary setup [--level scan|guard|lockdown]` and `canary doctor`
 
-Specified when slice 4 lands. Fixed now: `setup` asks for the user's password once, installs the CLI
-root-owned, and writes one drop-in per host (Claude Code:
-`/Library/Application Support/ClaudeCode/managed-settings.d/canary.json`). It
-does not set `allowManagedHooksOnly`, because that would disable the user's own
-hooks; a managed hook cannot be disabled from user settings anyway.
+`setup` asks which level the person wants in a native dialog, with the
+recommended one preselected (Guard when Claude Code or Codex is present).
+`--level` skips that question, so an agent can start setup on the person's
+behalf; Guard and Lockdown still need the person's password in the macOS
+administrator dialog, which an agent cannot answer.
+
+| Level | Password | What setup does |
+|---|---|---|
+| Scan | no | Nothing machine-wide. Reports the existing library. |
+| Guard | once | Installs Canary root-owned in `/usr/local/lib/skillcanary` (link `/usr/local/bin/canary`); writes the Claude Code drop-in `managed-settings.d/canary.json` and creates `/etc/codex/requirements.toml` when absent (else prints the block to add). |
+| Lockdown | once, and at every `canary add` | Guard, plus the user-level roots `~/.claude/skills` and `~/.agents/skills` become owned by root, so nothing running as the person (an agent, `npx skills`, a script inside a skill) can change them. `canary add` then installs through the administrator dialog (password or Touch ID). |
+
+The privileged step is one shell script passed to
+`do shell script … with administrator privileges` as a string, never a file
+on disk, so nothing can swap it while the dialog is open. Canary's own files
+travel inside it as a base64 archive whose SHA-256 the script checks before
+extracting. The script records the level and every file it created in
+`/usr/local/lib/skillcanary/state.json` (root-owned). Moving to a lower level
+removes only files Canary created and that still match what it wrote, and
+returns the roots to the person.
+
+At Lockdown, `canary add` copies the checked snapshot into a root-owned
+staging folder inside the root, has the root-owned `canary digest` confirm the
+staged copy's `package_digest`, and only then renames it into place, all in
+one administrator step.
+
+`canary doctor` reads `state.json` and checks the machine against it: the
+install and the hook command are root-owned and not writable by the person,
+each host's policy file carries the hook, Lockdown roots are root-owned, and
+the hook's Python runs. It prints the level, every gap in plain words, and the
+public-claims row that applies. Exit 0 when the machine matches its level, 10
+when there is a gap.
+
+Setup never sets `allowManagedHooksOnly`, because that would disable the
+person's own hooks; a managed hook cannot be disabled from user settings
+anyway.
 
 ## How people get Canary and use it
 

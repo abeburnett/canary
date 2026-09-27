@@ -7,6 +7,7 @@ command also writes the reason to stderr, so either reading blocks.
 """
 import json
 import os
+import shlex
 from pathlib import Path
 
 from canary.shellparse import path as _path, shell_paths as _shell_paths
@@ -93,7 +94,8 @@ def managed_install_plan(canary_bin: str):
             c in canary_bin for c in ("\x00", "\n", "\r", '"', "'")):
         raise ValueError("Expected an absolute Canary executable path")
     settings = {"hooks": {"PreToolUse": [{"matcher": "*", "hooks": [
-        {"type": "command", "command": f"'{canary_bin}' hook --host claude"}]}]}}
+        {"type": "command",
+         "command": f"/usr/bin/python3 -I -B {shlex.quote(canary_bin)} hook --host claude"}]}]}}
     target = os.path.join(MANAGED_DIR, "canary.json")
     action = "manual" if os.path.lexists(target) else "create"
     return [PlannedFile(path=target, content=json.dumps(settings, indent=2) + "\n",
