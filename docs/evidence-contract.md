@@ -1,6 +1,7 @@
 # Scanner evidence for hosted automated badges
 
-Status: draft 5, 2026-09-27. Draft 5 tightens `text-only/1` after an independent
+Status: draft 6 proposal, 2026-09-27 (see "Draft 6 proposal" at the end; needs
+Codex's agreement before the producer changes). Draft 5, 2026-09-27. Draft 5 tightens `text-only/1` after an independent
 QA review found false passes in the first producer (see "Changes in draft 5";
 two need Codex's agreement). The producer is implemented (`canary evidence`); Codex confirmed the
 shared vectors in JavaScript (hosted `e60c059`). Codex confirmed points A and B of draft 2
@@ -207,4 +208,67 @@ include an explicit question, "does this package require outside content or
 code to do its job?", with a badge requiring a clear no, alongside the
 deterministic pass. Without that, a non-English or oddly phrased instruction
 to fetch outside content could reach a badge.
+
+## Draft 6 proposal: patterns guarantee structure, the classifier judges meaning
+
+Two QA rounds on the draft 5 producer found fresh false passes each time,
+always of two kinds: recognizing *code* in prose, and recognizing *instructions
+to go elsewhere* in prose. Both are judgments about meaning. A pattern list can
+never be complete for them (`puts "hello"` and `echo hello` are also English),
+so each round of patches would meet the next variant. Draft 6 limits the
+deterministic `pass` to properties a check can be complete about, and makes the
+two meaning questions explicit, required semantic answers.
+
+**Deterministic `pass` claims only these (each complete by construction):**
+
+1. **File types:** every file is a prose document: `.md`, `.markdown`, `.txt`,
+   `.text`, `.rst`, `.adoc`, or a license- or readme-style name with no
+   extension. Everything else is `unknown` and unsupported. JSON, CSV and TSV
+   are dropped from `text-only/1` (the shared `notes.json` vector flips to
+   unsupported): a dependency-key list for JSON is itself a denylist.
+2. **No markup at all:** any `<` followed by a letter, `!`, `/` or `?`,
+   anywhere in the file (inside code fences too) makes the file unsupported.
+   No tag or attribute list is needed.
+3. **No `#!` first line**, after any byte-order mark.
+4. **Frontmatter:** read with the scanner's own parser (the same one `canary
+   scan` uses); any `unparsed_frontmatter` finding, or any key other than
+   `name`, `description` and `license`, makes the file `review`.
+5. **Definite unresolved references:** a `..` path segment anywhere (`../`,
+   `..\`, `./../`, `a/../../`), a download piped to a shell, or a dependency
+   file by name. These count in `unresolved`.
+6. **Every external reference is enumerated,** mechanically and completely:
+   every URL with any scheme in any case, bare domain with a path, autolink,
+   Markdown reference definition and HTML-style `href`. The count is reported
+   as a new field, `references.external` (outside `coverage`, so your strict
+   coverage keys are unchanged). No attempt is made to decide which are
+   documentation.
+
+The draft 5 heuristics for source lines and "fetch and follow" wording stay
+as extra `review` triggers (they can only make a result stricter), but the
+contract no longer claims them as guarantees.
+
+**Semantic record (Jev) must answer two explicit questions for eligibility:**
+
+- **A. Executable code:** "Does the package contain executable code, or tell
+  the agent to run code, other than clearly illustrative examples?" Must be
+  a clear no.
+- **B. Outside requirements:** "Does the package require outside content or
+  code to do its job: downloading, installing, running, or fetching and
+  following anything, including through any of its links?" Must be a clear
+  no. Required whenever `references.external` is above zero.
+
+**Eligibility becomes:** deterministic `pass` and complete coverage, as
+today; plus A answered no; plus B answered no when `references.external > 0`.
+
+**Calibration** on Anthropic's six text-only skills: none contains markup;
+all use only `name`, `description` and `license` in frontmatter; one has a
+fenced block. All six keep a deterministic `pass` under rules 1 to 5, and all
+six have at least one external link (often the license URL), so all six need
+answer B. That is the intended outcome: whether a link is documentation is a
+judgment the classifier makes, not a pattern.
+
+**What changes for Codex:** the eligibility gate reads `references.external`
+and two semantic answers; the Jev adapter asks questions A and B; the
+`notes.json` and `config.yaml` kind vectors are unsupported. The component-ID
+and ruleset vectors are unchanged.
 
