@@ -284,5 +284,9 @@ def doctor(home=None, prefix="/", expected_uid=0):
     if not ok:
         gaps.append(f"{PYTHON} does not run, so the hook would fail open. "
                     "Install the command-line tools: xcode-select --install")
-    claim = CLAIMS[level] if not gaps else CLAIMS["scan"] + " (Gaps below prevent more.)"
+    # With a gap, the level's claim does not hold yet, but saying "nothing is
+    # enforced" would be wrong too: the hooks are in place.
+    claim = CLAIMS[level] if not gaps else (
+        f"{level.capitalize()} is set up but not fully in force until the gaps "
+        "below are fixed.")
     return level, gaps, claim

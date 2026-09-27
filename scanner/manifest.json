@@ -15,7 +15,7 @@
     "canary/hosts/claude.py": "61638d14fdf54669a95142ed8105ad932386bf8c5ab701e000cd786bcc7a46e7",
     "canary/hosts/codex.py": "b86dc6cd927ef91527577617afd815ddabc9a5c33267ee631c851cb3e1169f50",
     "canary/scan.py": "b66fd7c627d995980cf77654728ae42410b1a320dca684d7698f60987688ac58",
-    "canary/setup.py": "1184a5e076f96c379b02ce6e2e8609448c8cc551bac8bb4965a4da6743922f95",
+    "canary/setup.py": "deb03f3321b6880af40e3f27438b3e55b08be2a80ca996417084a18ef56471e4",
     "canary/shellparse.py": "19220ace248b9d39106dbb8a35430d08863777c2c5a98a48b71dd87384e39ad7"
   }
 }

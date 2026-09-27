@@ -101,6 +101,7 @@ class AdministratorFilesAreNeverOverwritten(unittest.TestCase):
         level, gaps, claim = mac.doctor()
         self.assertTrue(any("Codex" in g for g in gaps))
         self.assertNotEqual(claim, setup.CLAIMS["guard"])
+        self.assertNotIn("Nothing is enforced", claim)
 
     def test_going_back_to_scan_keeps_files_someone_else_changed(self):
         mac = Mac()
