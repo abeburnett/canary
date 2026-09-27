@@ -167,6 +167,36 @@ root-owned, and writes one drop-in per host (Claude Code:
 does not set `allowManagedHooksOnly`, because that would disable the user's own
 hooks; a managed hook cannot be disabled from user settings anyway.
 
+## How people get Canary and use it
+
+Canary itself is the one install that happens without Canary, so it only
+arrives through channels that check integrity, and no agent ever reads a web
+page to install it.
+
+1. **Install:** `brew install skillcanary/tap/canary` (signed GitHub release
+   behind a Homebrew tap), or a signed, notarized macOS `.pkg`. An agent may
+   run that exact command when asked; it never fetches instructions from a page.
+2. **Setup:** `canary setup` detects Claude Code and Codex, shows the three
+   protection levels (Scan, Guard, Lockdown) with their trade-offs, recommends
+   one, and asks for the password once for Guard or Lockdown. It then scans the
+   existing library in report-only mode and prints the counts.
+3. **Every install:** the person says "use Canary to install <link>" in chat,
+   or runs `canary add <link>`. The agent only passes the link. Canary fetches
+   into quarantine, scans, classifies, and asks the person in a native macOS
+   dialog that summarizes publisher, version and capabilities in plain words.
+   At Lockdown the dialog requires Touch ID or the password. The agent receives
+   only the outcome.
+4. **Redirects:** at Guard and above, `npx skills add`, plugin installs and
+   writes into skill folders are denied with the message "use `canary add
+   <source>`", so the insecure path points to the secure one.
+5. **Updates:** `canary update` fetches, shows what changed in plain words
+   (for example "now adds a shell script"), and installs only after approval.
+
+The Claude Code and Codex marketplace plugins are front doors: a descriptive
+skill that teaches the agent to use `canary add` and, when `canary` is
+missing, to tell the person the install command. Each plugin must scan
+`LIKELY_SAFE` under Canary itself.
+
 ## Enforcement layers and their limits
 
 No single mechanism enforces the goal, so Canary stacks four layers and
