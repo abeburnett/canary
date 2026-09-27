@@ -1,12 +1,59 @@
 # Codex gate facts — 2026-09-26
 
-## Current adapter handoff
+## Direct OpenAI API backend — current continuation
+
+Rebased `program/2026-09-26-canary-codex` onto `b8eb66e`, which already
+contains the host adapter and retained facts history. The following API
+backend is explicitly owner-authorized; `codex exec` remains excluded.
+
+`canary/classifiers/openai_api.py` exports
+`classify(system_prompt, fenced_skill_text, timeout_s, *, model, transport=None)`.
+The caller binds its chosen model (and a transport for tests). It reads
+`OPENAI_API_KEY` only at invocation. The default transport makes one HTTPS
+POST to `api.openai.com/v1/responses`, without redirects or retries. The
+request contains exactly `model`, `instructions`, `input`, and `store: false`;
+there is no `tools` field or local context collection. `timeout_s` is the
+standard-library socket I/O timeout, not a total wall-clock deadline.
+
+The response must be HTTP 200 and completed, without API error or incomplete
+metadata. All output is checked before returning concatenated output-text
+parts, preserving whitespace and leaving verdict parsing to the shared caller.
+Refusals, tool calls, partial messages, malformed bodies and transport errors
+raise generic RuntimeError messages. No response body, key or underlying
+exception message is logged or included in the displayed exception chain.
+Reasoning output items are ignored; they are not returned as answer text.
+
+Source for the Responses request and output structure:
+[OpenAI text generation guide](https://developers.openai.com/api/docs/guides/text).
+This documents the protocol, not execution evidence for the live service.
+
+Acceptance evidence (Python 3.10.3):
+
+- Test-first scaffold returned an empty string; the tests failed on raw-text
+  equality and missing RuntimeError assertions, rather than import errors.
+- `python3 -B -m unittest discover -s tests -p test_classifier_openai_api.py -v`:
+  **3 tests passed**, covering the exact single request/raw text, failure and
+  key-diagnostic cases, and default HTTPS transport with no redirect handling.
+  Tests replace the environment with a fake key and forbid socket creation.
+- Counterfactual: adding `tools: []` made
+  `test_exact_single_request_and_unmodified_raw_text` fail while the other two
+  tests passed. Original bytes restored; capture at
+  `/private/tmp/canary-openai-counterfactual.txt`.
+- `python3 -B -m unittest discover -s tests -v`: **24 tests passed**.
+- No real credential was read and no real API call was made.
+- **[UNVERIFIED]** Live authentication, model availability, service behavior,
+  latency and real network timeout behavior. Caller integration is owned by
+  the shared core and is not included in this backend slice.
+
+Deviations: none.
+
+## Previous adapter handoff
 
 The owner corrected the deny contract and removed `codex exec` as a classifier
 backend in `3a9febd`. This branch is rebased onto that commit. Original facts
 commit `a8c6b88` is now `65f1954`; the experiment commit is now `5dadc42`.
 The historical classifier experiments below remain evidence, not pending
-classifier work. No classifier code is being added.
+classifier work. No `codex exec` classifier code is being added.
 
 Built the five functions in `canary/hosts/codex.py`, captured-payload tests in
 `tests/test_host_codex.py`, and a descriptive plugin in `plugins/codex/`.
