@@ -59,3 +59,35 @@ Done when:
 Not in this slice: layer 2, `canary add`, hooks, managed settings, the
 GitHub Action (owned by `program/2026-09-26-paid-launch`, which must rebase on
 this scanner before publishing).
+
+## Slice 2: isolated classifier (`canary check`)
+
+Done when:
+
+1. `canary check <path>` runs layer 1, then layer 2, then the combiner, and
+   exits 0, 10, 20, 2 or 3 as `docs/architecture.md` fixes.
+2. Every file reaches the model inside fences carrying a per-run random nonce;
+   a forged closing marker and a marker-like file name stay inside the fence
+   (`UntrustedTextStaysInsideNonceFences`).
+3. A backend error, prose, trailing text, an extra key, a wrong type, an
+   unknown verdict, `SAFE` below confidence 0.7 and a category with markup
+   each give `NEEDS_REVIEW`; one wrapping ```` ```json ```` fence is accepted.
+4. Layer 2 never loosens a verdict: layer-1 `UNSAFE` plus a confident `SAFE`
+   stays `UNSAFE`, and a deliberate downgrade turns that named test red.
+5. Default JSON and `--text` output carry no model evidence, reasoning or
+   summary; `--excerpts` shows them; the raw answer is logged with mode 0600.
+6. Above 256 KiB of fenced text layer 2 does not run and the verdict is
+   `NEEDS_REVIEW`; nothing is truncated.
+7. With no backend the verdict is `NEEDS_REVIEW` with status `unavailable`.
+8. The `claude` backend passes the isolation flags, runs in a fresh empty
+   directory that is removed afterwards, and sends the skill on stdin; the
+   absence of `CLAUDE.md` was verified live against a positive control and
+   is recorded in `docs/architecture.md`.
+9. The `anthropic_api` backend sends only the system prompt and one user
+   message, with no tools; its errors never contain the key.
+10. Live, through the `claude` backend: the benign fixture is `LIKELY_SAFE`
+    and the nasty fixture is `UNSAFE` with a schema-valid answer.
+11. `scanner/SKILL.md` and `references/classifier-prompt.md` no longer tell an
+    agent to paste a skill into a subagent and no longer say "Jev"; both scan
+    `LIKELY_SAFE`.
+12. `python3 -m unittest discover -s tests` passes.

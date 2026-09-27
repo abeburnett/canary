@@ -178,21 +178,87 @@ def managed_install_plan(canary_bin: str) -> list["PlannedFile"]:
 `deny(...)` or nothing.
 
 Layer-2 backends follow the same pattern in `canary/classifiers/<backend>.py`:
-`classify(system_prompt: str, fenced_skill_text: str, timeout_s: int) -> str`
-returns the model's raw text; `canary/classify.py` owns fencing, schema
-validation and the fail-closed rules, so a backend never decides a verdict.
+`classify(system_prompt: str, fenced_skill_text: str, timeout_s: int, *,
+model: str) -> str` returns the model's raw text or raises `RuntimeError`
+with no diagnostics; `canary/classify.py` owns fencing, schema validation and
+the fail-closed rules, so a backend never decides a verdict.
 
 A backend ships only when its isolation is demonstrated: the model receives
 the system prompt and the fenced text and nothing else, and has no tools.
-- `claude`: `claude -p` from an empty directory with `--disable-slash-commands
-  --tools "" --strict-mcp-config --setting-sources "" --no-session-persistence
-  --system-prompt-file`. Verified on the user's login: zero tools, MCP servers,
-  skills and hooks. Still to verify: the user's global `CLAUDE.md`.
+- `claude`: `claude -p` from a fresh empty temporary directory with
+  `--disable-slash-commands --tools "" --strict-mcp-config --setting-sources ""
+  --no-session-persistence --max-turns 1 --output-format json
+  --system-prompt-file`, skill text on stdin. Verified 2026-09-26 on the
+  user's subscription login, with a positive control: no tools, MCP servers,
+  skills, hooks, advisor or `CLAUDE.md` (the same question without
+  `--setting-sources ""` found the global `CLAUDE.md`). The model still sees
+  Claude Code's environment block (working directory, date) and the account's
+  email address. With no tools it cannot send either anywhere; the output
+  validator keeps model text out of agent-facing output. Default model
+  `sonnet`: Opus costs several times more per scan for a classification task.
   (`--bare` is not usable: it drops subscription login.)
 - `openai_api` and `anthropic_api`: a direct API request with the user's own
   key. No agent harness, so nothing else can load.
 - `codex exec` is **not** a backend: it still loads the global `AGENTS.md`
-  under every suppression setting tried (`docs/codex-facts.md`).
+  under every suppression setting tried (`docs/codex-facts.md`). A person who
+  has only a Codex subscription and no API key therefore has no layer 2; their
+  checks top out at `NEEDS_REVIEW`, and onboarding must say so.
+
+## `canary check <path> [--json | --text] [--excerpts] [--backend <name>] [--model <id>] [--timeout <seconds>]`
+
+Layer 1, then layer 2, then the combiner. Same exit codes as `canary scan`.
+`canary add` runs exactly this on its quarantined snapshot.
+
+Backend `auto` (the default) picks the first available: `claude` when the
+`claude` command is on `PATH`, then `anthropic_api` when `ANTHROPIC_API_KEY`
+is set, then `openai_api` when `OPENAI_API_KEY` is set. `none` skips layer 2.
+
+Layer 2 receives only the files layer 1 read as text, each inside a fence
+built from a per-run random nonce (`secrets.token_hex(16)`, regenerated if it
+occurs in the content). A file's relative path is the first line inside its
+fence, never in the marker, because file names are attacker text. The whole
+fenced input is capped at 256 KiB; above that layer 2 does not run. Nothing is
+truncated, because a truncated payload can hide at the tail.
+
+The model must answer with one JSON object in the shape
+`references/classifier-prompt.md` defines. One wrapping ```` ```json ````
+fence is tolerated; any other text, an extra key, a wrong type or an
+over-long field fails validation. The raw answer is written, mode 0600, to
+`~/Library/Application Support/Canary/logs/`, outside every discovery root.
+
+The combiner (`verdict`) is the strictest of: the layer-1 `verdict`; the
+layer-2 verdict (`SAFE` maps to `LIKELY_SAFE`); `NEEDS_REVIEW` when layer 2 is
+`SAFE` with confidence below 0.7; `NEEDS_REVIEW` when layer 2 did not produce
+a valid answer for any reason (`unavailable`, `too_large`, `failed`,
+`invalid`). Layer 2 can only make a verdict stricter, never safer.
+
+`--json` output (schema `canary.check/1`):
+
+```json
+{
+  "schema": "canary.check/1",
+  "target_id": "f:…",
+  "package_digest": "sha256:…",
+  "verdict": "LIKELY_SAFE | NEEDS_REVIEW | UNSAFE",
+  "scan": { "…": "the full canary.scan/1 result" },
+  "classifier": {
+    "status": "ok | unavailable | too_large | failed | invalid",
+    "backend": "claude | anthropic_api | openai_api | null",
+    "model": "…",
+    "verdict": "SAFE | NEEDS_REVIEW | UNSAFE | null",
+    "confidence": 0.93,
+    "findings": [{"category": "…", "severity": "high|medium|low",
+                  "evidence_sha256": "…"}],
+    "log_id": "…"
+  },
+  "reasons": ["plain-language reason for the verdict"]
+}
+```
+
+The model's `evidence`, `reasoning` and `summary` are attacker-influenced, so
+they appear only with `--excerpts` (as `evidence`, `reasoning`, `summary`),
+which is for a person's terminal, never an agent. A category must be 1 to 60
+letters, digits, spaces, `_`, `/` or `-`, for the same reason.
 
 ## `canary add <source>` and `canary setup`
 

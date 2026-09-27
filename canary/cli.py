@@ -3,14 +3,18 @@
 import json
 import sys
 
-from canary import scan
+from canary import classify, scan
 
 EXIT_FOR_VERDICT = {"LIKELY_SAFE": 0, "NEEDS_REVIEW": 10, "UNSAFE": 20}
 EXIT_USAGE = 2
 EXIT_INTERNAL = 3
 
 USAGE = ("usage: canary scan <skill-file-or-directory> [--json | --text] [--excerpts]"
-         " [--exclude <relative-path>]...")
+         " [--exclude <relative-path>]...\n"
+         "       canary check <skill-file-or-directory> [--json | --text] [--excerpts]"
+         " [--backend auto|claude|anthropic_api|openai_api|none] [--model <id>]"
+         " [--timeout <seconds>]")
+VALUE_FLAGS = {"--backend", "--model", "--timeout"}
 
 
 def _scan(args):
@@ -41,6 +45,42 @@ def _scan(args):
     return EXIT_FOR_VERDICT[result["verdict"]]
 
 
+def _check(args):
+    values, rest, i = {}, [], 0
+    while i < len(args):
+        if args[i] in VALUE_FLAGS:
+            if i + 1 >= len(args) or args[i] in values:
+                print(USAGE, file=sys.stderr)
+                return EXIT_USAGE
+            values[args[i]] = args[i + 1]
+            i += 2
+            continue
+        rest.append(args[i])
+        i += 1
+    paths = [a for a in rest if not a.startswith("--")]
+    flags = {a for a in rest if a.startswith("--")}
+    backend = values.get("--backend", "auto")
+    try:
+        timeout = float(values.get("--timeout", classify.DEFAULT_TIMEOUT_S))
+    except ValueError:
+        timeout = -1
+    if (len(paths) != 1 or flags - {"--json", "--text", "--excerpts"} or timeout <= 0
+            or backend not in ("auto", "claude", "anthropic_api", "openai_api", "none")):
+        print(USAGE, file=sys.stderr)
+        return EXIT_USAGE
+    try:
+        result = classify.check(paths[0], backend=backend, model=values.get("--model"),
+                                timeout_s=timeout, excerpts="--excerpts" in flags)
+    except scan.PathError as exc:
+        print(f"canary: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    if "--text" in flags:
+        print(classify.render_text(result))
+    else:
+        print(json.dumps(result, indent=2))
+    return EXIT_FOR_VERDICT[result["verdict"]]
+
+
 def main(argv):
     if not argv or argv[0] in ("-h", "--help", "help"):
         print(USAGE)
@@ -49,6 +89,8 @@ def main(argv):
     try:
         if command == "scan":
             return _scan(rest)
+        if command == "check":
+            return _check(rest)
     except Exception as exc:  # fail closed: callers treat 3 as NEEDS_REVIEW
         print(f"canary: internal error: {exc}", file=sys.stderr)
         return EXIT_INTERNAL
