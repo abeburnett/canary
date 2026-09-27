@@ -1,227 +1,24 @@
 #!/usr/bin/env python3
-"""jev-scan: deterministic static scanner for AI skill files (Jev layer 1).
+"""Deprecated entry point. Use `bin/canary scan`; this forwards to it.
 
-Scans a skill file or directory for known-bad instruction patterns:
-prompt-injection, safeguard bypass, exfiltration, credential harvesting,
-persistence, stealth, and obfuscation signals.
-
-Usage:
-    jev-scan <path> [--text] [--quarantine]
-
-    <path>         skill file or directory to scan
-    --text         human-readable report instead of JSON
-    --quarantine   copy the skill aside with every flagged line commented
-                   out (writes to <name>.jev-quarantined/)
-
-Exit codes: 0 scan completed (verdict is in the output), 2 usage/path error.
-Layer 1 never executes or "understands" the skill; it only matches
-patterns. Layer 2 (references/classifier-prompt.md) is the isolated model
-classifier. Combine both per SKILL.md.
+Exit codes follow docs/architecture.md: 0 LIKELY_SAFE, 10 NEEDS_REVIEW,
+20 UNSAFE, 2 usage error, 3 internal error. `--quarantine` is retired: it
+copied the payload back into the skills directory. `canary add` quarantines
+outside every discovery directory.
 """
 
-import json
 import os
-import re
-import shutil
 import sys
 
-SEVERITY_WEIGHT = {"high": 3, "medium": 2, "low": 1}
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+sys.path.insert(0, REPO)
 
-# (check_id, category, severity, description, [regex, ...])
-CHECKS = [
-    ("instruction-override", "INSTRUCTION_OVERRIDE", "high",
-     "Tries to override or discard the agent's own instructions",
-     [r"ignore\s+(all\s+|any\s+)?(previous|prior|earlier)\s+instructions",
-      r"disregard\s+(your\s+|all\s+)?(system\s+|prior\s+|previous\s+)?instructions",
-      r"override\s+your\s+instructions",
-      r"forget\s+(your|all)\s+instructions",
-      r"your\s+new\s+instructions\s+are",
-      r"previous\s+instructions\s+no\s+longer\s+apply"]),
-    ("identity-rewrite", "IDENTITY_REWRITE", "medium",
-     "Attempts to reassign the agent's identity or role mid-skill",
-     [r"you\s+are\s+now\s+(a|an|the)\s+\w+",
-      r"from\s+now\s+on,?\s+you\s+are",
-      r"adopt\s+the\s+persona\s+of"]),
-    ("safeguard-bypass", "SAFEGUARD_BYPASS", "high",
-     "Tells the agent to skip approvals, safety checks, or confirmation",
-     [r"disable\s+(safety|guardrails|approvals|checks)",
-      r"bypass\s+(the\s+)?approval",
-      r"skip\s+(the\s+)?(approval|confirmation|safety)\s+(step|check|process)?",
-      r"never\s+ask\s+(the\s+user\s+)?for\s+(confirmation|permission|approval)",
-      r"do\s+not\s+ask\s+for\s+(confirmation|permission|approval)"]),
-    ("exfiltration", "EXFILTRATION", "high",
-     "Instructs the agent to send data to an external endpoint",
-     [r"discord\.com/api/webhooks",
-      r"hooks\.slack\.com/services",
-      r"requestbin\.(com|net)|requestcatcher\.com|webhook\.site",
-      r"[a-z0-9-]+\.ngrok\.io",
-      r"send\s+.{0,40}\s+to\s+https?://",
-      r"POST\s+.{0,40}\s+https?://",
-      r"upload\s+.{0,40}\s+to\s+https?://",
-      r"curl\s+.*(-d|--data|--data-binary)"]),
-    ("shell-pipe", "SHELL_PIPE", "high",
-     "Pipes a remote download straight into a shell",
-     [r"curl\s+[^|\n]*\|\s*(sh|bash)",
-      r"wget\s+[^|\n]*\|\s*(sh|bash)"]),
-    ("credential-access", "CREDENTIAL_ACCESS", "high",
-     "Reaches for secrets, keys, or credentials on the machine",
-     [r"~/\.ssh|/\.ssh/id_",
-      r"id_rsa|\.pem\b",
-      r"~/\.aws|aws_secret",
-      r"\.env\b.*(read|load|cat|send)",
-      r"(api[_-]?key|secret[_-]?key|auth[_-]?token).{0,30}(send|post|upload|exfiltrate)",
-      r"enter\s+your\s+password"]),
-    ("persistence", "PERSISTENCE", "medium",
-     "Tries to persist itself, escalate, or modify agent configuration",
-     [r"persist\s+across\s+sessions",
-      r"modify\s+your\s+own\s+instructions",
-      r"add\s+(yourself|a)\s+(cron|scheduled)",
-      r"run\s+on\s+startup",
-      r"write\s+to\s+~/\.(config|ssh|aws)"]),
-    ("stealth", "STEALTH", "medium",
-     "Instructs the agent to hide behavior from the user",
-     [r"do\s+not\s+tell\s+the\s+user",
-      r"don'?t\s+mention\s+(this\s+)?to\s+the\s+user",
-      r"keep\s+this\s+secret\s+from\s+the\s+user",
-      r"hide\s+.{0,30}\s+from\s+the\s+user",
-      r"without\s+(the\s+user|anyone)\s+knowing"]),
-    ("prompt-leak", "PROMPT_LEAK", "medium",
-     "Tries to get the agent to reveal its own prompt or instructions",
-     [r"reveal\s+your\s+system\s+prompt",
-      r"print\s+your\s+(system\s+)?instructions",
-      r"output\s+your\s+SKILL\.md",
-      r"show\s+me\s+your\s+(system\s+)?prompt"]),
-    ("obfuscation", "OBFUSCATION", "medium",
-     "Obfuscated payload: long base64 blob or invisible unicode",
-     [r"[A-Za-z0-9+/]{80,}={0,2}",
-      r"[\u200b\u200c\u200d\ufeff]{3,}"]),
-    ("external-url", "EXTERNAL_URL", "low",
-     "External URL present (often benign docs; review in context)",
-     [r"https?://[^\s)\"']+"]),
-]
-
-SCAN_EXTENSIONS = (".md", ".txt", ".yaml", ".yml", ".json")
-SKIP_DIRS = {"bin", ".git", "__pycache__", "node_modules"}
-
-
-def iter_skill_files(path):
-    if os.path.isfile(path):
-        yield path
-        return
-    for root, dirs, files in os.walk(path):
-        dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
-        for f in files:
-            if f.lower().endswith(SCAN_EXTENSIONS):
-                yield os.path.join(root, f)
-
-
-def scan_file(path):
-    findings = []
-    try:
-        with open(path, "r", encoding="utf-8", errors="replace") as fh:
-            lines = fh.read().splitlines()
-    except OSError as exc:
-        return [{"check_id": "read-error", "category": "READ_ERROR",
-                 "severity": "low", "file": path, "line": 0,
-                 "match": str(exc)[:120],
-                 "description": "File could not be read; scan incomplete"}]
-    for lineno, line in enumerate(lines, 1):
-        low = line.lower()
-        for check_id, category, severity, description, patterns in CHECKS:
-            for pat in patterns:
-                m = re.search(pat, low)
-                if m:
-                    start = max(0, m.start() - 60)
-                    excerpt = line[start:m.end() + 60].strip()
-                    if len(excerpt) > 160:
-                        excerpt = excerpt[:157] + "..."
-                    findings.append({
-                        "check_id": check_id,
-                        "category": category,
-                        "severity": severity,
-                        "file": path,
-                        "line": lineno,
-                        "match": excerpt,
-                        "description": description,
-                    })
-                    break  # one finding per check per line is enough
-    return findings
-
-
-def verdict_for(score):
-    if score >= 6:
-        return "UNSAFE"
-    if score >= 3:
-        return "NEEDS_REVIEW"
-    return "LIKELY_SAFE"
-
-
-def main(argv):
-    args = [a for a in argv if not a.startswith("--")]
-    as_text = "--text" in argv
-    quarantine = "--quarantine" in argv
-    if len(args) != 1:
-        print("usage: jev-scan <skill-file-or-directory> [--text] [--quarantine]",
-              file=sys.stderr)
-        return 2
-    target = args[0]
-    if not os.path.exists(target):
-        print(f"jev-scan: no such path: {target}", file=sys.stderr)
-        return 2
-
-    files = list(iter_skill_files(target))
-    findings = []
-    for f in files:
-        findings.extend(scan_file(f))
-    score = sum(SEVERITY_WEIGHT[f["severity"]] for f in findings)
-    result = {
-        "skill": os.path.abspath(target),
-        "files_scanned": len(files),
-        "findings": findings,
-        "score": score,
-        "deterministic_verdict": verdict_for(score),
-        "note": ("Layer 1 only. Run the isolated classifier "
-                 "(references/classifier-prompt.md) and combine per SKILL.md."),
-    }
-
-    if quarantine and findings:
-        base = os.path.abspath(target)
-        dest = base + ".jev-quarantined"
-        if os.path.isdir(base):
-            shutil.copytree(base, dest, dirs_exist_ok=True)
-        else:
-            os.makedirs(dest, exist_ok=True)
-            shutil.copy2(base, dest)
-        flagged = {}
-        for f in findings:
-            if f["check_id"] != "read-error":
-                flagged.setdefault(f["file"], set()).add(f["line"])
-        for src, lines in flagged.items():
-            rel = os.path.relpath(src, base) if os.path.isdir(base) else os.path.basename(src)
-            qpath = os.path.join(dest, rel)
-            with open(qpath, "r", encoding="utf-8", errors="replace") as fh:
-                qlines = fh.read().splitlines()
-            for ln in lines:
-                if 1 <= ln <= len(qlines) and not qlines[ln - 1].lstrip().startswith("<!-- JEV-QUARANTINED"):
-                    qlines[ln - 1] = "<!-- JEV-QUARANTINED: " + qlines[ln - 1]
-            with open(qpath, "w", encoding="utf-8") as fh:
-                fh.write("\n".join(qlines) + "\n")
-        result["quarantined_copy"] = dest
-
-    if as_text:
-        print(f"Jev layer-1 scan: {result['skill']}")
-        print(f"Files scanned: {len(files)}  Score: {score}  "
-              f"Verdict: {result['deterministic_verdict']}")
-        for f in findings:
-            rel = os.path.relpath(f["file"], os.path.abspath(target)) if os.path.isdir(target) else os.path.basename(f["file"])
-            print(f"  [{f['severity'].upper():6}] {f['category']} "
-                  f"{rel}:{f['line']}: {f['match']}")
-        if quarantine and findings:
-            print(f"Quarantined copy: {result['quarantined_copy']}")
-    else:
-        print(json.dumps(result, indent=2))
-    return 0
-
+from canary.cli import main  # noqa: E402
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    args = sys.argv[1:]
+    if "--quarantine" in args:
+        print("jev-scan: --quarantine is retired; see docs/architecture.md", file=sys.stderr)
+        sys.exit(2)
+    print("jev-scan: deprecated, forwarding to `canary scan`", file=sys.stderr)
+    sys.exit(main(["scan"] + args))

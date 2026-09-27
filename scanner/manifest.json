@@ -1,0 +1,20 @@
+{
+  "version": "8095f1e",
+  "files": {
+    "bin/canary": "6be3492d4a1c5373bf1040f4a612737548593853448d95f436d5828e9545ffa9",
+    "canary/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "canary/add.py": "e3127b171b09af3f7bab7a41e4142cac5c505455d117bd37b52753f9ef04c4d0",
+    "canary/catalog.py": "abc8c72e727153f0ec035774ac4b0b34fa2d020195a599d1da919840df282372",
+    "canary/classifiers/anthropic_api.py": "a38794d24641ab62a3acfa889e6f264ee2f83fe68e42c028d8fe211d01b6f833",
+    "canary/classifiers/claude_cli.py": "2120c73e4fe0376ac15fdff06cb256ab526d8b70b2b7705bef7525f22ec33892",
+    "canary/classifiers/openai_api.py": "8f12e081140a78b472788263bc483677dabcdc547082cb034849d7d5cb569dc6",
+    "canary/classify.py": "80dee4850b7fae65fa9c0aa68d1a8a8cec58b7a95d77575628cc4afa3f6720c4",
+    "canary/cli.py": "c9e7765cab7d301e5daee08740cc7812249e096d4f18a23c5d6aa5e37345e1ee",
+    "canary/gate.py": "a3ab7696c27b38b3a3dc618ecea426c88b18815a7a0c759d1c5d67da753e3e4e",
+    "canary/hosts/claude.py": "61638d14fdf54669a95142ed8105ad932386bf8c5ab701e000cd786bcc7a46e7",
+    "canary/hosts/codex.py": "b86dc6cd927ef91527577617afd815ddabc9a5c33267ee631c851cb3e1169f50",
+    "canary/scan.py": "b66fd7c627d995980cf77654728ae42410b1a320dca684d7698f60987688ac58",
+    "canary/setup.py": "ac7f21ac471b99271751960b8d0f28325b1670a0a383252eb5d54e5c635054e3",
+    "canary/shellparse.py": "19220ace248b9d39106dbb8a35430d08863777c2c5a98a48b71dd87384e39ad7"
+  }
+}

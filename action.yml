@@ -1,0 +1,45 @@
+name: SkillCanary Skill Scan
+description: Scan AI skill files for prompt-injection and malicious-instruction risk.
+author: SkillCanary
+
+branding:
+  icon: shield
+  color: yellow
+
+inputs:
+  path:
+    description: File or directory to scan, relative to the repository workspace.
+    required: false
+    default: .
+  fail-on:
+    description: Lowest verdict that fails the step (unsafe, review, or never).
+    required: false
+    default: unsafe
+  version:
+    description: Bundled scanner version; latest selects the fixed bundled version.
+    required: false
+    default: latest
+
+outputs:
+  verdict:
+    description: Action verdict (safe, review, or unsafe).
+    value: ${{ steps.scan.outputs.verdict }}
+  layer1_verdict:
+    description: Strictest scanner verdict across skill folders (LIKELY_SAFE, NEEDS_REVIEW, or UNSAFE).
+    value: ${{ steps.scan.outputs.layer1_verdict }}
+  coverage_complete:
+    description: Whether every file was read (true or false). An incomplete scan fails unless fail-on is never.
+    value: ${{ steps.scan.outputs.coverage_complete }}
+
+runs:
+  using: composite
+  steps:
+    - id: scan
+      name: Run bundled SkillCanary scanner
+      shell: bash
+      env:
+        CANARY_INPUT_PATH: ${{ inputs.path }}
+        CANARY_FAIL_ON: ${{ inputs['fail-on'] }}
+        CANARY_VERSION: ${{ inputs.version }}
+        CANARY_REPOSITORY_PRIVATE: ${{ github.event.repository.private }}
+      run: python3 "$GITHUB_ACTION_PATH/scripts/action.py"

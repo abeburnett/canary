@@ -1,0 +1,30 @@
+name: Canary Action checks
+on:
+  push:
+    branches: [main, program/2026-09-26-paid-launch]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  action:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Exercise behavioral contract
+        run: python3 -m unittest discover -s tests -v
+      - name: Run the composite Action
+        id: canary
+        uses: ./
+        with:
+          path: scanner/tests/fixtures/benign-skill
+          fail-on: review
+      - name: Check composite outputs
+        env:
+          VERDICT: ${{ steps.canary.outputs.verdict }}
+          LAYER1: ${{ steps.canary.outputs.layer1_verdict }}
+        run: |
+          test "$VERDICT" = safe
+          test "$LAYER1" = LIKELY_SAFE

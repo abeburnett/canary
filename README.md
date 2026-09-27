@@ -6,7 +6,8 @@ AI skills are the new npm packages — and nobody is auditing them. Canary scans
 
 ## What's here
 
-- `scanner/` — the detection engine (Jev): deterministic layer-1 CLI (`bin/jev-scan`), the check catalog, the isolated layer-2 classifier prompt, and test fixtures. Product name: Canary; engine name: Jev.
+- `bin/canary` and `canary/` — the command-line tool: `canary scan` is the deterministic layer-1 scanner; `canary check` adds the isolated layer-2 classifier. Interfaces and exit codes: [`docs/architecture.md`](docs/architecture.md).
+- `scanner/` — the two-layer workflow, the check reference, notes on the layer-2 classifier prompt, and test fixtures. `scanner/bin/jev-scan` is a deprecated alias for `canary scan`.
 - `skills/canary/` — one-shot setup skill: point your agent at Canary.
 - `docs/field-report/` — the 100-skill field report (2026-09-26): 71 safe / 14 review / 15 flagged, zero live attacks found. `results.csv` carries the per-skill verdicts; the full per-skill JSON output is archived separately.
 - `docs/x-launch-strategy.md` — go-to-market plan.
@@ -14,15 +15,33 @@ AI skills are the new npm packages — and nobody is auditing them. Canary scans
 ## Quickstart
 
 ```bash
-python3 scanner/bin/jev-scan path/to/SKILL.md --text
+bin/canary scan path/to/skill-folder --text
 ```
 
-Verdict bands: LIKELY_SAFE (score 0–2), NEEDS_REVIEW (3–5), UNSAFE (6+).
+Verdicts: LIKELY_SAFE (exit 0), NEEDS_REVIEW (exit 10), UNSAFE (exit 20). A package that runs code, or that could not be read in full, is never LIKELY_SAFE. See [`scanner/references/checks.md`](scanner/references/checks.md).
+
+## GitHub Action
+
+Public repositories can run the bundled deterministic scanner in CI:
+
+```yaml
+- uses: actions/checkout@v4
+- uses: abeburnett/canary@e81f825cf36abe0add5503a20ff698233d9837f9
+  with:
+    path: skills
+    fail-on: unsafe
+```
+
+The example pins the tested launch candidate by its full commit SHA. See [the Action guide](docs/github-action.md) for inputs,
+outputs, private-repository setup, and the scope of a `safe` result.
 
 ## Model
 
-Free for individuals. Team/CI and a verified-publisher badge are on the roadmap.
+Free for individuals and public-repository CI. Private-repository CI requires
+a Canary Team token ($19/month per team). Verified skill badges are $99/year
+per skill; registry submission and badge issuance are separate steps.
 
 ## Status
 
-Private alpha. Nothing here is published or shared without the founder's explicit approval.
+Launch candidate. Marketplace listing materials are drafts until the owner
+publishes them.
