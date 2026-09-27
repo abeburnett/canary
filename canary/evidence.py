@@ -62,12 +62,12 @@ def ruleset_sha256():
 
 # ---- the text-only/1 producer (`canary evidence`) --------------------------
 #
-# text-only/1 passes a file only when it is plainly an instruction document.
-# It is deliberately narrower than `canary scan`'s inert allowlist: evidence
-# decides a public badge with no person in the loop, so anything uncertain is
-# unsupported rather than guessed. Recognizing instructions in prose ("fetch
-# this and follow it") is a question of meaning; the patterns below catch the
-# mechanical forms, and the hosted semantic check must cover the rest.
+# Contract draft 6: the deterministic `pass` claims only properties a check
+# can be complete about (prose file types, no matching tag-openers, no
+# shebang, an allowlisted frontmatter, definite outside references). Whether
+# prose contains code or sends the agent elsewhere is a judgment about
+# meaning: the hosted semantic record answers it for every package. The
+# pattern heuristics below remain as extra review triggers only.
 
 POLICY = "text-only/1"
 MAX_COMPONENTS = 4096
@@ -75,7 +75,14 @@ EXIT = {"pass": 0, "review": 10, "block": 20, "error": 3}
 RANK = {"pass": 0, "review": 1, "block": 2, "error": 3}
 
 PROSE_EXTENSIONS = {".md", ".markdown", ".txt", ".text", ".rst", ".adoc"}
-DATA_EXTENSIONS = {".json", ".csv", ".tsv"}
+BADGE_FRONTMATTER_KEYS = {"name", "description", "license"}
+TAG_OPENER = re.compile(r"<[A-Za-z!/?]")
+BLOCK_SCALARS = {">", "|", ">-", "|-", ">+", "|+"}
+PARENT_SEGMENT = re.compile(r"\.\.[/\\]")
+PLAIN_SCALAR = re.compile(r"""^[^\s"'\[\]{}|>&*!%@`#,][^#]*$""")
+QUOTED_SCALAR = re.compile(r"""^(?:"(?:[^"\\]|\\.)*"|'(?:[^']|'')*')$""")
+AUTOLINK = re.compile(r"<(?:[a-z][a-z0-9+.-]*:[^>\s]+)>", re.I)
+HREF = re.compile(r"\bhref\s*=", re.I)
 TYPE_CAPABILITIES = {"script", "unrecognized_file", "executable_bit", "bin_dir",
                      "package_manifest", "plugin_power", "plugin_hooks", "mcp_config"}
 DEPENDENCY_CAPABILITIES = {"package_manifest", "mcp_config", "skill_dependencies"}
@@ -85,14 +92,9 @@ DEPENDENCY_NAME = re.compile(
     r"(yarn|pnpm-lock|bun|deno|poetry|cargo|gemfile|composer)\.(lock|lockb|yaml|json)|"
     r"gemfile|cargo\.toml|go\.(mod|sum)|composer\.json|deno\.jsonc?|\.mcp\.json|mcp\.json|"
     r"[\w.-]*\.lock)$", re.I)
-DEPENDENCY_KEYS = {"mcpservers", "mcp_servers", "mcp", "hooks", "dependencies",
-                   "devdependencies", "peerdependencies", "requires", "commands", "plugins"}
 FRONTMATTER_DEPENDENCY_KEYS = {"dependencies", "requires", "mcp", "mcpservers",
                                "mcp_servers", "tools", "install", "setup"}
 
-ACTIVE_MARKUP = re.compile(
-    r"<\s*/?\s*(script|iframe|object|embed|svg|html|body|form|style|meta|link|base|applet)\b"
-    r"|\bon[a-z]+\s*=\s*[\"']|javascript\s*:|data\s*:\s*text/html", re.I)
 SOURCE_LINE = re.compile(
     r"^\s*(import\s+[\w.]+|from\s+[\w.]+\s+import\b|def\s+\w+\s*\(|class\s+\w+\s*[:(]"
     r"|function\s+\w+\s*\(|(const|let|var)\s+\w+\s*=|console\.\w+\s*\(|print\s*\("
@@ -105,7 +107,8 @@ BARE_URL = r"\b(?:[a-z0-9-]+\.)+[a-z]{2,}(?:/[^\s<>\"')\]]*)"
 URLISH = re.compile(rf"{SCHEME_URL}|{BARE_URL}", re.I)
 MD_LINK = re.compile(r"\[([^\]]*)\]\(\s*<?([^)\s>]+)>?[^)]*\)")
 REF_DEF = re.compile(r"^\s{0,3}\[([^\]]+)\]:\s*<?(\S+?)>?(?:\s.*)?$", re.M)
-REF_USE = re.compile(r"\[([^\]]*)\]\[([^\]]*)\]")
+REF_USE = re.compile(r"\[([^\]]*)\]\s*\[([^\]]*)\]")
+SHORTCUT = re.compile(r"\[([^\]]+)\](?![(\[:])")
 HTML_ANCHOR = re.compile(r"<a\b[^>]*?\bhref\s*=\s*[\"']?([^\"'\s>]+)[^>]*>(.*?)</a\s*>", re.I | re.S)
 GET_OR_RUN = re.compile(
     r"\b(run|runs|execute|exec|install|source|eval|pipe|launch|start|download|fetch|retrieve|"
@@ -117,7 +120,6 @@ DIRECTIVES = re.compile(r"\b(instructions?|steps|directions|directives|rules|gui
 # inside the package is not a reference to fetch.
 POINTER = re.compile(r"\b(urls?|links?|endpoints?|address|websites?|site|server|domain)\b", re.I)
 PIPE_TO_SHELL = re.compile(r"\b(curl|wget)\b[^|\n]*\|\s*(sudo\s+)?(ba|z|da)?sh\b", re.I)
-OUTSIDE_ROOT = re.compile(r"(^|[\s`'\"(=])\.\./")
 
 
 def _outside_fences(text):
@@ -131,14 +133,21 @@ def _outside_fences(text):
     return "\n".join(out)
 
 
+def _label(text):
+    return " ".join(text.split()).casefold()
+
+
 def _link_text(text):
-    """Markdown and HTML links rewritten as "text URL", reference links resolved."""
-    refs = {k.strip().lower(): v for k, v in REF_DEF.findall(text)}
+    """Links rewritten as "text URL": inline, HTML, and every Markdown
+    reference form (full, collapsed, shortcut; labels matched case- and
+    whitespace-insensitively, across line breaks)."""
+    refs = {_label(k): v for k, v in REF_DEF.findall(text)}
     text = REF_DEF.sub("", text)
     text = HTML_ANCHOR.sub(lambda m: f"{m.group(2)} {m.group(1)}", text)
     text = MD_LINK.sub(lambda m: f"{m.group(1)} {m.group(2)}", text)
-    return REF_USE.sub(lambda m: f"{m.group(1)} {refs.get((m.group(2) or m.group(1)).strip().lower(), '')}",
-                       text)
+    text = REF_USE.sub(lambda m: f"{m.group(1)} {refs.get(_label(m.group(2) or m.group(1)), '')}", text)
+    return SHORTCUT.sub(lambda m: f"{m.group(1)} {refs[_label(m.group(1))]}"
+                        if _label(m.group(1)) in refs else m.group(0), text)
 
 
 def external_references(text):
@@ -146,7 +155,7 @@ def external_references(text):
     outside instructions, or use files outside the package. Paragraphs, not
     lines or sentences, so wrapping or splitting a sentence does not hide it.
     Plain documentation links do not count."""
-    count = len(OUTSIDE_ROOT.findall(text))
+    count = 0
     for para in re.split(r"\n\s*\n", _link_text(text)):
         flat = " ".join(para.split())
         if PIPE_TO_SHELL.search(flat):
@@ -159,73 +168,73 @@ def external_references(text):
 
 
 def _frontmatter_problems(text):
-    """(declares dependencies, malformed) for Markdown frontmatter."""
-    body = text.lstrip("\ufeff")
-    if not body.startswith("---"):
+    """(declares dependencies, needs review) for Markdown frontmatter, using
+    the scanner's own boundary and key rules, then a strict badge rule: only
+    name, description and license, each a plain or correctly quoted one-line
+    value."""
+    lines = text.lstrip("\ufeff").splitlines()
+    i = 0
+    while i < len(lines) and not lines[i].strip():
+        i += 1
+    if i >= len(lines) or lines[i].strip() != "---":
         return False, False
-    end = body.find("\n---", 3)
-    if end < 0:
+    if any(k == "unparsed_frontmatter" for k, _ in scan._frontmatter_capabilities(text)):
         return False, True
-    declares, malformed = False, False
-    for line in body[3:end].splitlines():
-        key, sep, value = line.partition(":")
-        if sep and not line[:1].isspace() and key.strip().lower() in FRONTMATTER_DEPENDENCY_KEYS:
+    close = next(j for j in range(i + 1, len(lines)) if lines[j].strip() == "---")
+    declares, review, block_open = False, False, False
+    for _, key, value, indented in scan._yaml_lines(lines[i + 1:close], i + 2):
+        if indented:
+            # Only the continuation of a ">" or "|" block value; the scanner
+            # already rejects a continuation that looks like another key.
+            review = review or not block_open
+            continue
+        block_open = False
+        if key is None:
+            review = True
+            continue
+        if key in FRONTMATTER_DEPENDENCY_KEYS:
             declares = True
-        v = value.strip()
-        if v and v[0] in "\"'" and (len(v) < 2 or v[-1] != v[0]):
-            malformed = True
-    return declares, malformed
+        if key not in BADGE_FRONTMATTER_KEYS:
+            review = True
+        if value in BLOCK_SCALARS:
+            block_open = True
+        elif not (PLAIN_SCALAR.match(value) or QUOTED_SCALAR.match(value)):
+            review = True
+    return declares, review
 
 
-def _json_problems(text):
-    """(declares dependencies, malformed) for a JSON file."""
-    try:
-        data = json.loads(text)
-    except ValueError:
-        return False, True
-    stack = [data]
-    while stack:
-        item = stack.pop()
-        if isinstance(item, dict):
-            if any(str(k).lower() in DEPENDENCY_KEYS for k in item):
-                return True, False
-            stack.extend(item.values())
-        elif isinstance(item, list):
-            stack.extend(item)
-    return False, False
+def recognized_references(text):
+    """How many outside references the patterns recognize: URLs with any
+    scheme, bare domains with a path, autolinks, Markdown reference
+    definitions and href attributes. Recognized, not guaranteed exhaustive."""
+    return (len(URLISH.findall(text)) + len(AUTOLINK.findall(text))
+            + len(REF_DEF.findall(text)) + len(HREF.findall(text)))
 
 
 def _classify(rel, text, kinds):
-    """(kind, supported, unresolved count, forced review) for one file."""
+    """(kind, supported, unresolved count, external references, forced review)
+    for one file."""
     lower = rel.lower()
     base = lower.rsplit("/", 1)[-1]
     ext = os.path.splitext(base)[1]
     if DEPENDENCY_NAME.search(lower):
-        return "unknown", False, 1, True
+        return "unknown", False, 1, 0, True
     if text is None:
-        return "unknown", False, 0, True
-    unresolved = 1 if kinds & DEPENDENCY_CAPABILITIES else 0
+        return "unknown", False, 0, 0, True
     body = text.lstrip("\ufeff")
+    unresolved = (1 if kinds & DEPENDENCY_CAPABILITIES else 0) + len(PARENT_SEGMENT.findall(body))
+    references = recognized_references(body)
     prose = ext in PROSE_EXTENSIONS or (ext == "" and not (kinds & TYPE_CAPABILITIES))
-    if (kinds & TYPE_CAPABILITIES) or body.startswith("#!") or ACTIVE_MARKUP.search(body):
-        return "unknown", False, unresolved, True
-    if prose:
-        visible = _outside_fences(body) if ext in (".md", ".markdown") else body
-        if SOURCE_LINE.search(visible):
-            return "unknown", False, unresolved, True
-        declares, malformed = _frontmatter_problems(body) if ext in (".md", ".markdown") else (False, False)
-        unresolved += declares + external_references(body)
-        review = malformed or any(scan.INTERPRETER_RUN.search(scan.normalize(line))
-                                  for line in body.splitlines())
-        return "instruction", True, unresolved, review
-    if ext == ".json":
-        declares, malformed = _json_problems(body)
-        if malformed:
-            return "unknown", False, unresolved, True
-        return "instruction", True, unresolved + declares + external_references(body), False
-    if ext in (".csv", ".tsv"):
-        return "instruction", True, unresolved + external_references(body), False
-    return "unknown", False, unresolved, True
+    if (not prose or (kinds & TYPE_CAPABILITIES) or body.startswith("#!")
+            or TAG_OPENER.search(body)):
+        return "unknown", False, unresolved, references, True
+    declares, review = (_frontmatter_problems(body) if ext in (".md", ".markdown")
+                        else (False, False))
+    unresolved += declares + external_references(body)
+    visible = _outside_fences(body) if ext in (".md", ".markdown") else body
+    review = (review or bool(SOURCE_LINE.search(visible))
+              or any(scan.INTERPRETER_RUN.search(scan.normalize(line)) for line in body.splitlines()))
+    return "instruction", True, unresolved, references, review
 
 
 def _error(reason_code):
@@ -236,7 +245,7 @@ def _error(reason_code):
             "tree_sha256": None, "deterministic": {"verdict": "error", "reason": reason_code},
             "coverage": {"complete": False, "files_total": 0, "files_checked": 0,
                          "unsupported": 0, "unresolved": 0},
-            "components": []}
+            "references": {"external": 0}, "components": []}
 
 
 class _Stop(Exception):
@@ -317,14 +326,15 @@ def _produce(root):
     for s in result["coverage"]["skipped"]:
         skipped[s["path"].replace(os.sep, "/")] = s["reason"]
 
-    components, unsupported, unresolved, checked = [], 0, 0, 0
+    components, unsupported, unresolved, checked, references = [], 0, 0, 0, 0
     for rel, executable, sha in inventory:
         component_key = component_id(rel, executable, sha)
         kinds = caps.get(rel, set())
         if skipped.get(rel) == "media":
-            kind, supported, refs, review = "binary", False, 0, True
+            kind, supported, refs, external, review = "binary", False, 0, 0, True
         else:
-            kind, supported, refs, review = _classify(rel, text_of.get(rel), kinds)
+            kind, supported, refs, external, review = _classify(rel, text_of.get(rel), kinds)
+        references += external
         weights = {}
         for f in findings.get(rel, []):
             w = scan.SEVERITY_WEIGHT[f["severity"]]
@@ -361,5 +371,5 @@ def _produce(root):
     return {"schema": "canary.evidence/1", "policy_version": POLICY,
             "scanner_version": __version__, "ruleset_sha256": ruleset_sha256(),
             "tree_sha256": before.split(":", 1)[1], "deterministic": {"verdict": package},
-            "coverage": coverage,
+            "coverage": coverage, "references": {"external": references},
             "components": sorted(components, key=lambda c: c["id"])}

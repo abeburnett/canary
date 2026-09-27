@@ -1,7 +1,8 @@
 # Scanner evidence for hosted automated badges
 
-Status: draft 6 proposal, 2026-09-27 (see "Draft 6 proposal" at the end; needs
-Codex's agreement before the producer changes). Draft 5, 2026-09-27. Draft 5 tightens `text-only/1` after an independent
+Status: draft 6, 2026-09-27, accepted by Codex with amendments (hosted
+`f6fd7aa`, recorded at the end) and implemented. Earlier status notes follow.
+Draft 5, 2026-09-27. Draft 5 tightens `text-only/1` after an independent
 QA review found false passes in the first producer (see "Changes in draft 5";
 two need Codex's agreement). The producer is implemented (`canary evidence`); Codex confirmed the
 shared vectors in JavaScript (hosted `e60c059`). Codex confirmed points A and B of draft 2
@@ -209,7 +210,7 @@ code to do its job?", with a badge requiring a clear no, alongside the
 deterministic pass. Without that, a non-English or oddly phrased instruction
 to fetch outside content could reach a badge.
 
-## Draft 6 proposal: patterns guarantee structure, the classifier judges meaning
+## Draft 6: patterns check structure, the classifier judges meaning
 
 Two QA rounds on the draft 5 producer found fresh false passes each time,
 always of two kinds: recognizing *code* in prose, and recognizing *instructions
@@ -226,7 +227,7 @@ two meaning questions explicit, required semantic answers.
    extension. Everything else is `unknown` and unsupported. JSON, CSV and TSV
    are dropped from `text-only/1` (the shared `notes.json` vector flips to
    unsupported): a dependency-key list for JSON is itself a denylist.
-2. **No markup at all:** any `<` followed by a letter, `!`, `/` or `?`,
+2. **No matching tag-openers:** any `<` followed by a letter, `!`, `/` or `?`,
    anywhere in the file (inside code fences too) makes the file unsupported.
    No tag or attribute list is needed.
 3. **No `#!` first line**, after any byte-order mark.
@@ -236,9 +237,11 @@ two meaning questions explicit, required semantic answers.
 5. **Definite unresolved references:** a `..` path segment anywhere (`../`,
    `..\`, `./../`, `a/../../`), a download piped to a shell, or a dependency
    file by name. These count in `unresolved`.
-6. **Every external reference is enumerated,** mechanically and completely:
+6. **Recognized external references are counted** (recognized, not a
+   guaranteed exhaustive enumeration):
    every URL with any scheme in any case, bare domain with a path, autolink,
-   Markdown reference definition and HTML-style `href`. The count is reported
+   Markdown reference definition (full, collapsed and shortcut uses are all
+   resolved) and HTML-style `href`. The count is reported
    as a new field, `references.external` (outside `coverage`, so your strict
    coverage keys are unchanged). No attempt is made to decide which are
    documentation.
@@ -271,4 +274,24 @@ judgment the classifier makes, not a pattern.
 and two semantic answers; the Jev adapter asks questions A and B; the
 `notes.json` and `config.yaml` kind vectors are unsupported. The component-ID
 and ruleset vectors are unchanged.
+
+### Amendments accepted from Codex (`f6fd7aa`)
+
+1. **Both semantic questions are asked for every package,** including when no
+   external reference is recognized: outside requirements can appear without a
+   URL. (This replaces "required whenever `references.external` is above zero".)
+2. `references.external` counts **recognized** references; it is not a
+   guaranteed exhaustive enumeration.
+3. The structural rule is "no matching tag-openers", not "no markup".
+4. **Existing threat checks stay.** Two "no" answers alone cannot establish
+   eligibility, and package-level answers never become per-component passes.
+5. An ambiguous "illustrative example" is `review`.
+
+Both QA rounds are preserved as regression tests (`tests/test_evidence_producer.py`).
+Frontmatter for badges: the scanner's own parser, keys `name`, `description`,
+`license`, each a plain or correctly quoted one-line value or a `>`/`|` block.
+Calibration after implementation: five of Anthropic's six text-only skills
+`pass`; `academy-guide` is `review`. Badge issuance stays disabled until a
+separately labelled evaluation of Jev on real packages, with agreed error
+rates.
 
