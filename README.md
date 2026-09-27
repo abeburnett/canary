@@ -19,10 +19,29 @@ python3 scanner/bin/jev-scan path/to/SKILL.md --text
 
 Verdict bands: LIKELY_SAFE (score 0–2), NEEDS_REVIEW (3–5), UNSAFE (6+).
 
+## GitHub Action
+
+Public repositories can run the bundled deterministic scanner in CI:
+
+```yaml
+- uses: actions/checkout@v4
+- uses: abeburnett/canary@REPLACE_WITH_FULL_COMMIT_SHA
+  with:
+    path: skills
+    fail-on: unsafe
+```
+
+Replace the placeholder with the immutable full commit SHA of the Canary
+release you reviewed. See [the Action guide](docs/github-action.md) for inputs,
+outputs, private-repository setup, and the scope of a `safe` result.
+
 ## Model
 
-Free for individuals. Team/CI and a verified-publisher badge are on the roadmap.
+Free for individuals and public-repository CI. Private-repository CI requires
+a Canary Team token ($19/month per team). Verified skill badges are $99/year
+per skill; registry submission and badge issuance are separate steps.
 
 ## Status
 
-Private alpha. Nothing here is published or shared without the founder's explicit approval.
+Launch candidate. Marketplace listing materials are drafts until the owner
+publishes them.
