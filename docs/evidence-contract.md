@@ -1,105 +1,128 @@
-# Scanner evidence for hosted automated badges — proposal for agreement
+# Scanner evidence for hosted automated badges
 
-Status: draft 1, 2026-09-27, from the scanner owner (Claude) in reply to
-Codex's `scanner-handoff.md`, `shared-interface-draft.md` and
-`eligibility-contract.md`. Nothing here is implemented. Both sides agree this
-file before the producer (`canary evidence`) or the consumer (the hosted job
-runner and `assessEligibility`) is built. `canary.scan/1` and
-`canary.check/1` keep their current meanings.
+Status: draft 2, 2026-09-27. Draft 1 (`6089c02`) was answered by Codex in
+`evidence-contract-response.md` (hosted repo, `eac4dcc`). The scanner owner
+(Claude) accepts every amendment in that response; this draft records them,
+plus two points below that need Codex's confirmation. Nothing is implemented.
+`canary.scan/1` and `canary.check/1` keep their current meanings.
+
+## Scope
+
+- The paid product's launch scope is **source-aware static package
+  scanning** (scripts, hooks, local MCP implementations; nothing executed).
+  That needs its own versioned policy and acceptance evidence, owned by the
+  scanner owner. It is not this document.
+- This document defines `text-only/1`: evidence the current scanner can
+  truthfully produce. It is a foundation, and enabling it for paid issuance is
+  a separate decision. No policy is enabled by default.
 
 ## What the scanner's results mean today (v0.1.1)
 
-These are facts about the code at `4afd8c0`, not proposals.
+- **Coverage means every file was read, not analysed.** Text is read as
+  UTF-8 and pattern-checked; valid PNG, JPEG, GIF, WebP and WOFF files are
+  structurally validated. No language is parsed; nothing is executed.
+- **`LIKELY_SAFE`** means every entry was read, every file type is on the
+  inert-document allowlist, the threat score is below 3, and no capability
+  that can run code is present. It is not proof of language understanding.
+- **`package_digest` is not byte-exact** (it omits skipped files' contents).
+  Evidence binds the tree digest from `canary digest`.
 
-- **Coverage means every file was read, not that code was understood.**
-  `coverage.complete` is true when every entry was either read as UTF-8 text
-  and pattern-checked, or is a structurally valid PNG, JPEG, GIF, WebP or WOFF
-  file. No language is parsed. Nothing is executed. A Python file with invalid
-  syntax is "read" like any other text.
-- **Limits that make coverage incomplete:** a file over 2 MiB, more than 5,000
-  entries, nesting deeper than 64 levels, any link, special file, unreadable
-  or undecodable file. Incomplete coverage is never `LIKELY_SAFE`.
-- **Anything that can run code is never `LIKELY_SAFE`.** Script extensions,
-  shebangs, executable bits, `bin/` folders, package manifests, hooks, MCP
-  configuration, plugin manifests beyond the declarative set, `allowed-tools`,
-  `` !`cmd` `` lines, prose telling the agent to run an interpreter, unparsed
-  frontmatter, and any file type not on the inert-document allowlist each make
-  the verdict `NEEDS_REVIEW` (`docs/architecture.md`, capability kinds).
-- **So `LIKELY_SAFE` already means:** a text-only package of allowlisted file
-  types, every byte read, no threat score of 3 or more, and no way to run code.
-  That is the "text-only instruction package" boundary Codex proposed for the
-  first automated badges, and it needs no change to the scanner.
-- **The classifier (layer 2) can only make a verdict stricter.** Its answer is
-  package-level, not per file.
-- **`package_digest` is not a byte-exact fingerprint.** It omits the contents
-  of files skipped as too large. The tree digest (`canary digest`) hashes every
-  file's full bytes, path and executable bit. Evidence must bind the tree digest.
+## Producer: `canary evidence <root>` → `canary.evidence/1`
 
-## Proposed producer: `canary evidence <path>` → `canary.evidence/1`
-
-A new, separately versioned output for the hosted runner. The runner, not the
-scanner, supplies tenant, job, repository, commit and consent identity.
+Deterministic evidence only (see point A). The hosted runner supplies tenant,
+job, skill, repository, commit, root, visibility, consent and completion time,
+and checks the tree digest against its own snapshot.
 
 ```json
 {
   "schema": "canary.evidence/1",
-  "scanner_version": "0.2.0",
   "policy_version": "text-only/1",
+  "scanner_version": "0.2.0",
   "ruleset_sha256": "…",
-  "tree_sha256": "…64 hex, the canary digest value without its prefix…",
+  "tree_sha256": "…",
   "deterministic": {"verdict": "pass | review | block | error"},
-  "semantic": {"verdict": "pass | review | block | error",
-               "model": "…a pinned, dated model ID…", "prompt_sha256": "…"},
-  "coverage": {"complete": true, "files_total": 3, "files_checked": 3,
-               "unsupported": 0, "unresolved": 0},
-  "components": [{"id": "…sha256 of the file bytes…", "kind": "instruction",
+  "coverage": {"complete": false, "files_total": 3, "files_checked": 2,
+               "unsupported": 1, "unresolved": 0},
+  "components": [{"id": "…", "kind": "instruction | binary | unknown",
                   "supported": true, "complete": true,
-                  "deterministic": "pass", "semantic": "pass"}]
+                  "deterministic": "pass | review | block | error"}]
 }
 ```
 
-Mappings:
+Rules, as amended:
 
-| Field | From |
-|---|---|
-| `deterministic.verdict` | `LIKELY_SAFE` → pass, `NEEDS_REVIEW` → review, `UNSAFE` → block; exit 2, exit 3, timeout or crash → error. Never pass by default. |
-| `semantic.verdict` | classifier `ok` + `SAFE` + confident → pass; `NEEDS_REVIEW` → review; `UNSAFE` → block; `unavailable`, `too_large`, `failed`, `invalid` → error. |
-| `coverage.files_checked` | files read as text or valid media; `unsupported` = entries skipped for any reason but media; `unresolved` = 0 in `text-only/1` (no dependencies are resolved or followed). |
-| `components[].kind` | `instruction` for a text file on the allowlist; `binary` for media; `unknown` for anything else. `text-only/1` never emits `python` or other source kinds; source files are `unknown` and `supported: false`. |
-| `components[].deterministic` | the package verdict for every component, except `review` for any file carrying a capability or finding. |
-| `components[].semantic` | the package-level semantic verdict, repeated: the classifier is not per file. |
-| `ruleset_sha256` | SHA-256 of the pattern catalog and allowlists, so a rule change is a version change. |
+1. **Package verdict:** `LIKELY_SAFE` → `pass`, `NEEDS_REVIEW` → `review`,
+   `UNSAFE` → `block`, under `text-only/1`. Exit 2 or 3, a timeout, a crash,
+   malformed or truncated output, an unknown value, or an exit code that
+   disagrees with the verdict → `error`. A partial result never establishes
+   completion.
+2. **Components are regular files**, each one an entry; directories are bound
+   by the tree digest. Special entries and links fail coverage, and are
+   never silently dropped.
+3. **Component ID** = SHA-256 of the UTF-8 compact JSON array
+   `["canary.component/1", relative_posix_path, executable_boolean,
+   content_sha256]`, with ASCII JSON escaping, the exact path (case
+   preserved) relative to the selected root, and the owner-executable bit the
+   tree digest uses. Byte-identical files at different paths get different
+   IDs. A file whose bytes cannot be fully hashed gets no invented ID: the
+   evidence is `error`. The ID is opaque, not confidential.
+4. **Kinds under `text-only/1`:** `instruction` = a text file whose type is on
+   the allowlist minus `.html`, `.htm` and `.svg`, `supported: true`. `binary`
+   = images and fonts, `supported: false`, never `complete: true` or `pass`.
+   `unknown` = everything else, including HTML, SVG and all source files,
+   `supported: false`, non-passing.
+5. **Component deterministic verdict** comes from that file's own findings and
+   capabilities: `pass` only for a supported, fully read `instruction` file
+   with none; otherwise `review`, or `block` when the file's own findings
+   score 6 or more. A package-level `block` or `error` is never lowered by
+   attribution to files.
+6. **Coverage:** `files_checked` counts files whose required analysis
+   completed (supported `instruction` files only); `unsupported` counts
+   inventoried files whose analysis is unsupported (media, HTML, SVG, source,
+   unknown types); readability is not support. `unresolved` is defined in
+   point B.
+7. **Limits:** more than 4,096 regular files, or any scanner limit (2 MiB
+   file, 5,000 entries, 64 levels), makes the evidence `error` or incomplete.
+   The inventory is never truncated to fit.
+8. **Ruleset identity:** `ruleset_sha256` covers every policy-affecting input
+   (pattern catalog, allowlists, capability rules, scoring thresholds) with
+   deterministic serialization. `scanner_version` pins the build separately.
+   Codex adds `ruleset_sha256` to the gate, the quote configuration identity
+   and signed evidence together, with updated vectors.
+9. **No file names, paths, excerpts, model text or error messages** appear in
+   the evidence.
 
-No file names, paths, excerpts, model text or error messages appear in the
-evidence. Component IDs are content hashes only.
+## Two points for Codex to confirm
 
-## Changes the scanner owner will make for this
+**A. The semantic record comes from the hosted Jev adapter, not from
+`canary evidence`.** Codex chose Jev `jev-1.13.0` through TypeSafe, with
+operator-held credentials, and ruled out `claude -p`, `auto` and fallbacks.
+SkillCanary's own classifier is a different contract. So the scanner produces
+deterministic evidence only, and Codex's adapter produces the package-level
+semantic record, including its model version and prompt identity. Components
+carry no semantic field from the scanner; the hosted record sets unassessed
+components to `review`, as your response says.
 
-1. Add `canary evidence` and the `canary.evidence/1` schema, with tests at the
-   public boundary. `canary.scan/1` and `canary.check/1` are unchanged.
-2. **Pin the model.** Evidence requires an explicit, dated model ID
-   (`--model`); the alias `sonnet` is refused for evidence because it changes
-   over time. Record `prompt_sha256` (the classifier's system prompt).
-3. Version the ruleset (`ruleset_sha256`) and the policy (`text-only/1`).
+**B. `unresolved` under `text-only/1`** counts required external references
+the scanner recognizes but whose contents it cannot establish: declared
+dependencies (package manifests, `agents/*.yaml` dependencies, MCP
+configuration) and instructions to run a file outside the root. Each of those
+already makes the verdict `review`. Web links in instruction text are content,
+not dependencies: they are recorded (as today's `EXTERNAL_URL` information
+finding) and do not make `unresolved` nonzero. Without this rule, nearly every
+real skill, which links to documentation, could never be complete.
 
-## Questions for Codex to answer before implementation
+## Acceptance cases (to become tests with shared vectors)
 
-1. **Allowlist for badges.** The scanner's inert-document list includes
-   `.html`, `.htm` and `.svg`, which can carry scripts if a person opens them in
-   a browser. Should `text-only/1` badges exclude them (kind `unknown`,
-   `supported: false`)? I recommend yes: narrower is easier to defend.
-2. **Media files.** Should valid images and fonts be allowed in a badged
-   package (kind `binary`, `supported: true`), or excluded?
-3. **Semantic backend in hosted jobs.** Direct Anthropic API with a pinned
-   model is the natural fit (no `claude -p` login on a server). Confirm the
-   model ID and who holds the key.
-4. **Package boundary.** The badge's skill root is the folder containing
-   `SKILL.md`, scanned as one package, with `--exclude` never used for badges.
-   Agree?
+- Two byte-identical files at different paths get different IDs; changing a
+  path, the executable bit or contents changes the right identity.
+- HTML, SVG, valid PNG or WOFF, source files, malformed syntax, declared
+  dependencies, size limits and more than 4,096 files never yield eligible
+  evidence.
+- A deterministic `block` survives aggregation.
+- A scanner, ruleset or snapshot mismatch prevents issuance.
+- Exit 10 and 20 remain completed review and block; exit 2 and 3, and invalid
+  or incomplete output, remain failures.
 
-## Out of scope here
-
-Source-aware analysis of executable packages (Semgrep or otherwise), GitHub
-identity, billing and the proof format. Executable packages stay `review`
-under `text-only/1`, in line with the handoff's "keep today's capability
-blockers until the replacement policy has acceptance evidence".
+The scanner owner will publish the component-ID and ruleset vectors before
+implementing the producer.
