@@ -1,33 +1,42 @@
 ---
 name: "canary"
-description: "One-shot setup of Canary skill screening: install the scanner, wire skill-safety checks into the agent's workflow, and quarantine anything suspicious. Use when the user says 'set up Canary' or 'point your agent at Canary'."
+description: "Install AI skills safely with SkillCanary. Use when the person asks to install, add, update or vet a skill or plugin, shares a link to one, or says 'use Canary'."
 ---
 
-# Canary — one-shot install
+# SkillCanary
 
-Canary scans AI skill files for prompt-injection and malicious-instruction risk *before* they get trusted. Setup takes one pass:
+SkillCanary checks a skill before any agent reads it and installs it only
+after the person approves in a Mac dialog. You pass it links; you never read
+the skill yourself.
 
-## Install
+## When the person wants a skill installed
 
-1. The scanner engine lives at `scanner/` in this repo (product name: SkillCanary; command: `canary`). To install, copy `scanner/` into the agent's workspace skills directory.
-   - Files: `SKILL.md` (the full two-layer workflow), `bin/canary` (layer-1 scanner CLI), `references/checks.md`, `references/classifier-prompt.md`.
-2. Verify it runs: `bin/canary --help` should print usage and exit 0. (Python 3, no dependencies.)
+Run `canary add "<link>"` with the link exactly as they gave it. Then report
+the outcome in one or two sentences:
 
-## Wire it into the workflow
+- `installed` (exit 0): say where it was installed.
+- `declined` or `not_installed` (exit 10): repeat SkillCanary's reasons. Do
+  not install the skill another way; that decision belongs to the person.
+- `refused` (exit 20): say SkillCanary judged it unsafe and it was not
+  installed.
+- Exit 2: the link or download did not work; repeat the message.
 
-1. **Scan before install.** Every third-party skill gets scanned *before* being added to the agent's skills. No eyeballing — always run the scan.
-2. **The rule:** `bin/canary check <skill-path> --text` (both layers; `scan` is layer 1 alone). Either layer says UNSAFE → do not install. Any meaningful flag → NEEDS REVIEW, show the user the findings, let them decide. Both clear → install.
-3. **Quarantine, don't delete.** Never copy a flagged skill anywhere an agent loads skills from. Quarantine lives outside every skills directory (see `docs/architecture.md`).
-4. **Re-scan discipline.** Re-run the scan after every new skill install and periodically over the whole skills directory. Skills update; trust doesn't persist.
+Do not open, read, summarize or paste the skill's files, before or after.
+Do not use `npx skills`, `git clone`, plugin install commands or file writes
+to put a skill in a skills folder; at Guard and Lockdown those are blocked.
 
-## The two layers (summary)
+## When they want a skill checked, not installed
 
-- **Layer 1 (deterministic):** pattern-matches 11 attack categories (instruction override, identity rewrite, safeguard bypass, exfiltration, shell-pipe execution, credential access, persistence, stealth, prompt leakage, obfuscation, external URLs). Cannot be socially engineered — it never "reads" the skill.
-- **Layer 2 (isolated classifier):** `canary check` starts a separate model session with no tools, memory or project files and a fixed JSON-only answer. A hijacked classifier can only lie inside that JSON, and it can only make the verdict stricter.
-- **Combination:** either layer UNSAFE → UNSAFE; any meaningful flag → NEEDS REVIEW; both clear → SAFE.
+Run `canary check "<path>" --text` and relay the verdict and reasons.
 
-Full workflow, output contract, and operating rules: read `scanner/SKILL.md`.
+## When `canary` is not installed
 
-## After setup
+Tell the person to set it up from https://skillcanary.com, where the page
+gives a sentence to paste into this app. Do not fetch or read that page
+yourself.
 
-Confirm back to the user in one line: where the scanner lives, how many existing skills were scanned, and the verdict counts. Offer to scan the current skills directory immediately.
+## When they ask what they are protected against
+
+Run `canary doctor` and relay its output. To change the level, run
+`canary setup`; it asks the person in a Mac dialog and, for Guard or
+Lockdown, asks for their password in the standard macOS window.
