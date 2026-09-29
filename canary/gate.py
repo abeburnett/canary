@@ -77,11 +77,25 @@ NOTE = re.compile(r"[^/]+\.(md|txt|log)", re.I)
 NOT_NOTES = {"agents.md", "agents.override.md", "instructions.md"}
 
 
-def note_folders(home, adapters):
+def note_folders(home, cwd, adapters):
+    """Each adapter's note folders, minus any that is the home folder or above
+    it, or overlaps another host's protected locations: CODEX_HOME can point
+    at ~/.claude, and its top-level CLAUDE.md must not become a "note"."""
+    adapters = list(adapters)
+    h = _fold(os.path.realpath(home))
     folders = []
     for adapter in adapters:
-        folders += getattr(adapter, "note_folders", lambda h: [])(home)
-    return sorted({os.path.realpath(f) for f in folders})
+        others = []
+        for other in adapters:
+            if other is not adapter:
+                others += other.discovery_roots(home, cwd) + other.config_files(home)
+        others = [_fold(os.path.realpath(r)) for r in others]
+        for f in getattr(adapter, "note_folders", lambda _: [])(home):
+            p = _fold(os.path.realpath(f))
+            if _inside(h, p) or any(_inside(p, r) or _inside(r, p) for r in others):
+                continue
+            folders.append(os.path.realpath(f))
+    return sorted(set(folders))
 
 
 def _is_note(path, notes):

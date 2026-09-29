@@ -212,7 +212,9 @@ protected whole so that a profile created later is covered). A note is a
 path, that is a regular file with one name and is not `AGENTS.md`,
 `AGENTS.override.md` or `instructions.md`. Writing one is checked against
 every other protected location, so a note that is really a skills file, or a
-note folder inside another protected folder, is still denied. This lets an
+note folder inside another protected folder, is still denied. A note folder
+that is the home folder or above it, or overlaps another host's protected
+locations (`CODEX_HOME` pointed at `~/.claude`), grants no notes. This lets an
 agent keep a delegation log in `~/.codex`; everything else there stays
 protected.
 

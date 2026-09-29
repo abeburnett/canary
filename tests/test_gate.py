@@ -26,11 +26,11 @@ class Home:
         for d in (".claude/skills/notes", ".agents/skills", ".codex", "work/app/src"):
             os.makedirs(os.path.join(self.path, d), exist_ok=True)
 
-    def hook(self, host, tool, tool_input, raw=None):
+    def hook(self, host, tool, tool_input, raw=None, env=None):
         payload = raw if raw is not None else json.dumps({
             "hook_event_name": "PreToolUse", "tool_name": tool,
             "tool_input": tool_input, "cwd": self.project})
-        env = {"HOME": self.path, "PATH": os.environ.get("PATH", "")}
+        env = {"HOME": self.path, "PATH": os.environ.get("PATH", ""), **(env or {})}
         proc = subprocess.run([sys.executable, CANARY, "hook", "--host", host],
                               input=payload, capture_output=True, text=True, env=env,
                               timeout=60)
@@ -145,6 +145,19 @@ class DenialsNameTheSanctionedRoute(unittest.TestCase):
                 proc = h.hook(host, "Bash", {"command": command})
                 self.assertTrue(h.denied(host, "Bash", {"command": command}))
                 self.assertIn("Write tool", proc.stdout + proc.stderr)
+
+
+class ARepointedCodexHomeGetsNoNotes(unittest.TestCase):
+    def test_codex_home_on_another_hosts_folder_or_home_grants_nothing(self):
+        # Fable, notes refutation (2026-09-29): CODEX_HOME aimed at ~/.claude
+        # made ~/.claude/CLAUDE.md writable as a "note".
+        h = Home()
+        for codex_home in (os.path.join(h.path, ".claude"), h.path):
+            target = os.path.join(codex_home, "CLAUDE.md" if codex_home != h.path else "notes.md")
+            with self.subTest(codex_home=codex_home):
+                proc = h.hook("claude", "Bash", {"command": f"echo x >> '{target}'"},
+                              env={"CODEX_HOME": codex_home})
+                self.assertEqual(proc.returncode, 2, "a note was allowed in a repointed home")
 
 
 class NotesStayInsideOtherProtection(unittest.TestCase):

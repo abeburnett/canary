@@ -287,6 +287,15 @@ exist. The owner asked for two changes here and a third as its own program
    `instructions.md` exclusion each turn a named case red. Judging a note on
    its unresolved path cannot be isolated by a test: a link is not a regular
    file, so the one-name check refuses it first.
+   A focused Fable refutation of the notes change found it sound against
+   anything an agent can do (case variants, links, hard links, `mv`/`cp`/
+   `apply_patch` onto loaded files, parent-folder links). It found one
+   should-fix: with `CODEX_HOME` pointed at `~/.claude` or the home folder,
+   `~/.claude/CLAUDE.md` became a writable "note". Fixed: such a folder
+   grants no notes (`ARepointedCodexHomeGetsNoNotes`; removing the filter
+   turns it red). Findings outside this change go to the protected-file
+   program: `~/.claude/CLAUDE.md` is not protected at all, and a hard link
+   made out of a protected file elsewhere can change it.
 2. **No invented features.** The settings deny says no SkillCanary command
    allows the write and tells the agent to hand the person a command to
    paste; the shipped SkillCanary skill (both hosts) says never to tell the
