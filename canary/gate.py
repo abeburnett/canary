@@ -13,7 +13,13 @@ from dataclasses import dataclass, field
 SUPPORT = os.path.join("Library", "Application Support", "Canary")
 FRAGMENTS = (".claude/skills", ".agents/skills", ".claude/plugins", ".codex/skills",
              ".codex/plugins", ".canary-lock", "application support/canary",
-             "managed-settings", "/etc/codex", "claudecode/managed")
+             "managed-settings", "/etc/codex", "claudecode/managed", ".claude/commands",
+             ".claude/agents", ".claude/settings", ".claude.json", ".mcp.json", "agents.md",
+             "agents.override.md", ".codex/config", ".codex/hooks", ".codex/rules",
+             "application support/skillcanary")
+# In a command SkillCanary could not map, a bare host folder (`cd ~/.claude &&
+# tool skills/x $V`) may be where the relative writes that follow land.
+HOST_FOLDER = re.compile(r"(?:^|[\s/'\"=:])\.(?:claude|agents|codex)(?=$|[\s'\";&|)<>])")
 INSTALLERS = re.compile(
     r"(\b(npx|bunx)\b(\s+-\S+)*\s+[@\w./-]*\bskills(@\S*)?\s+(add|install|update)\b"
     r"|\b(pnpm|yarn)\s+dlx\s+(-\S+\s+)*[@\w./-]*\bskills(@\S*)?\s+(add|install|update)\b"
@@ -181,7 +187,7 @@ def decide(call, protected, home, canary_bin=None):
             if call.screen and _names_protected(text, protected, home):
                 return MENTIONED
             return None
-        if _names_protected(text, protected, home):
+        if _names_protected(text, protected, home) or HOST_FOLDER.search(text.casefold()):
             return MENTIONED
         return None
     except Exception:

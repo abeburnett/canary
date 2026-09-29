@@ -49,10 +49,18 @@ class EditError(Exception):
 # ---- skill folders ---------------------------------------------------------
 
 def _is_skill_folder(real):
-    """A real folder directly inside a folder named `skills`."""
-    return (os.path.isdir(real) and not os.path.islink(real)
+    """A real folder directly inside a skills folder the hook protects: any
+    repository's `.claude/skills`, `.agents/skills` or `.codex/skills`, or a
+    host's user skills folder (which may live under CODEX_HOME)."""
+    if not (os.path.isdir(real) and not os.path.islink(real)
             and os.path.basename(os.path.dirname(real)) == "skills"
-            and os.path.isfile(os.path.join(real, "SKILL.md")))
+            and os.path.isfile(os.path.join(real, "SKILL.md"))):
+        return False
+    from canary import gate
+    home = os.path.expanduser("~")
+    roots = {os.path.realpath(m.install_root(home)) for _, m, _ in add.HOSTS.values()}
+    roots.add(os.path.realpath(os.path.join(add.HOSTS["codex"][1]._codex_home(home), "skills")))
+    return gate._in_any_skills_folder(real) or os.path.dirname(real) in roots
 
 
 def resolve(target, home, cwd):
@@ -143,8 +151,9 @@ def _load(draft):
         raise EditError("That is not a draft from canary edit start.") from None
     if not targets or not all(_is_skill_folder(t) for t in targets):
         raise EditError("The draft points at a folder that is not an installed skill.")
-    if not add.NAME.fullmatch(str(name)):
-        name = os.path.basename(targets[0])
+    # edit.json is the agent's file: the name the person sees comes from the
+    # folder actually being changed.
+    name = os.path.basename(targets[0])
     return folder, name, list(dict.fromkeys(targets)), base
 
 

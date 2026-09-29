@@ -136,10 +136,11 @@ class ApprovedTextEditsWriteOnlyTheChange(unittest.TestCase):
 
     def test_folders_outside_skills_folders_and_drafts_without_skill_md_are_refused(self):
         h = Home()
-        plain = os.path.join(h.path, "work", "notes")
-        h.write("SKILL.md", SKILL, plain)
-        with self.assertRaises(edit.EditError):
-            h.start(plain)
+        for plain in (os.path.join(h.path, "work", "notes"),
+                      os.path.join(h.path, "work", "skills", "notes")):  # not a host's skills folder
+            h.write("SKILL.md", SKILL, plain)
+            with self.assertRaises(edit.EditError):
+                h.start(plain)
         draft = h.start()
         os.unlink(os.path.join(draft, "SKILL.md"))
         with self.assertRaises(edit.EditError):
@@ -187,6 +188,22 @@ class CodeChangesAreFlagged(unittest.TestCase):
         self.assertEqual(out["outcome"], "refused")
         self.assertEqual(approver.seen, [])
         self.assertEqual(h.read("references/guide.md"), "Read the routing lessons.\n")
+
+
+class TheDialogNamesTheRealFolder(unittest.TestCase):
+    def test_a_name_written_into_edit_json_is_not_shown(self):
+        h = Home()
+        draft = h.start()
+        record_path = os.path.join(os.path.dirname(draft), "edit.json")
+        with open(record_path) as fh:
+            record = json.load(fh)
+        record["name"] = "harmless-notes"
+        with open(record_path, "w") as fh:
+            json.dump(record, fh)
+        h.write("references/guide.md", "Changed.\n", draft)
+        approver = Approver(False)
+        h.apply(draft, approver)
+        self.assertEqual(approver.seen[0]["name"], "orchestrate")
 
 
 class ChangedDraftsOrSkillsWriteNothing(unittest.TestCase):

@@ -188,16 +188,26 @@ def _looks_like_path(word):
 
 
 def _unknown(m, words, cwd):
-    """No model of this command: screen its text, and count every argument
-    that looks like a path, including option values, as read and written."""
+    """No model of this command: screen its text, and count every argument,
+    including option values, as a path it reads and writes. A relative word
+    such as `skills/x.md` after `cd ~/.claude` is a write there. Bare `.` and
+    `..` stand for a whole folder, like a git checkout: they count only when a
+    protected location exists inside it, so `prettier --check .` still runs."""
     m.screen = True
     for word in words[1:]:
         value = word.split("=", 1)[1] if word.startswith("-") and "=" in word else word
-        if _looks_like_path(value) or word.globbed:
-            v = Word(value)
-            v.globbed = word.globbed
+        if not value or (value.startswith("-") and value == word):
+            continue
+        v = Word(value)
+        v.globbed = word.globbed
+        try:
+            if value in (".", "..", "./", "../"):
+                m.trees_written.append(path(value, cwd))
+                continue
             _read(m, v, cwd)
             _write(m, v, cwd)
+        except ValueError:
+            continue  # `~user/...` and the like: left to the text screen
 
 
 def _repo_top(folder):

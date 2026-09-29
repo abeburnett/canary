@@ -178,9 +178,11 @@ Decision rules (`canary/gate.py`, `decide`), in order:
      root: deny when that repository holds a protected location that exists
      on disk. (A skills folder that does not exist yet is not protected
      against a checkout that creates it; see "Enforcement layers".)
-   - Any other command is unknown: its path-like arguments, including option
-     values such as `--out=<path>`, count as read and written, and its text
-     is also screened as in rule 5.
+   - Any other command is unknown: every argument, including option values
+     such as `--out=<path>`, counts as a path it reads and writes, resolved
+     against the tracked working folder (so `cd ~/.claude && tool
+     skills/x.md` writes into a skills folder). A bare `.` or `..` counts like
+     a git rewrite of that folder. Its text is also screened as in rule 5.
    - Tools that only carry text to a person or another agent
      (AskUserQuestion, TodoWrite, Agent, SendMessage, plan-mode tools,
      spawn_task) touch no files; whatever they start is checked in turn.
@@ -188,9 +190,14 @@ Decision rules (`canary/gate.py`, `decide`), in order:
    unknown tools such as MCP calls): the call's text is screened. Deny when
    it names a protected location (the resolved paths, their `~` and `$HOME`
    spellings, and the fragments `.claude/skills`, `.agents/skills`,
-   `.claude/plugins`, `.codex/skills`, `.canary-lock`,
-   `Application Support/Canary`, `managed-settings`, `/etc/codex`);
-   allow otherwise, so ordinary compound commands keep working.
+   `.claude/plugins`, `.codex/skills`, `.claude/commands`, `.claude/agents`,
+   `.claude/settings`, `.claude.json`, `.mcp.json`, `AGENTS.md`,
+   `.codex/config`, `.codex/hooks`, `.codex/rules`, `.canary-lock`,
+   `Application Support/Canary`, `Application Support/SkillCanary`,
+   `managed-settings`, `/etc/codex`). A call the adapter could not map at
+   all is also denied when it names a bare `.claude`, `.agents` or `.codex`
+   folder, because relative writes after `cd` into one cannot be seen.
+   Allow otherwise, so ordinary compound commands keep working.
 6. Otherwise allow.
 
 Deny messages name the way forward: a write into a skills folder names

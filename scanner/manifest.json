@@ -1,5 +1,5 @@
 {
-  "version": "bb62113b5ee649a0518889c7721e0647ba4ddbeb",
+  "version": "a988dfded2d89757acaf2e1658b3647138526842",
   "files": {
     "bin/canary": "6be3492d4a1c5373bf1040f4a612737548593853448d95f436d5828e9545ffa9",
     "canary/__init__.py": "ae739b3e3b817044ada923b44ba82c752fe8b7c2133908d58fff8fd4b5146298",
@@ -10,14 +10,14 @@
     "canary/classifiers/openai_api.py": "8f12e081140a78b472788263bc483677dabcdc547082cb034849d7d5cb569dc6",
     "canary/classify.py": "721f07a640928eec3ec4c9198c53ba5fc34870a0125882ba3814570321453e06",
     "canary/cli.py": "6e61ae495f79e040e7b45bd9d99e4df4ff2a70e568570165db61f2db260d9427",
-    "canary/edit.py": "4d1f5bacb5a16f0015618ea6ec78adfe706d14f4345057d5f337049a9314d729",
+    "canary/edit.py": "224ff13c4f2b8275508c261785929432ebc8069013567b9efad7672b7c37e6c2",
     "canary/evidence.py": "cb4d5de6b3d4567b39706dfff8f022a59f24eca1bc6052dc8c3a99ee688c353b",
     "canary/frontdoor.py": "dfaafd7fd180e606d07669a03e6ae02ac57ab0fc54ce6f74a79e2c0d6953c200",
-    "canary/gate.py": "6eca87b62176d581d468f7bfd322c5d5a1c3b5fe6241eb000c7d608456821b43",
+    "canary/gate.py": "b563573e65cc4c20631b81422ab3b3a4992c6eb7ba00abad7d33896e670cadfd",
     "canary/hosts/claude.py": "a8118fbf145a68e0d010de5da06351f52cb5bf8ceaee9e7a003f413e7184b647",
     "canary/hosts/codex.py": "ae92cd1cd4d225fe304ffea2f8035e8f893123c4a9da47f4882ed61434cc7312",
     "canary/scan.py": "b66fd7c627d995980cf77654728ae42410b1a320dca684d7698f60987688ac58",
     "canary/setup.py": "9acb5e2fba19e73f0826618e13809954ce03da1d9a28084619cd5eb277f4b217",
-    "canary/shellparse.py": "6a93309b79c1fcd272b7fcccdb4249c7d515420edfd88d23368bc3498a78d4a1"
+    "canary/shellparse.py": "f4826449e5733470cb33d547deb42a7b25cd7c939928197a0cae0d9edfc081fd"
   }
 }

@@ -16,6 +16,15 @@ Changes made while building slice A, with the reason for each:
   `.codex/skills` are protected, not only those above the working folder.
   Before, `echo x > <other repo>/.claude/skills/x/SKILL.md` and
   `git -C <other repo> reset --hard` passed.
+- Refutation round 1 (Fable, 2026-09-29) found that an unknown command with
+  a relative path (`cd ~/.claude && node w.js skills/x.md`, `install …
+  .claude/commands/x.md`, `python3 -c "open('.claude/settings.json','w')"`)
+  still wrote into protected places; the old hook allowed these too. Every
+  argument of an unknown command is now a path, the text screen knows the
+  commands, agents and settings locations, and an unmappable command that
+  names a bare `.claude`, `.agents` or `.codex` folder is denied. It also
+  found that `canary edit start` accepted any folder named `…/skills/x`, and
+  that the dialog showed a name from the agent's `edit.json`; both fixed.
 - The shell lexer is SkillCanary's own. shlex cannot tell a quoted `;` from
   a separator, and it read `cp a b 2>/dev/null` as a copy to `2`, which the
   old hook allowed into a skills folder.
