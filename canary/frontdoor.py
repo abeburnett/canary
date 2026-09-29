@@ -14,7 +14,7 @@ MARKER = ("\n<!-- Installed by canary setup, which keeps it up to date. "
 
 SKILL_TEXT = """---
 name: "canary"
-description: "Install AI skills safely with SkillCanary. Use when the person asks to install, add, update or vet a skill or plugin, shares a link to one, or says 'use Canary'."
+description: "Install and change AI skills safely with SkillCanary. Use when the person asks to install, add, update, edit or vet a skill or plugin, shares a link to one, says 'use Canary', or when a write to a skills folder is blocked."
 ---
 
 # SkillCanary
@@ -38,6 +38,28 @@ the outcome in one or two sentences:
 Do not open, read, summarize or paste the skill's files, before or after.
 Do not use `npx skills`, `git clone`, plugin install commands or file writes
 to put a skill in a skills folder; at Guard and Lockdown those are blocked.
+
+## When the person wants to change an installed skill
+
+Skills folders are protected, so do not write into them directly. Reading
+them is fine.
+
+1. Run `canary edit start <name>`. For a skill inside a repository, pass its
+   folder instead of a name. It prints a draft folder.
+2. Make the change in the draft with your normal file tools.
+3. Run `canary edit apply "<draft>"` and report the outcome:
+   - `applied` (exit 0): say which files changed. If the skill lives in a git
+     repository, commit the change there as usual.
+   - `declined`, `not_applied` or `conflict` (exit 10): repeat SkillCanary's
+     reasons. The draft is kept; after a conflict, start again.
+   - `refused` (exit 20): say SkillCanary judged the change unsafe.
+
+The person approves each change in a dialog, which warns them when the
+change adds scripts, tools or hooks, or changes the skill's description.
+When the person wants a recurring task to change some Markdown files without
+a dialog, they can run `canary edit allow <name> "<pattern>" --days <n>`,
+which asks for their password. Suggest an allowance only when the person
+asks for fewer dialogs.
 
 ## When they want a skill checked, not installed
 

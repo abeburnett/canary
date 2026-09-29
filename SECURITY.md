@@ -34,6 +34,15 @@ These are documented, not bugs; the site and `docs/architecture.md` state them.
 - **Guard is a guard, not a wall.** Hooks see each tool call, and a command
   written to hide its target can get past them. Lockdown closes this for
   user-level skill folders; skills inside a repository are guarded only.
+- **An edit allowance trusts text that passes both scanners.** With
+  `canary edit allow`, an agent can change matching Markdown files in one
+  skill without asking you, until the allowance expires. Canary cannot tell
+  which session or scheduled task is making the change, so the allowance
+  covers files and a time window, not a task. Text copied from an untrusted
+  source (such as a shared lessons inbox) can steer an agent while reading
+  as ordinary advice. The narrow pattern, the size limit, the notification,
+  the log in `~/Library/Application Support/Canary/edits.jsonl` and the
+  expiry limit how far that spreads; they do not prevent it.
 - **A git checkout can create a repository skills folder.** Guard blocks git
   commands that would rewrite a repository holding a skills folder, but a
   repository with no `.claude/skills` or `.agents/skills` yet can gain one

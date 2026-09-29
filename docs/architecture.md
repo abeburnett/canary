@@ -441,6 +441,52 @@ renamed:
    "verdict": "…", "installed": ["…"], "installed_at": "2026-09-26T00:00:00Z"}}}
 ```
 
+## `canary edit start|apply|allow|allowances|revoke`
+
+The one supported way to change an installed skill (`canary/edit.py`;
+design and owner decisions in `docs/program-2026-09-28-skill-edits.md`).
+
+- `start <name | folder>` finds every copy of a name in the user skill
+  folders, or takes a folder directly inside any folder named `skills`,
+  follows links to the real folder, and refuses copies that differ. It copies
+  the skill without `.git` to `~/.skillcanary/drafts/<name>-<id>/skill/` and
+  records each file's SHA-256 in `edit.json` beside it.
+- `apply <draft>` re-validates the targets named in `edit.json` (the agent
+  can write that file), copies the draft to a private snapshot under
+  `~/Library/Application Support/Canary/edits/<run>/`, and compares it with
+  the installed skill. A skill that changed since `start` is a `conflict`.
+  - A *code change* touches a file that has, or gains, a capability that
+    blocks auto-approval, a file the scanner cannot read as text, a program
+    bit, or the SKILL.md frontmatter (including `description`). Anything
+    else is a *text change*.
+  - Layers 1 and 2 run on a package of only the added and changed files.
+    `UNSAFE` is refused without asking.
+  - One dialog asks the person; a code change or a verdict other than
+    `LIKELY_SAFE` uses the caution form with Cancel as the default. It shows
+    file names (labelled as the skill's), lines added and the path of the
+    full diff. At Lockdown the write is one administrator step that stages
+    each file in a root-owned folder inside the skill, checks its SHA-256
+    with `/usr/bin/shasum`, then moves it into place.
+  - Writes happen under `canary add`'s lock, after re-checking the skill
+    and snapshot, file by file through a temporary file and a rename. Files
+    outside the change, and `.git`, are not touched. The lockfile entry gets
+    the new `package_digest` and `edited_at`; `edits.jsonl` records the
+    change, and the previous files stay under the run folder.
+- `allow <name | folder> <pattern> [--days 1-30]` (Guard only): after a
+  dialog, the administrator step writes `allowances.json` beside
+  `state.json`. An allowance is read only when the file and its folder
+  belong to root and are not writable by group or others. It covers a
+  change when every changed file already exists, matches the pattern
+  segment by segment, ends in `.md` and is not `SKILL.md`; the change is a
+  text change; the change scan is `LIKELY_SAFE` with the classifier run; it
+  adds at most 200 lines and 16 KiB; and it adds no URL or shell fence. Then
+  no dialog is shown, and a notification follows. `revoke` also takes the
+  password; `allowances` lists them.
+
+Exit codes: 0 `started`, `applied`, `unchanged`, `allowed`, `revoked`; 10
+`declined`, `not_applied`, `conflict`; 20 `refused`; 2 usage or an unusable
+draft or folder; 3 internal error. No flag approves an edit.
+
 ## `canary setup [--level scan|guard|lockdown]` and `canary doctor`
 
 `setup` asks which level the person wants in a native dialog, with the

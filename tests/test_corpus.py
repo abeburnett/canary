@@ -773,6 +773,17 @@ HOOK_CASES = [
     hook_case("H_write_text_tool_edit", "deny", {"file_path": "{H}/.claude/" + "skills/notes/SKILL.md",
                                                  "old_string": "a", "new_string": "b"},
               tool="Edit", hosts=("claude",)),
+    # The edit route: drafts are ordinary files; what Canary trusts is not.
+    hook_case("H_edit_draft_write", "allow", {"file_path": "{H}/.skillcanary/drafts/o-1/skill/SKILL.md",
+                                              "content": "x"}, tool="Write", hosts=("claude",)),
+    hook_case("H_edit_draft_shell", "allow", "echo x >> ~/.skillcanary/drafts/o-1/skill/notes.md"),
+    hook_case("H_edit_apply", "allow", "canary edit apply {H}/.skillcanary/drafts/o-1/skill"),
+    hook_case("H_edit_snapshot", "deny",
+              "echo x > '{H}/Library/Application Support/Canary/edits/r1/new/SKILL.md'"),
+    hook_case("H_edit_allowances", "deny",
+              "echo '{}' > '/Library/Application Support/SkillCanary/allowances.json'"),
+    hook_case("H_edit_log", "deny", {"file_path": "{H}/Library/Application Support/Canary/edits.jsonl",
+                                     "content": ""}, tool="Write", hosts=("claude",)),
     hook_case("H_quarantine_pipe", "deny", "cat {Q} | head"),
     hook_case("H_quarantine_glob", "deny", "cat ~/Library/App*/Canary/quarantine/*/package/SKILL.md"),
 ]
