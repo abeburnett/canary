@@ -122,6 +122,27 @@ class TheHookNeverFailsOpen(unittest.TestCase):
         self.assertIsNotNone(reason)
 
 
+class DenialsNameTheSanctionedRoute(unittest.TestCase):
+    def test_each_deny_says_what_to_do_instead(self):
+        h = Home()
+        skill = os.path.join(h.path, ".claude", "skills", "notes", "SKILL.md")
+        settings = os.path.join(h.path, ".claude", "settings.json")
+        for host in ("claude", "codex"):
+            with self.subTest(host=host, kind="skill"):
+                proc = h.hook(host, "Bash", {"command": f"echo x > '{skill}'"})
+                self.assertIn("canary edit start", proc.stdout + proc.stderr)
+                self.assertIn("canary edit apply", proc.stdout + proc.stderr)
+            with self.subTest(host=host, kind="settings"):
+                proc = h.hook(host, "Bash", {"command": f"echo x > '{settings}'"})
+                self.assertTrue(h.denied(host, "Bash", {"command": f"echo x > '{settings}'"}))
+                self.assertNotIn("canary edit apply", proc.stdout + proc.stderr)
+            with self.subTest(host=host, kind="mention"):
+                command = "cat > /tmp/note.md <<'EOF'\nsee ~/.claude/skills\nEOF"
+                proc = h.hook(host, "Bash", {"command": command})
+                self.assertTrue(h.denied(host, "Bash", {"command": command}))
+                self.assertIn("Write tool", proc.stdout + proc.stderr)
+
+
 class TheQuarantineIsNotReadable(unittest.TestCase):
     def test_reads_of_quarantined_packages_are_denied(self):
         h = Home()

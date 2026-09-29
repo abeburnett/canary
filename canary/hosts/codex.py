@@ -10,7 +10,7 @@ import os
 import shlex
 from pathlib import Path
 
-from canary.shellparse import path as _path, shell_paths as _shell_paths
+from canary.shellparse import path as _path, shell as _shell
 
 _FALLBACK = ('{"hookSpecificOutput":{"hookEventName":"PreToolUse",'
              '"permissionDecision":"deny","permissionDecisionReason":'
@@ -75,17 +75,19 @@ def parse_pre_tool_use(payload: dict):
     command = args.get("command")
     if type(command) is not str or not command.strip() or "\x00" in command:
         raise ValueError("Expected command text")
-    if tool == "Bash":
-        reads, writes = _shell_paths(command, cwd)
-    elif tool == "apply_patch":
-        reads, writes = _patch_paths(command, cwd)
-    else:
-        # MCP arguments have no shared read/write semantics; do not treat an
-        # arbitrary argument object as a harmless call with empty paths.
-        raise ValueError("Unsupported Codex tool shape")
     from canary.gate import ToolCall
-    return ToolCall(tool_name=tool, command=command, paths_read=reads,
-                    paths_written=writes, cwd=_path(cwd, cwd))
+    if tool == "Bash":
+        m = _shell(command, cwd)
+        return ToolCall(tool_name=tool, command=command, paths_read=m.reads,
+                        paths_written=m.writes, cwd=_path(cwd, cwd), trees_read=m.trees_read,
+                        trees_written=m.trees_written, screen=m.screen)
+    if tool == "apply_patch":
+        reads, writes = _patch_paths(command, cwd)
+        return ToolCall(tool_name=tool, command=command, paths_read=reads,
+                        paths_written=writes, cwd=_path(cwd, cwd))
+    # MCP arguments have no shared read/write semantics; do not treat an
+    # arbitrary argument object as a harmless call with empty paths.
+    raise ValueError("Unsupported Codex tool shape")
 
 
 def _codex_home(home):

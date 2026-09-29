@@ -156,11 +156,35 @@ Decision rules (`canary/gate.py`, `decide`), in order:
 3. `canary` itself is allowed when the command's first word is exactly
    `canary`, it has no other shell syntax, and the `canary` on `PATH` is the
    root-owned install (so an agent cannot put its own `canary` first).
-4. The adapter mapped the call exactly (a file tool, or a simple shell
-   command): deny when a written path is inside a protected location, or a
-   read path is inside the quarantine. Writing to a folder that contains a
-   protected location (`rm -rf ~/.claude`) counts as writing into it.
-5. The adapter could not map it exactly (compound shell, variables,
+4. The adapter mapped the call (a file tool, a tool that only carries text,
+   or a shell command `canary/shellparse.py` can lex): deny when a written
+   path is inside a protected location or inside any repository's
+   `.claude/skills`, `.claude/commands`, `.claude/agents`, `.agents/skills`
+   or `.codex/skills`; when a read path is inside the quarantine; or when a
+   recursive read (`grep -r`, `find`, `rg`, a glob, Claude Code's Grep and
+   Glob) covers it. Writing to a folder that contains a protected location
+   (`rm -rf ~/.claude`) counts as writing into it.
+   - Shell: `canary/shellparse.py` lexes quotes itself, so a quoted `;` is an
+     argument and `2>` is a file descriptor. It maps pipelines and `&&`/`;`
+     chains, follows a plain `cd dir &&`, and models read-only commands
+     (`ls`, `cat`, `grep`, `find` without actions, `sed -n 'N,Mp'`, …), the
+     writers `touch`, `mkdir`, `rm`, `rmdir`, `tee`, `cp`, `mv`, and
+     redirection. A glob stands for its fixed folder. Backslashes, `$`,
+     backticks, newlines, subshells and heredocs cannot be mapped (rule 5).
+   - `git`: subcommands that touch only the index and history (`status`,
+     `log`, `diff`, `show`, `add`, `commit`, `fetch`, `push`, …) are reads;
+     `--output=<file>` is a write. Every other subcommand, and any alias,
+     rewrites the repository at `-C` or the working folder, walked up to its
+     root: deny when that repository holds a protected location that exists
+     on disk. (A skills folder that does not exist yet is not protected
+     against a checkout that creates it; see "Enforcement layers".)
+   - Any other command is unknown: its path-like arguments, including option
+     values such as `--out=<path>`, count as read and written, and its text
+     is also screened as in rule 5.
+   - Tools that only carry text to a person or another agent
+     (AskUserQuestion, TodoWrite, Agent, SendMessage, plan-mode tools,
+     spawn_task) touch no files; whatever they start is checked in turn.
+5. The adapter could not map it exactly (variables, escapes, heredocs,
    unknown tools such as MCP calls): the call's text is screened. Deny when
    it names a protected location (the resolved paths, their `~` and `$HOME`
    spellings, and the fragments `.claude/skills`, `.agents/skills`,
@@ -168,6 +192,11 @@ Decision rules (`canary/gate.py`, `decide`), in order:
    `Application Support/Canary`, `managed-settings`, `/etc/codex`);
    allow otherwise, so ordinary compound commands keep working.
 6. Otherwise allow.
+
+Deny messages name the way forward: a write into a skills folder names
+`canary edit start` and `canary edit apply`; a write to settings says to ask
+the person; a text-screen deny says to read with plain commands and to
+write a file that mentions a protected folder with the Write tool.
 
 ## Host adapters (`canary/hosts/<host>.py`)
 

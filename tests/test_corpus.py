@@ -679,5 +679,189 @@ assert len({c["name"] for c in CASES}) == len(CASES), "duplicate case names"
 assert {c["name"].split("_", 1)[0] for c in CASES} <= set(GROUPS), "case outside every group"
 
 
+# ---------------------------------------------------------------- the hook
+#
+# Tool calls, not packages: each case runs `canary hook` for real, under a
+# throwaway HOME laid out like a person's (a versioned ~/.agents holding its
+# skills folder, a Claude Code skill, an ordinary repository and one that
+# carries its own .claude/skills). Program 2026-09-28 (skill edits).
+#
+# Expectations:
+#   allow  a read, or a mention in text: the hook must stay silent
+#   deny   a write into a protected location, or a quarantine read
+#
+# Placeholders: {A} the Codex user skills folder, {C} the Claude Code one,
+# {H} the absolute home, {Q} a quarantined package, {R} a repository whose
+# .claude/skills exists, {P} an ordinary repository (the default cwd).
+
+A_ = "~/.agents/" + "skills"
+C_ = "~/.claude/" + "skills"
+BOTH = ("claude", "codex")
+
+
+def hook_case(name, expect, command, tool="Bash", hosts=BOTH, cwd="{P}", why=None):
+    return dict(name=name, expect=expect, command=command, tool=tool, hosts=hosts,
+                cwd=cwd, why=why)
+
+
+HOOK_CASES = [
+    # Reads and mentions that the 2026-09-28 distillation saw denied.
+    hook_case("H_read_ls_pipe", "allow", f"ls {A_} | head"),
+    hook_case("H_read_grep_recursive", "allow", f"grep -rn routing {A_}/orchestrate"),
+    hook_case("H_read_wc_quiet", "allow", f"wc -l {A_}/orchestrate/SKILL.md 2>/dev/null"),
+    hook_case("H_read_cat_head", "allow", f"cat {A_}/orchestrate/SKILL.md | head -n 20"),
+    hook_case("H_read_find_names", "allow", f"find {A_} -name '*.md' -type f"),
+    hook_case("H_read_sed_range", "allow", f"sed -n '1,40p' {A_}/orchestrate/SKILL.md"),
+    hook_case("H_read_rg", "allow", f"rg -n routing {A_}"),
+    hook_case("H_read_cd_chain", "allow", f"cd {A_} && ls && cat orchestrate/SKILL.md"),
+    hook_case("H_read_echo_mention", "allow", f"echo 'edit {A_}/orchestrate next'"),
+    hook_case("H_read_git_status", "allow", "git -C ~/.agents status --short"),
+    hook_case("H_read_git_log", "allow", "git -C ~/.agents log --oneline -3"),
+    hook_case("H_read_git_diff", "allow", f"git -C ~/.agents diff -- {A_}/orchestrate"),
+    hook_case("H_read_git_cd_status", "allow", "cd ~/.agents && git status"),
+    hook_case("H_read_git_commit", "allow",
+              "cd ~/.agents && git add -A && git commit -m 'Record lessons'"),
+    hook_case("H_read_gitignore_append", "allow", "echo 'x.lock' >> ~/.agents/.gitignore"),
+    hook_case("H_read_git_checkout_plain_repo", "allow", "git checkout -b feature"),
+    hook_case("H_read_ordinary_chain", "allow", "cd src && npm test"),
+    hook_case("H_read_ask", "allow", {"questions": [{"question": f"Edit {A_}/orchestrate?",
+                                                     "header": "Edit", "options": []}]},
+              tool="AskUserQuestion", hosts=("claude",)),
+    hook_case("H_read_spawn_task", "allow", {"title": "Fix", "prompt": f"Tidy {C_}/notes"},
+              tool="mcp__ccd_session__spawn_task", hosts=("claude",)),
+    hook_case("H_read_agent", "allow", {"description": "Look", "prompt": f"Read {C_}/notes"},
+              tool="Agent", hosts=("claude",)),
+
+    # Writes stay denied, including three shapes the old parser allowed.
+    hook_case("H_write_redirect", "deny", f"echo x > {A_}/orchestrate/SKILL.md"),
+    hook_case("H_write_append_chain", "deny", f"ls && echo x >> {A_}/orchestrate/SKILL.md"),
+    hook_case("H_write_fd_redirect_cp", "deny", f"cp /etc/hosts {C_}/notes/SKILL.md 2>/dev/null",
+              why="the old parser took `2` as cp's destination"),
+    hook_case("H_write_quoted_separator", "deny", f"cp /etc/hosts /etc/shells ';' ls {C_}/notes/",
+              why="a quoted ; is an argument, so cp copies into the skill"),
+    hook_case("H_write_tee_pipe", "deny", f"echo x | tee -a {A_}/orchestrate/SKILL.md"),
+    hook_case("H_write_sed_inplace", "deny", f"sed -i '' s/a/b/ {A_}/orchestrate/SKILL.md"),
+    hook_case("H_write_sed_w_command", "deny", f"sed -n 'w {A_}/orchestrate/x.md' /etc/hosts"),
+    hook_case("H_write_find_delete", "deny", f"find {A_} -name '*.md' -delete"),
+    hook_case("H_write_find_exec", "deny", f"find {A_} -name '*.md' -exec rm {{}} +"),
+    hook_case("H_write_sort_output", "deny", f"sort -o {A_}/orchestrate/SKILL.md /etc/hosts"),
+    hook_case("H_write_rg_pre", "deny", f"rg --pre ./x.sh routing {A_}"),
+    hook_case("H_write_glob", "deny", "rm -rf ~/.claude/s*",
+              why="the glob reaches .claude/skills without naming it"),
+    hook_case("H_write_brace", "deny", "rm -rf ~/.claude/{sk,x}ills"),
+    hook_case("H_write_container", "deny", "rm -rf ~/.agents"),
+    hook_case("H_write_backslash", "deny", f"echo x > {A_}/orchestrate/new\\ file.md"),
+    hook_case("H_write_heredoc", "deny", f"cat > {A_}/orchestrate/x.md <<'EOF'\nhi\nEOF"),
+    hook_case("H_write_git_checkout_C", "deny", "git -C ~/.agents checkout other"),
+    hook_case("H_write_git_checkout_cd", "deny", "cd ~/.agents && git checkout other"),
+    hook_case("H_write_git_checkout_subfolder", "deny", "git checkout other", cwd="{H}/.agents/docs",
+              why="the repository root holds the skills folder the checkout rewrites"),
+    hook_case("H_write_git_merge", "deny", "git -C ~/.agents merge lessons/x"),
+    hook_case("H_write_git_stash", "deny", "git -C ~/.agents stash pop"),
+    hook_case("H_write_git_alias", "deny", "git -C ~/.agents co other"),
+    hook_case("H_write_git_config_flag", "deny", "git -c core.fsmonitor=./x -C ~/.agents status"),
+    hook_case("H_write_git_output", "deny", f"git -C ~/.agents log --output={A_}/o.md"),
+    hook_case("H_write_git_repo_skills", "deny", "git -C {R} reset --hard"),
+    hook_case("H_write_python_c", "deny",
+              "python3 -c \"open('{H}/.claude/" + "skills/x.md','w').write('x')\"",
+              why="a path inside a quoted program was never screened"),
+    hook_case("H_write_option_value", "deny", f"python3 tool.py --out={C_}/notes/SKILL.md"),
+    hook_case("H_write_unknown_on_container", "deny", "python3 tool.py ~/.agents"),
+    hook_case("H_write_variable", "deny", 'D="$HOME/.agents/' + 'skills"; mkdir -p "$D/x"'),
+    hook_case("H_write_mcp_tool", "deny", {"path": "{H}/.claude/" + "skills/x/SKILL.md"},
+              tool="mcp__fs__write_file"),
+    hook_case("H_write_text_tool_edit", "deny", {"file_path": "{H}/.claude/" + "skills/notes/SKILL.md",
+                                                 "old_string": "a", "new_string": "b"},
+              tool="Edit", hosts=("claude",)),
+    hook_case("H_quarantine_pipe", "deny", "cat {Q} | head"),
+    hook_case("H_quarantine_glob", "deny", "cat ~/Library/App*/Canary/quarantine/*/package/SKILL.md"),
+]
+
+
+class HookHome:
+    def __init__(self):
+        self.path = os.path.realpath(tempfile.mkdtemp(prefix="canary-hook-"))
+        for d in (".agents/.git", ".agents/docs", ".agents/skills/orchestrate/references",
+                  ".claude/skills/notes", ".codex", "work/app/.git", "work/app/src",
+                  "work/skilled/.git", "work/skilled/.claude/skills/x",
+                  "Library/Application Support/Canary/quarantine/r1/package"):
+            os.makedirs(os.path.join(self.path, d), exist_ok=True)
+        for f in (".agents/skills/orchestrate/SKILL.md", ".claude/skills/notes/SKILL.md",
+                  "Library/Application Support/Canary/quarantine/r1/package/SKILL.md"):
+            with open(os.path.join(self.path, f), "w") as fh:
+                fh.write("---\nname: x\ndescription: Notes.\n---\nBody.\n")
+        self.subs = {"{H}": self.path, "{P}": os.path.join(self.path, "work", "app"),
+                     "{R}": os.path.join(self.path, "work", "skilled"),
+                     "{Q}": "'" + os.path.join(self.path, "Library/Application Support/Canary/"
+                                               "quarantine/r1/package/SKILL.md") + "'"}
+
+    def fill(self, value):
+        if isinstance(value, str):
+            for k, v in self.subs.items():
+                value = value.replace(k, v)
+            return value
+        if isinstance(value, dict):
+            return {k: self.fill(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [self.fill(v) for v in value]
+        return value
+
+    def run(self, host, tool, tool_input, cwd):
+        payload = json.dumps({"hook_event_name": "PreToolUse", "tool_name": tool,
+                              "tool_input": tool_input, "cwd": cwd})
+        env = {"HOME": self.path, "PATH": os.environ.get("PATH", "")}
+        return subprocess.run([sys.executable, CANARY, "hook", "--host", host], input=payload,
+                              capture_output=True, text=True, env=env, timeout=TIMEOUT_S)
+
+
+def hook_blocked(host, proc):
+    """True for the host's deny, False for a clean allow; anything else fails."""
+    if host == "claude" and proc.returncode == 2 and proc.stderr.strip():
+        return True
+    if (host == "codex" and proc.returncode == 0 and proc.stdout
+            and json.loads(proc.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"):
+        return True
+    if proc.returncode == 0 and proc.stdout == "" and proc.stderr == "":
+        return False
+    raise AssertionError(f"neither a clean allow nor a deny: {proc!r}")
+
+
+class HookProbeCorpus(unittest.TestCase):
+    """One subTest per tool call and host."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.home = HookHome()
+
+    @classmethod
+    def tearDownClass(cls):
+        remove_tree(cls.home.path)
+
+    def run_group(self, expect):
+        cases = [c for c in HOOK_CASES if c["expect"] == expect]
+        self.assertTrue(cases)
+        for c in cases:
+            tool_input = c["command"] if isinstance(c["command"], dict) else {"command": c["command"]}
+            tool_input = self.home.fill(tool_input)
+            for host in c["hosts"]:
+                with self.subTest(case=c["name"], host=host):
+                    proc = self.home.run(host, c["tool"], tool_input, self.home.fill(c["cwd"]))
+                    blocked = hook_blocked(host, proc)
+                    note = f" ({c['why']})" if c["why"] else ""
+                    if c["expect"] == "deny":
+                        self.assertTrue(blocked, f"write allowed{note}")
+                    else:
+                        self.assertFalse(blocked, f"read denied: {proc.stderr.strip()[:200]}")
+
+    def test_H_reads_and_mentions_pass(self):
+        self.run_group("allow")
+
+    def test_H_writes_stay_denied(self):
+        self.run_group("deny")
+
+
+assert len({c["name"] for c in HOOK_CASES}) == len(HOOK_CASES), "duplicate hook case names"
+
+
 if __name__ == "__main__":
     unittest.main()

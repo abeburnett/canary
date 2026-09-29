@@ -8,7 +8,7 @@ import os
 import re
 import shlex
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 SUPPORT = os.path.join("Library", "Application Support", "Canary")
 FRAGMENTS = (".claude/skills", ".agents/skills", ".claude/plugins", ".codex/skills",
@@ -19,11 +19,23 @@ INSTALLERS = re.compile(
     r"|\b(pnpm|yarn)\s+dlx\s+(-\S+\s+)*[@\w./-]*\bskills(@\S*)?\s+(add|install|update)\b"
     r"|\bclaude\s+plugins?\s+(install|update|marketplace\s+add)\b"
     r"|\bcodex\s+plugins?\s+(install|add|update|marketplace\s+add)\b)", re.I)
+REPO_ROOTS = (".claude/skills", ".claude/commands", ".claude/agents", ".agents/skills",
+              ".codex/skills")
 SHELL_SYNTAX = set(";&|<>()$`\\\n\r*?[]{}~")
 REDIRECT = ("This installs skills or plugins without SkillCanary checking them first. "
             "Use `canary add <link>` instead; it checks the package and asks the person.")
-PROTECTED = ("This would change a folder agents load skills or settings from, which "
-             "SkillCanary protects. To install a skill, use `canary add <link>`.")
+PROTECTED_SKILL = ("SkillCanary protects this skills folder. To change an installed skill, "
+                   "run `canary edit start <name or folder>`, edit the draft it prints, then "
+                   "run `canary edit apply <draft>`; the person approves in a dialog. To "
+                   "install a new skill, use `canary add <link>`. Reading this folder is allowed.")
+PROTECTED = ("This would change a folder or file agents load skills or settings from, which "
+             "SkillCanary protects. Reading it is allowed. Ask the person to make this change "
+             "in their own editor or terminal. To install a skill, use `canary add <link>`; "
+             "to change one, use `canary edit start <name>`.")
+MENTIONED = ("SkillCanary could not tell whether this command changes the protected folder "
+             "it names, so it is blocked. To read, use plain commands (ls, grep, cat) or the "
+             "Read tool. To write a file whose text mentions the folder, use the Write tool. "
+             "To change a skill, use `canary edit start <name>`.")
 QUARANTINED = ("That file is a quarantined package SkillCanary has not approved. "
                "Agents may not read it; use `canary check` for a verdict.")
 UNREADABLE = ("SkillCanary could not check this tool call, so it is blocked. "
@@ -39,6 +51,9 @@ class ToolCall:
     cwd: str
     precise: bool = True     # False: the adapter could not map it exactly
     text: str = ""           # everything the call says, for text screening
+    trees_read: list = field(default_factory=list)     # read recursively
+    trees_written: list = field(default_factory=list)  # rewritten wholesale (git)
+    screen: bool = False     # mapped, but also screen the text (unknown commands)
 
 
 @dataclass
@@ -68,14 +83,46 @@ def _fold(path):
     return os.path.normpath(path).casefold()
 
 
-def _protected_hit(path, protected):
-    """Inside a protected location, or a folder that contains one."""
+def _inside(p, r):
+    return p == r or p.startswith(r.rstrip("/") + "/")
+
+
+def _protected_hit(path, protected, existing_only=False):
+    """Inside a protected location, or a folder that contains one. With
+    existing_only, a contained location counts only if it exists on disk."""
     p = _fold(os.path.realpath(path))
-    for r in protected:
-        r = _fold(r)
-        if p == r or p.startswith(r.rstrip("/") + "/") or r.startswith(p.rstrip("/") + "/"):
+    for root in protected:
+        r = _fold(root)
+        if _inside(p, r):
+            return True
+        if _inside(r, p) and (not existing_only or os.path.lexists(root)):
             return True
     return False
+
+
+def _in_any_skills_folder(path):
+    """Inside a skills, commands or agents folder of any repository, not only
+    the ones above the working folder."""
+    p = _fold(os.path.realpath(path))
+    return any(f"/{rel}/" in p + "/" for rel in REPO_ROOTS)
+
+
+def _reads_inside(path, protected):
+    p = _fold(os.path.realpath(path))
+    return any(_inside(p, _fold(r)) for r in protected)
+
+
+def _write_reason(paths, protected):
+    """PROTECTED_SKILL when a write lands inside a skills folder, else PROTECTED."""
+    for path in paths:
+        p = _fold(os.path.realpath(path))
+        for root in protected:
+            r = _fold(root)
+            if _inside(p, r) and "skills" in r.split("/"):
+                return PROTECTED_SKILL
+        if any(f"/{rel}/" in p + "/" for rel in REPO_ROOTS if rel.endswith("skills")):
+            return PROTECTED_SKILL
+    return PROTECTED
 
 
 def _names_protected(text, protected, home):
@@ -117,14 +164,25 @@ def decide(call, protected, home, canary_bin=None):
         if _is_canary(call.command, canary_bin):
             return None
         if call.precise:
-            if any(_protected_hit(p, protected) for p in call.paths_written):
-                return PROTECTED
+            hits = [p for p in call.paths_written
+                    if _protected_hit(p, protected) or _in_any_skills_folder(p)]
+            # A git checkout rewrites a whole repository; its placeholder
+            # skills folders count only once they exist.
+            trees = protected + [os.path.join(os.path.realpath(t), rel)
+                                 for t in call.trees_written for rel in REPO_ROOTS]
+            hits += [p for p in call.trees_written
+                     if _protected_hit(p, trees, existing_only=True)]
+            if hits:
+                return _write_reason(hits, protected)
             quarantine = [r for r in protected if _fold(r).endswith("/canary/quarantine")]
-            if any(_protected_hit(p, quarantine) for p in call.paths_read):
+            if (any(_reads_inside(p, quarantine) for p in call.paths_read)
+                    or any(_protected_hit(p, quarantine) for p in call.trees_read)):
                 return QUARANTINED
+            if call.screen and _names_protected(text, protected, home):
+                return MENTIONED
             return None
         if _names_protected(text, protected, home):
-            return PROTECTED
+            return MENTIONED
         return None
     except Exception:
         return UNREADABLE

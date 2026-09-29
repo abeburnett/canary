@@ -34,6 +34,11 @@ These are documented, not bugs; the site and `docs/architecture.md` state them.
 - **Guard is a guard, not a wall.** Hooks see each tool call, and a command
   written to hide its target can get past them. Lockdown closes this for
   user-level skill folders; skills inside a repository are guarded only.
+- **A git checkout can create a repository skills folder.** Guard blocks git
+  commands that would rewrite a repository holding a skills folder, but a
+  repository with no `.claude/skills` or `.agents/skills` yet can gain one
+  from a branch. `canary scan` a repository's skills when you start work in
+  it.
 - **The approval dialog can be clicked by an agent that controls the screen**
   at Scan and Guard. Lockdown also asks for your password at each install.
 - **A missing Python fails open.** Claude Code and Codex let a call through

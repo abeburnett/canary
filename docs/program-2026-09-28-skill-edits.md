@@ -1,6 +1,24 @@
 # Program 2026-09-28: editing installed skills
 
-Status: design for owner approval. Branch `program/2026-09-28-skill-edits`.
+Status: approved by the owner on 2026-09-28. Branch
+`program/2026-09-28-skill-edits`. Owner decisions: build both slices;
+allowances need the password and are stored root-owned; a text-only edit
+without an allowance gets a one-click dialog; Fable runs the independent
+refutation.
+
+Changes made while building slice A, with the reason for each:
+
+- The "exists on disk" exception applies only to git, not to unknown
+  commands. Applied to unknown commands, it would let `rsync /tmp/evil/
+  ~/.claude/` or `unzip -d <repo>` create a skills folder that is not there
+  yet. `python3 tool.py <repo root>` therefore stays denied, as before.
+- Writes into any repository's `.claude/skills`, `.agents/skills` or
+  `.codex/skills` are protected, not only those above the working folder.
+  Before, `echo x > <other repo>/.claude/skills/x/SKILL.md` and
+  `git -C <other repo> reset --hard` passed.
+- The shell lexer is SkillCanary's own. shlex cannot tell a quoted `;` from
+  a separator, and it read `cp a b 2>/dev/null` as a copy to `2`, which the
+  old hook allowed into a skills folder.
 
 ## Problem
 
@@ -49,10 +67,8 @@ sits inside a quoted string), and `git checkout <branch>` run inside
 - **Unknown commands are screened as text, and their path arguments still
   count.** A command the hook has no model of (`python3`, `node`, `vim`) is
   denied if its text names a protected folder. This closes the `python3 -c`
-  hole. Its path arguments still count as writes, but a folder only counts as
-  containing a protected location when that location exists on disk. So
-  `python3 tool.py <repo>` passes when the repository has no
-  `.claude/skills`, and `python3 tool.py ~/.agents` stays denied.
+  hole. Its path arguments, including `--opt=<path>` values, still count as
+  writes, so `python3 tool.py ~/.agents` stays denied.
 - **Heredocs stay screened as text.** A command whose text names a protected
   folder, such as a heredoc that writes a note mentioning one, is still
   denied, and the message says to write that file with the Write tool.
@@ -196,8 +212,8 @@ Slice A: the hook.
 1. In both hosts, reads pass: `ls <skills> | head`, `grep -rn x <skills>`,
    `wc`, `cat`, `find` without actions, `git -C ~/.agents status|log|diff`,
    `git -C ~/.agents commit`, and AskUserQuestion, spawn_task and Agent calls
-   that mention a skills folder. `python3 tool.py <repo root>` passes when the
-   repository has no skills folder.
+   that mention a skills folder. `git checkout` passes in a repository whose
+   skills folders do not exist.
 2. In both hosts, writes stay denied: `>`, `>>`, `tee`, `sed -i`,
    `cp`/`mv`/`rm`, `find -delete`/`-exec`, `git checkout|merge|reset|stash|pull`
    and git aliases in or into a repository that holds a skills folder (with
