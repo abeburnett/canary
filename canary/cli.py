@@ -219,7 +219,8 @@ def _hook(args):
         except ValueError:
             call = gate.unmapped(payload)
         protected = gate.protected_paths(home, payload["cwd"], adapters.values())
-        reason = gate.decide(call, protected, home, CANARY_BIN)
+        notes = gate.note_folders(home, adapters.values())
+        reason = gate.decide(call, protected, home, CANARY_BIN, notes)
     except BaseException:
         reason = gate.UNREADABLE
     if reason is None:

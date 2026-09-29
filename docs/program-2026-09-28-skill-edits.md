@@ -270,6 +270,28 @@ Slice B: `canary edit`.
     `tests/test_corpus.py`, and an independent refutation pass finds no
     bypass.
 
+## Follow-up on this branch (owner, 2026-09-29)
+
+Another session could not add a row to `~/.codex/delegation-log.md` and told
+the owner to "allow that file in SkillCanary", a command that does not
+exist. The owner asked for two changes here and a third as its own program
+(`docs/program-2026-09-29-protected-file-edits.md`):
+
+1. **Notes in the Codex home.** The Codex home stays protected whole, since
+   it holds `agents/`, `memories/`, `models.json`, `auth.json` and
+   profiles; top-level notes (`.md`, `.txt`, `.log`, not `AGENTS*.md` or
+   `instructions.md`) are writable. See architecture.md, "Notes".
+   Corpus cases `H_note_*` (2 allow, 12 deny) and
+   `NotesStayInsideOtherProtection`. Counterfactuals: removing the exception,
+   the other-roots check, the one-name check, the name pattern or the
+   `instructions.md` exclusion each turn a named case red. Judging a note on
+   its unresolved path cannot be isolated by a test: a link is not a regular
+   file, so the one-name check refuses it first.
+2. **No invented features.** The settings deny says no SkillCanary command
+   allows the write and tells the agent to hand the person a command to
+   paste; the shipped SkillCanary skill (both hosts) says never to tell the
+   person to "allow" a file or invent a command.
+
 ## Refutation and audit
 
 - Refutation: Fable, two rounds (see the list under "Status"); every

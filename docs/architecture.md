@@ -205,9 +205,21 @@ Decision rules (`canary/gate.py`, `decide`), in order:
    Allow otherwise, so ordinary compound commands keep working.
 6. Otherwise allow.
 
+Notes: an adapter may name protected folders whose top-level notes agents
+may write (`note_folders(home)`; Codex returns its home folder, which is
+protected whole so that a profile created later is covered). A note is a
+`.md`, `.txt` or `.log` file directly in that folder, judged on its resolved
+path, that is a regular file with one name and is not `AGENTS.md`,
+`AGENTS.override.md` or `instructions.md`. Writing one is checked against
+every other protected location, so a note that is really a skills file, or a
+note folder inside another protected folder, is still denied. This lets an
+agent keep a delegation log in `~/.codex`; everything else there stays
+protected.
+
 Deny messages name the way forward: a write into a skills folder names
-`canary edit start` and `canary edit apply`; a write to settings says to ask
-the person; a text-screen deny says to read with plain commands and to
+`canary edit start` and `canary edit apply`; a write to settings says no
+SkillCanary command allows it and tells the agent to give the person a
+command to paste into their own terminal; a text-screen deny says to read with plain commands and to
 write a file that mentions a protected folder with the Write tool.
 
 ## Host adapters (`canary/hosts/<host>.py`)
@@ -235,6 +247,10 @@ def parse_pre_tool_use(payload: dict) -> "ToolCall":
 
 def deny(reason: str) -> tuple[str, int]:
     """The exact stdout text and exit code that make this host block the call."""
+
+def note_folders(home: str) -> list[str]:   # optional
+    """Protected folders whose top-level notes agents may write (see
+    "Notes" under the decision rules). Codex: its home folder."""
 
 def install_root(home: str) -> str:
     """The user-level folder `canary add` installs skills into for this

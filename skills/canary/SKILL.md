@@ -47,6 +47,15 @@ a dialog, they can run `canary edit allow <name> "<pattern>" --days <n>`,
 which asks for their password. Suggest an allowance only when the person
 asks for fewer dialogs.
 
+## When SkillCanary blocks something
+
+The block message says what to do instead; follow it. SkillCanary has only
+the commands `canary --help` lists (add, check, edit, setup, doctor). Never
+tell the person to "allow" a file in SkillCanary, or suggest a setting or
+command it does not have. When there is no route, give the person the exact
+command to paste into their own terminal, in its own code block, and say in
+one sentence what it does. Do not retry the blocked action another way.
+
 ## When they want a skill checked, not installed
 
 Run `canary check "<path>" --text` and relay the verdict and reasons.

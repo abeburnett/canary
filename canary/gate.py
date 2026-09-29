@@ -8,6 +8,7 @@ import os
 import re
 import shlex
 import shutil
+import stat
 from dataclasses import dataclass, field
 
 SUPPORT = os.path.join("Library", "Application Support", "Canary")
@@ -35,8 +36,9 @@ PROTECTED_SKILL = ("SkillCanary protects this skills folder. To change an instal
                    "run `canary edit apply <draft>`; the person approves in a dialog. To "
                    "install a new skill, use `canary add <link>`. Reading this folder is allowed.")
 PROTECTED = ("This would change a folder or file agents load skills or settings from, which "
-             "SkillCanary protects. Reading it is allowed. Ask the person to make this change "
-             "in their own editor or terminal. To install a skill, use `canary add <link>`; "
+             "SkillCanary protects, and no SkillCanary command allows it. Reading it is "
+             "allowed. Give the person the exact command to paste into their own terminal, "
+             "and do not retry another way. To install a skill, use `canary add <link>`; "
              "to change one, use `canary edit start <name>`.")
 MENTIONED = ("SkillCanary could not tell whether this command changes the protected folder "
              "it names, so it is blocked. To read, use plain commands (ls, grep, cat) or the "
@@ -69,6 +71,33 @@ class PlannedFile:
     content: str
     mode: int
     action: str              # "create" or "manual"
+
+
+NOTE = re.compile(r"[^/]+\.(md|txt|log)", re.I)
+NOT_NOTES = {"agents.md", "agents.override.md", "instructions.md"}
+
+
+def note_folders(home, adapters):
+    folders = []
+    for adapter in adapters:
+        folders += getattr(adapter, "note_folders", lambda h: [])(home)
+    return sorted({os.path.realpath(f) for f in folders})
+
+
+def _is_note(path, notes):
+    """A top-level Markdown or text file in a note folder, judged on the
+    resolved path, so a note that links elsewhere is judged where it lands."""
+    real = os.path.realpath(path)
+    name = os.path.basename(real)
+    if not (any(_fold(os.path.dirname(real)) == _fold(n) for n in notes)
+            and NOTE.fullmatch(name) is not None and name.casefold() not in NOT_NOTES):
+        return False
+    try:
+        st = os.lstat(real)
+    except FileNotFoundError:
+        return True
+    # A file with a second name may be a skill file under another name.
+    return stat.S_ISREG(st.st_mode) and st.st_nlink == 1
 
 
 def quarantine_dir(home):
@@ -170,7 +199,18 @@ def _is_canary(command, canary_bin):
     return st.st_uid == 0 and not st.st_mode & 0o022
 
 
-def decide(call, protected, home, canary_bin=None):
+def _write_hit(path, protected, notes):
+    if _in_any_skills_folder(path):
+        return True
+    if notes and _is_note(path, notes):
+        # Only the note folder itself is set aside; any other protected
+        # location the resolved path lands in still counts.
+        return _protected_hit(path, [r for r in protected
+                                     if _fold(r) not in {_fold(n) for n in notes}])
+    return _protected_hit(path, protected)
+
+
+def decide(call, protected, home, canary_bin=None, notes=()):
     """A deny reason, or None to allow. Any internal error denies."""
     try:
         text = call.text or (call.command if isinstance(call.command, str) else "")
@@ -179,8 +219,7 @@ def decide(call, protected, home, canary_bin=None):
         if _is_canary(call.command, canary_bin):
             return None
         if call.precise:
-            hits = [p for p in call.paths_written
-                    if _protected_hit(p, protected) or _in_any_skills_folder(p)]
+            hits = [p for p in call.paths_written if _write_hit(p, protected, notes)]
             # A git checkout rewrites a whole repository; its placeholder
             # skills folders count only once they exist.
             trees = protected + [os.path.join(os.path.realpath(t), rel)

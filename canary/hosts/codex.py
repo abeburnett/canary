@@ -153,6 +153,13 @@ def config_files(home: str) -> list[str]:
     return _resolved_unique(paths)
 
 
+def note_folders(home: str) -> list[str]:
+    """Protected folders whose own top-level notes (a delegation log beside the
+    config) agents may write: Codex loads none of them. The gate decides
+    which names count as notes; everything else in the folder stays protected."""
+    return [str(_codex_home(home))]
+
+
 def managed_install_plan(canary_bin: str):
     """Return an additive requirements block; never install or modify policy."""
     if type(canary_bin) is not str or not os.path.isabs(canary_bin) or any(

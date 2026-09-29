@@ -801,6 +801,26 @@ HOOK_CASES = [
     hook_case("H_read_dot_in_skilled_repo", "allow", "npx prettier --check .", cwd="{R}",
               why="a whole-repository tool run in a repository with a committed skill"),
     hook_case("H_read_unknown_relative", "allow", "python3 scripts/check.py src/app.py"),
+    # Notes in the Codex home (2026-09-29): a delegation log beside Codex's
+    # config is not something Codex loads; everything around it still is.
+    hook_case("H_note_codex_log_edit", "allow", {"file_path": "{H}/.codex/delegation-log.md",
+                                                 "old_string": "a", "new_string": "b"},
+              tool="Edit", hosts=("claude",)),
+    hook_case("H_note_codex_log_append", "allow", "echo '| row |' >> ~/.codex/delegation-log.md"),
+    hook_case("H_note_codex_agents_md", "deny", "echo x >> ~/.codex/AGENTS.md"),
+    hook_case("H_note_codex_agents_override", "deny", "echo x > ~/.codex/agents.override.md"),
+    hook_case("H_note_codex_instructions", "deny", "echo x > ~/.codex/instructions.md"),
+    hook_case("H_note_codex_new_profile", "deny", "echo x > ~/.codex/new.config.toml"),
+    hook_case("H_note_codex_subfolder", "deny", "echo x > ~/.codex/memories/note.md"),
+    hook_case("H_note_codex_prompts", "deny", "echo x > ~/.codex/prompts/review.md"),
+    hook_case("H_note_codex_models", "deny", "echo '{}' > ~/.codex/models.json"),
+    hook_case("H_note_codex_link_to_skill", "deny", "echo x >> ~/.codex/linked.md",
+              why="the note is a link into a skills folder"),
+    hook_case("H_note_codex_link_to_subfolder", "deny", "echo x >> ~/.codex/memory-link.md",
+              why="the note is a link to a file Codex loads from a subfolder"),
+    hook_case("H_note_codex_hard_link", "deny", "echo x >> ~/.codex/hard.md",
+              why="the note is a second name for a skill file"),
+    hook_case("H_note_codex_rm_home", "deny", "rm -rf ~/.codex"),
     # The edit route: drafts are ordinary files; what Canary trusts is not.
     hook_case("H_edit_draft_write", "allow", {"file_path": "{H}/.skillcanary/drafts/o-1/skill/SKILL.md",
                                               "content": "x"}, tool="Write", hosts=("claude",)),
@@ -829,6 +849,17 @@ class HookHome:
                   "Library/Application Support/Canary/quarantine/r1/package/SKILL.md"):
             with open(os.path.join(self.path, f), "w") as fh:
                 fh.write("---\nname: x\ndescription: Notes.\n---\nBody.\n")
+        with open(os.path.join(self.path, ".codex", "delegation-log.md"), "w") as fh:
+            fh.write("a\n")
+        os.symlink(os.path.join(self.path, ".claude", "skills", "notes", "SKILL.md"),
+                   os.path.join(self.path, ".codex", "linked.md"))
+        os.link(os.path.join(self.path, ".agents", "skills", "orchestrate", "SKILL.md"),
+                os.path.join(self.path, ".codex", "hard.md"))
+        os.makedirs(os.path.join(self.path, ".codex", "memories"))
+        with open(os.path.join(self.path, ".codex", "memories", "m.md"), "w") as fh:
+            fh.write("m\n")
+        os.symlink(os.path.join(self.path, ".codex", "memories", "m.md"),
+                   os.path.join(self.path, ".codex", "memory-link.md"))
         self.subs = {"{H}": self.path, "{P}": os.path.join(self.path, "work", "app"),
                      "{R}": os.path.join(self.path, "work", "skilled"),
                      "{Q}": "'" + os.path.join(self.path, "Library/Application Support/Canary/"

@@ -136,11 +136,28 @@ class DenialsNameTheSanctionedRoute(unittest.TestCase):
                 proc = h.hook(host, "Bash", {"command": f"echo x > '{settings}'"})
                 self.assertTrue(h.denied(host, "Bash", {"command": f"echo x > '{settings}'"}))
                 self.assertNotIn("canary edit apply", proc.stdout + proc.stderr)
+                # No route exists, so the agent must hand the person a command,
+                # not invent a SkillCanary feature.
+                self.assertIn("own terminal", proc.stdout + proc.stderr)
+                self.assertIn("no SkillCanary command allows it", proc.stdout + proc.stderr)
             with self.subTest(host=host, kind="mention"):
                 command = "cat > /tmp/note.md <<'EOF'\nsee ~/.claude/skills\nEOF"
                 proc = h.hook(host, "Bash", {"command": command})
                 self.assertTrue(h.denied(host, "Bash", {"command": command}))
                 self.assertIn("Write tool", proc.stdout + proc.stderr)
+
+
+class NotesStayInsideOtherProtection(unittest.TestCase):
+    def test_a_note_folder_inside_another_protected_folder_grants_nothing(self):
+        # CODEX_HOME can point anywhere, including inside a skills folder.
+        root = os.path.realpath(tempfile.mkdtemp(prefix="canary-notes-"))
+        outer = os.path.join(root, "protected")
+        notes = os.path.join(outer, "codex-home")
+        os.makedirs(notes)
+        note = os.path.join(notes, "log.md")
+        call = gate.ToolCall("Write", None, [], [note], root)
+        self.assertIsNone(gate.decide(call, [notes], root, notes=[notes]))
+        self.assertIsNotNone(gate.decide(call, [notes, outer], root, notes=[notes]))
 
 
 class TheQuarantineIsNotReadable(unittest.TestCase):
