@@ -80,7 +80,8 @@ def parse_pre_tool_use(payload: dict):
         m = _shell(command, cwd)
         return ToolCall(tool_name=tool, command=command, paths_read=m.reads,
                         paths_written=m.writes, cwd=_path(cwd, cwd), trees_read=m.trees_read,
-                        trees_written=m.trees_written, screen=m.screen)
+                        trees_written=m.trees_written, screen=m.screen,
+                        folders_written=m.folders_written)
     if tool == "apply_patch":
         reads, writes = _patch_paths(command, cwd)
         return ToolCall(tool_name=tool, command=command, paths_read=reads,

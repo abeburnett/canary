@@ -43,11 +43,14 @@ These are documented, not bugs; the site and `docs/architecture.md` state them.
   as ordinary advice. The narrow pattern, the size limit, the notification,
   the log in `~/Library/Application Support/Canary/edits.jsonl` and the
   expiry limit how far that spreads; they do not prevent it.
-- **A git checkout can create a repository skills folder.** Guard blocks git
-  commands that would rewrite a repository holding a skills folder, but a
-  repository with no `.claude/skills` or `.agents/skills` yet can gain one
-  from a branch. `canary scan` a repository's skills when you start work in
-  it.
+- **Whole-repository commands can change a repository's skills.** Guard
+  blocks git commands that would rewrite a repository holding a skills
+  folder, but a repository with no `.claude/skills` or `.agents/skills` yet
+  can gain one from a branch. And a tool run over a whole repository
+  (`some-tool .`) is allowed, because most such runs only read, so a tool
+  that writes can change that repository's skills. User-level skill folders
+  are not affected. `canary scan` a repository's skills when you start work
+  in it.
 - **The approval dialog can be clicked by an agent that controls the screen**
   at Scan and Guard. Lockdown also asks for your password at each install.
 - **A missing Python fails open.** Claude Code and Codex let a call through

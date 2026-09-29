@@ -25,6 +25,12 @@ Changes made while building slice A, with the reason for each:
   names a bare `.claude`, `.agents` or `.codex` folder is denied. It also
   found that `canary edit start` accepted any folder named `…/skills/x`, and
   that the dialog showed a name from the agent's `edit.json`; both fixed.
+- Refutation round 2 (Fable) verified round 1 closed and exercised the edit
+  runtime (links in drafts, tampered `edit.json`, no classifier), which
+  held. It found an attached option value (`cc -oskills/x.md` after `cd`)
+  that hid a write, and that a bare `.` denied `prettier --check .` in any
+  repository with a committed skill. Both fixed; a bare `.` now counts only
+  at user level, which SECURITY.md lists as a known limit.
 - The shell lexer is SkillCanary's own. shlex cannot tell a quoted `;` from
   a separator, and it read `cp a b 2>/dev/null` as a copy to `2`, which the
   old hook allowed into a skills folder.

@@ -60,6 +60,7 @@ class ToolCall:
     trees_read: list = field(default_factory=list)     # read recursively
     trees_written: list = field(default_factory=list)  # rewritten wholesale (git)
     screen: bool = False     # mapped, but also screen the text (unknown commands)
+    folders_written: list = field(default_factory=list)  # `.`/`..` for unknown commands
 
 
 @dataclass
@@ -111,6 +112,14 @@ def _in_any_skills_folder(path):
     the ones above the working folder."""
     p = _fold(os.path.realpath(path))
     return any(f"/{rel}/" in p + "/" for rel in REPO_ROOTS)
+
+
+def _user_level_folder(path, protected, home):
+    p = _fold(os.path.realpath(path))
+    h = _fold(os.path.realpath(home))
+    parts = p.split("/")
+    return (_inside(h, p) or any(part in (".claude", ".agents", ".codex") for part in parts)
+            or any(_inside(p, _fold(r)) for r in protected))
 
 
 def _reads_inside(path, protected):
@@ -178,6 +187,10 @@ def decide(call, protected, home, canary_bin=None):
                                  for t in call.trees_written for rel in REPO_ROOTS]
             hits += [p for p in call.trees_written
                      if _protected_hit(p, trees, existing_only=True)]
+            # `tool .` may only read (prettier --check .), so a whole folder
+            # counts as written only where user-level protection lives: the
+            # home folder or above, a host folder, or inside a protected one.
+            hits += [p for p in call.folders_written if _user_level_folder(p, protected, home)]
             if hits:
                 return _write_reason(hits, protected)
             quarantine = [r for r in protected if _fold(r).endswith("/canary/quarantine")]

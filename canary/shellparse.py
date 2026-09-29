@@ -160,6 +160,7 @@ class Mapped:
     def __init__(self):
         self.reads, self.writes = [], []
         self.trees_read, self.trees_written = [], []
+        self.folders_written = []  # a bare `.` or `..` given to an unknown command
         self.screen = False
 
 
@@ -195,19 +196,31 @@ def _unknown(m, words, cwd):
     protected location exists inside it, so `prettier --check .` still runs."""
     m.screen = True
     for word in words[1:]:
-        value = word.split("=", 1)[1] if word.startswith("-") and "=" in word else word
-        if not value or (value.startswith("-") and value == word):
-            continue
-        v = Word(value)
-        v.globbed = word.globbed
-        try:
-            if value in (".", "..", "./", "../"):
-                m.trees_written.append(path(value, cwd))
+        if word.startswith("-"):
+            if "=" in word:
+                values = [word.split("=", 1)[1]]
+            elif "/" in word:
+                # `-oskills/x.md`: the value is glued to the option letters,
+                # so every suffix up to the first `/` is a candidate path.
+                start = len(word) - len(word.lstrip("-"))
+                values = [word[i:] for i in range(start, word.index("/") + 1)]
+            else:
                 continue
-            _read(m, v, cwd)
-            _write(m, v, cwd)
-        except ValueError:
-            continue  # `~user/...` and the like: left to the text screen
+        else:
+            values = [word]
+        for value in values:
+            if not value:
+                continue
+            v = Word(value)
+            v.globbed = word.globbed
+            try:
+                if value in (".", "..", "./", "../"):
+                    m.folders_written.append(path(value, cwd))
+                    continue
+                _read(m, v, cwd)
+                _write(m, v, cwd)
+            except ValueError:
+                continue  # `~user/...` and the like: left to the text screen
 
 
 def _repo_top(folder):
@@ -329,6 +342,6 @@ def shell(command, cwd):
             _writer(m, name, words, cwd)
         elif not (name in READ_ONLY and _read_only(m, name, words, cwd)):
             _unknown(m, words, cwd)
-    for attr in ("reads", "writes", "trees_read", "trees_written"):
+    for attr in ("reads", "writes", "trees_read", "trees_written", "folders_written"):
         setattr(m, attr, list(dict.fromkeys(getattr(m, attr))))
     return m

@@ -72,7 +72,8 @@ def parse_pre_tool_use(payload: dict):
             raise ValueError("Expected command text")
         m = _shell(command, cwd)
         return ToolCall(tool, command, m.reads, m.writes, cwd, trees_read=m.trees_read,
-                        trees_written=m.trees_written, screen=m.screen)
+                        trees_written=m.trees_written, screen=m.screen,
+                        folders_written=m.folders_written)
     raise ValueError("Tool without file semantics")
 
 

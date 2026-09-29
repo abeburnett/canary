@@ -181,8 +181,13 @@ Decision rules (`canary/gate.py`, `decide`), in order:
    - Any other command is unknown: every argument, including option values
      such as `--out=<path>`, counts as a path it reads and writes, resolved
      against the tracked working folder (so `cd ~/.claude && tool
-     skills/x.md` writes into a skills folder). A bare `.` or `..` counts like
-     a git rewrite of that folder. Its text is also screened as in rule 5.
+     skills/x.md` writes into a skills folder). An option with its value
+     attached (`-oskills/x.md`) counts every suffix up to its first `/` as a
+     candidate. A bare `.` or `..` may only be read (`prettier --check .`),
+     so it counts as written only when it is the home folder or above, a host
+     folder (`.claude`, `.agents`, `.codex`) or inside a protected location;
+     a whole-repository run in a repository is allowed. Its text is also
+     screened as in rule 5.
    - Tools that only carry text to a person or another agent
      (AskUserQuestion, TodoWrite, Agent, SendMessage, plan-mode tools,
      spawn_task) touch no files; whatever they start is checked in turn.

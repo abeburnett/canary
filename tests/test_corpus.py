@@ -792,6 +792,14 @@ HOOK_CASES = [
     hook_case("H_write_unmapped_cd_split", "deny", "cd ~/.claude && node w.js skills/notes/x.md $V",
               why="$ makes it unmappable, and its text names only ~/.claude"),
     hook_case("H_read_unknown_dot", "allow", "npx prettier --check ."),
+    # Refutation round 2 (Fable, 2026-09-29).
+    hook_case("H_write_attached_option", "deny", "cd ~/.agents && cc -oskills/orchestrate/x.md main.c",
+              why="-o<path> is one word shaped like an option"),
+    hook_case("H_write_dot_in_home", "deny", "rsync -a /etc/ .", cwd="{H}"),
+    hook_case("H_write_dot_in_host_folder", "deny", "cd ~/.claude && tar -xf /tmp/x.tar ."),
+    hook_case("H_write_dotdot_to_host_folder", "deny", "cd ~/.agents/docs && tool --into .."),
+    hook_case("H_read_dot_in_skilled_repo", "allow", "npx prettier --check .", cwd="{R}",
+              why="a whole-repository tool run in a repository with a committed skill"),
     hook_case("H_read_unknown_relative", "allow", "python3 scripts/check.py src/app.py"),
     # The edit route: drafts are ordinary files; what Canary trusts is not.
     hook_case("H_edit_draft_write", "allow", {"file_path": "{H}/.skillcanary/drafts/o-1/skill/SKILL.md",
