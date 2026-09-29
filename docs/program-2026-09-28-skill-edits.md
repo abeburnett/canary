@@ -251,8 +251,9 @@ Slice B: `canary edit`.
    change, inline shell, or an edit to an existing script is a code change
    (caution dialog, Cancel default); an `UNSAFE` change is refused without a
    dialog.
-7. A draft changed after the snapshot, or an installed skill changed since
-   `start` (checked inside the lock), writes nothing.
+7. A change made to the draft after its snapshot is never written (the
+   approved snapshot is), and an installed skill changed since `start`
+   (checked inside the lock) writes nothing.
 8. Creating an allowance runs the administrator step and writes it
    root-owned; an allowance file that is not root-owned, or is writable by
    others, is ignored. An allowance applies a matching text change with no
@@ -268,6 +269,23 @@ Slice B: `canary edit`.
 11. `python3 -m unittest discover -s tests` passes, including
     `tests/test_corpus.py`, and an independent refutation pass finds no
     bypass.
+
+## Refutation and audit
+
+- Refutation: Fable, two rounds (see the list under "Status"); every
+  confirmed finding has a corpus or edit test and a counterfactual.
+- Done-when audit: Sonnet, read-only, against the gate logs of 9e410d3 on
+  Python 3.10 and 3.9, the counterfactual logs, the old-hook comparison and
+  the refutation record. It passed bullets 1-7 and 9-11 and blocked bullet 8:
+  no test set an allowance file whose owner differs from the expected one.
+  Added the "wrong owner" case to
+  `test_no_classifier_expiry_or_a_writable_file_means_the_dialog`; removing
+  the owner comparison in `edit._root_owned` turns it red. The auditor read
+  bullet 7's "writes nothing" as "the late change is not written"; its
+  wording now says so.
+- The gate's second step (the composite Action on GitHub) runs only in CI;
+  the auditor judged it unrelated to these bullets, and
+  `tests/test_action.py` covers its script locally.
 
 ## Not in this program
 

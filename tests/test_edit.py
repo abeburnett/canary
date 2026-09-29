@@ -306,6 +306,8 @@ class AllowancesCoverOnlyWhatTheyPromise(unittest.TestCase):
             "no classifier": lambda h: {"backend": "none"},
             "expired": lambda h: {},
             "writable file": lambda h: os.chmod(edit._allow_path(h.path), 0o666) or {},
+            # The file belongs to this account, not the owner apply expects.
+            "wrong owner": lambda h: {"uid": os.getuid() + 1},
         }
         for label, prepare in cases.items():
             with self.subTest(case=label):
