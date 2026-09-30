@@ -8,22 +8,42 @@ import os
 import re
 import shlex
 import shutil
-from dataclasses import dataclass
+import stat
+from dataclasses import dataclass, field
 
 SUPPORT = os.path.join("Library", "Application Support", "Canary")
 FRAGMENTS = (".claude/skills", ".agents/skills", ".claude/plugins", ".codex/skills",
              ".codex/plugins", ".canary-lock", "application support/canary",
-             "managed-settings", "/etc/codex", "claudecode/managed")
+             "managed-settings", "/etc/codex", "claudecode/managed", ".claude/commands",
+             ".claude/agents", ".claude/settings", ".claude.json", ".mcp.json", "agents.md",
+             "agents.override.md", ".codex/config", ".codex/hooks", ".codex/rules",
+             "application support/skillcanary")
+# In a command SkillCanary could not map, a bare host folder (`cd ~/.claude &&
+# tool skills/x $V`) may be where the relative writes that follow land.
+HOST_FOLDER = re.compile(r"(?:^|[\s/'\"=:])\.(?:claude|agents|codex)(?=$|[\s'\";&|)<>])")
 INSTALLERS = re.compile(
     r"(\b(npx|bunx)\b(\s+-\S+)*\s+[@\w./-]*\bskills(@\S*)?\s+(add|install|update)\b"
     r"|\b(pnpm|yarn)\s+dlx\s+(-\S+\s+)*[@\w./-]*\bskills(@\S*)?\s+(add|install|update)\b"
     r"|\bclaude\s+plugins?\s+(install|update|marketplace\s+add)\b"
     r"|\bcodex\s+plugins?\s+(install|add|update|marketplace\s+add)\b)", re.I)
+REPO_ROOTS = (".claude/skills", ".claude/commands", ".claude/agents", ".agents/skills",
+              ".codex/skills")
 SHELL_SYNTAX = set(";&|<>()$`\\\n\r*?[]{}~")
 REDIRECT = ("This installs skills or plugins without SkillCanary checking them first. "
             "Use `canary add <link>` instead; it checks the package and asks the person.")
-PROTECTED = ("This would change a folder agents load skills or settings from, which "
-             "SkillCanary protects. To install a skill, use `canary add <link>`.")
+PROTECTED_SKILL = ("SkillCanary protects this skills folder. To change an installed skill, "
+                   "run `canary edit start <name or folder>`, edit the draft it prints, then "
+                   "run `canary edit apply <draft>`; the person approves in a dialog. To "
+                   "install a new skill, use `canary add <link>`. Reading this folder is allowed.")
+PROTECTED = ("This would change a folder or file agents load skills or settings from, which "
+             "SkillCanary protects, and no SkillCanary command allows it. Reading it is "
+             "allowed. Give the person the exact command to paste into their own terminal, "
+             "and do not retry another way. To install a skill, use `canary add <link>`; "
+             "to change one, use `canary edit start <name>`.")
+MENTIONED = ("SkillCanary could not tell whether this command changes the protected folder "
+             "it names, so it is blocked. To read, use plain commands (ls, grep, cat) or the "
+             "Read tool. To write a file whose text mentions the folder, use the Write tool. "
+             "To change a skill, use `canary edit start <name>`.")
 QUARANTINED = ("That file is a quarantined package SkillCanary has not approved. "
                "Agents may not read it; use `canary check` for a verdict.")
 UNREADABLE = ("SkillCanary could not check this tool call, so it is blocked. "
@@ -39,6 +59,10 @@ class ToolCall:
     cwd: str
     precise: bool = True     # False: the adapter could not map it exactly
     text: str = ""           # everything the call says, for text screening
+    trees_read: list = field(default_factory=list)     # read recursively
+    trees_written: list = field(default_factory=list)  # rewritten wholesale (git)
+    screen: bool = False     # mapped, but also screen the text (unknown commands)
+    folders_written: list = field(default_factory=list)  # `.`/`..` for unknown commands
 
 
 @dataclass
@@ -47,6 +71,52 @@ class PlannedFile:
     content: str
     mode: int
     action: str              # "create" or "manual"
+
+
+NOTE = re.compile(r"[^/]+\.(md|txt|log)", re.I)
+# The note exception is safe only while these are the only .md/.txt/.log files
+# a host loads from its home folder (docs/codex-facts.md: AGENTS.md,
+# AGENTS.override.md and the legacy instructions.md; fallback names such as
+# GUIDE.md are project-level only). When a host starts loading another, add it
+# here; tests/test_gate.py checks the Codex adapter's own list against it.
+NOT_NOTES = {"agents.md", "agents.override.md", "instructions.md"}
+
+
+def note_folders(home, cwd, adapters):
+    """Each adapter's note folders, minus any that is the home folder or above
+    it, or overlaps another host's protected locations: CODEX_HOME can point
+    at ~/.claude, and its top-level CLAUDE.md must not become a "note"."""
+    adapters = list(adapters)
+    h = _fold(os.path.realpath(home))
+    folders = []
+    for adapter in adapters:
+        others = []
+        for other in adapters:
+            if other is not adapter:
+                others += other.discovery_roots(home, cwd) + other.config_files(home)
+        others = [_fold(os.path.realpath(r)) for r in others]
+        for f in getattr(adapter, "note_folders", lambda _: [])(home):
+            p = _fold(os.path.realpath(f))
+            if _inside(h, p) or any(_inside(p, r) or _inside(r, p) for r in others):
+                continue
+            folders.append(os.path.realpath(f))
+    return sorted(set(folders))
+
+
+def _is_note(path, notes):
+    """A top-level Markdown or text file in a note folder, judged on the
+    resolved path, so a note that links elsewhere is judged where it lands."""
+    real = os.path.realpath(path)
+    name = os.path.basename(real)
+    if not (any(_fold(os.path.dirname(real)) == _fold(n) for n in notes)
+            and NOTE.fullmatch(name) is not None and name.casefold() not in NOT_NOTES):
+        return False
+    try:
+        st = os.lstat(real)
+    except FileNotFoundError:
+        return True
+    # A file with a second name may be a skill file under another name.
+    return stat.S_ISREG(st.st_mode) and st.st_nlink == 1
 
 
 def quarantine_dir(home):
@@ -68,28 +138,88 @@ def _fold(path):
     return os.path.normpath(path).casefold()
 
 
-def _protected_hit(path, protected):
-    """Inside a protected location, or a folder that contains one."""
+def _inside(p, r):
+    return p == r or p.startswith(r.rstrip("/") + "/")
+
+
+def _protected_hit(path, protected, existing_only=False):
+    """Inside a protected location, or a folder that contains one. With
+    existing_only, a contained location counts only if it exists on disk."""
     p = _fold(os.path.realpath(path))
-    for r in protected:
-        r = _fold(r)
-        if p == r or p.startswith(r.rstrip("/") + "/") or r.startswith(p.rstrip("/") + "/"):
+    for root in protected:
+        r = _fold(root)
+        if _inside(p, r):
+            return True
+        if _inside(r, p) and (not existing_only or os.path.lexists(root)):
             return True
     return False
 
 
-def _names_protected(text, protected, home):
+def _in_any_skills_folder(path):
+    """Inside a skills, commands or agents folder of any repository, not only
+    the ones above the working folder."""
+    p = _fold(os.path.realpath(path))
+    return any(f"/{rel}/" in p + "/" for rel in REPO_ROOTS)
+
+
+def _user_level_folder(path, protected, home):
+    p = _fold(os.path.realpath(path))
+    h = _fold(os.path.realpath(home))
+    parts = p.split("/")
+    return (_inside(h, p) or any(part in (".claude", ".agents", ".codex") for part in parts)
+            or any(_inside(p, _fold(r)) for r in protected))
+
+
+def _reads_inside(path, protected):
+    p = _fold(os.path.realpath(path))
+    return any(_inside(p, _fold(r)) for r in protected)
+
+
+def _write_reason(paths, protected):
+    """PROTECTED_SKILL when a write lands inside a skills folder, else PROTECTED."""
+    for path in paths:
+        p = _fold(os.path.realpath(path))
+        for root in protected:
+            r = _fold(root)
+            if _inside(p, r) and "skills" in r.split("/"):
+                return PROTECTED_SKILL
+        if any(f"/{rel}/" in p + "/" for rel in REPO_ROOTS if rel.endswith("skills")):
+            return PROTECTED_SKILL
+    return PROTECTED
+
+
+def _spellings(root, home):
+    found = {root}
+    for base in {home, os.path.realpath(home)}:
+        if root.startswith(base + "/"):
+            rest = root[len(base):]
+            found.update({"~" + rest, "$home" + rest, "${home}" + rest})
+    return found
+
+
+# What may follow a note folder's name in text: one plain note file, then the
+# end of the word.
+NOTE_TAIL = re.compile(r"/([^/\s'\"`;&|<>()*?\[\]{}$\\~]+\.(?:md|txt|log))(?=$|[\s'\";&|<>)])", re.I)
+
+
+def _names_protected(text, protected, home, notes=()):
     t = text.casefold()
     if any(f in t for f in FRAGMENTS):
         return True
-    spellings = set()
+    folded_notes = {_fold(n) for n in notes}
     for r in protected:
-        spellings.add(r)
-        for base in {home, os.path.realpath(home)}:
-            if r.startswith(base + "/"):
-                rest = r[len(base):]
-                spellings.update({"~" + rest, "$home" + rest, "${home}" + rest})
-    return any(s.casefold() in t for s in spellings)
+        if _fold(r) not in folded_notes and any(s.casefold() in t for s in _spellings(r, home)):
+            return True
+    # A note folder's own name is fine when each mention is followed by one
+    # plain note file that checks out on disk (a link, a hard link or a loaded
+    # file under a note-like name is not a note). Anything else counts.
+    for n in notes:
+        for s in _spellings(n, home):
+            for m in re.finditer(re.escape(s), text, re.I):
+                tail = NOTE_TAIL.match(text, m.end())
+                if not tail or not _is_note(os.path.join(n, tail.group(1)), [n]):
+                    return True
+    return False
 
 
 def _is_canary(command, canary_bin):
@@ -108,7 +238,18 @@ def _is_canary(command, canary_bin):
     return st.st_uid == 0 and not st.st_mode & 0o022
 
 
-def decide(call, protected, home, canary_bin=None):
+def _write_hit(path, protected, notes):
+    if _in_any_skills_folder(path):
+        return True
+    if notes and _is_note(path, notes):
+        # Only the note folder itself is set aside; any other protected
+        # location the resolved path lands in still counts.
+        return _protected_hit(path, [r for r in protected
+                                     if _fold(r) not in {_fold(n) for n in notes}])
+    return _protected_hit(path, protected)
+
+
+def decide(call, protected, home, canary_bin=None, notes=()):
     """A deny reason, or None to allow. Any internal error denies."""
     try:
         text = call.text or (call.command if isinstance(call.command, str) else "")
@@ -117,14 +258,28 @@ def decide(call, protected, home, canary_bin=None):
         if _is_canary(call.command, canary_bin):
             return None
         if call.precise:
-            if any(_protected_hit(p, protected) for p in call.paths_written):
-                return PROTECTED
+            hits = [p for p in call.paths_written if _write_hit(p, protected, notes)]
+            # A git checkout rewrites a whole repository; its placeholder
+            # skills folders count only once they exist.
+            trees = protected + [os.path.join(os.path.realpath(t), rel)
+                                 for t in call.trees_written for rel in REPO_ROOTS]
+            hits += [p for p in call.trees_written
+                     if _protected_hit(p, trees, existing_only=True)]
+            # `tool .` may only read (prettier --check .), so a whole folder
+            # counts as written only where user-level protection lives: the
+            # home folder or above, a host folder, or inside a protected one.
+            hits += [p for p in call.folders_written if _user_level_folder(p, protected, home)]
+            if hits:
+                return _write_reason(hits, protected)
             quarantine = [r for r in protected if _fold(r).endswith("/canary/quarantine")]
-            if any(_protected_hit(p, quarantine) for p in call.paths_read):
+            if (any(_reads_inside(p, quarantine) for p in call.paths_read)
+                    or any(_protected_hit(p, quarantine) for p in call.trees_read)):
                 return QUARANTINED
+            if call.screen and _names_protected(text, protected, home, notes):
+                return MENTIONED
             return None
-        if _names_protected(text, protected, home):
-            return PROTECTED
+        if _names_protected(text, protected, home, notes) or HOST_FOLDER.search(text.casefold()):
+            return MENTIONED
         return None
     except Exception:
         return UNREADABLE

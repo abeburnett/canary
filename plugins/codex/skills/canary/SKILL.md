@@ -24,6 +24,16 @@ package. Report the resulting decision and any action required from the
 person. A review decision is a request for a person's judgment, not approval
 to install the package another way.
 
+To change an installed skill, run `canary edit start <name>` (or pass the
+skill's folder), make the change in the draft folder it prints, then run
+`canary edit apply "<draft>"` and report the outcome. The person approves
+the change; do not write into a skills folder another way.
+
+When SkillCanary blocks a call, follow its message. Never tell the person to
+"allow" a file in SkillCanary or invent a command it does not have; when
+there is no route, give them the exact command to paste into their own
+terminal and say what it does.
+
 Managed hooks guard supported agent calls. They do not cover every tool or
 process, and local default discovery does not include configured external or
 remote skill roots. Describe only protection verified by `canary doctor`.

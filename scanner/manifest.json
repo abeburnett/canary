@@ -1,5 +1,5 @@
 {
-  "version": "0.1.1",
+  "version": "ea7e5a9499a6ad0ad53392ccc7133d40418f4e4f",
   "files": {
     "bin/canary": "6be3492d4a1c5373bf1040f4a612737548593853448d95f436d5828e9545ffa9",
     "canary/__init__.py": "ae739b3e3b817044ada923b44ba82c752fe8b7c2133908d58fff8fd4b5146298",
@@ -9,14 +9,15 @@
     "canary/classifiers/claude_cli.py": "2120c73e4fe0376ac15fdff06cb256ab526d8b70b2b7705bef7525f22ec33892",
     "canary/classifiers/openai_api.py": "8f12e081140a78b472788263bc483677dabcdc547082cb034849d7d5cb569dc6",
     "canary/classify.py": "721f07a640928eec3ec4c9198c53ba5fc34870a0125882ba3814570321453e06",
-    "canary/cli.py": "568e29a14cfb011b3428ed603fec02e050e21731cf6ccdd0b65ebd096b0f1565",
+    "canary/cli.py": "fb3bdc02679ac347914595f040c92c365e8a6e16f0f9c13638bf929b60e25b10",
+    "canary/edit.py": "224ff13c4f2b8275508c261785929432ebc8069013567b9efad7672b7c37e6c2",
     "canary/evidence.py": "cb4d5de6b3d4567b39706dfff8f022a59f24eca1bc6052dc8c3a99ee688c353b",
-    "canary/frontdoor.py": "bf1f7211319c250c259cf7657c54232710002ea723be7d9e32cc09eac0542e2c",
-    "canary/gate.py": "271ce18fb7a7b2afe0aaa7cb0d5296e1f29e939f6a5f94693ece4b02c19f3595",
-    "canary/hosts/claude.py": "61638d14fdf54669a95142ed8105ad932386bf8c5ab701e000cd786bcc7a46e7",
-    "canary/hosts/codex.py": "b86dc6cd927ef91527577617afd815ddabc9a5c33267ee631c851cb3e1169f50",
+    "canary/frontdoor.py": "e2d9393ed841902f210a2ac8f7322e796a29b1eac81a5b4c6cf4d10d5733c2ea",
+    "canary/gate.py": "e35201714e9f7b6f89873bd32f0958a92a728490e271077f6247b99c745ae1a6",
+    "canary/hosts/claude.py": "d763f3dac44873cd2cb3c984bdf95f55f077cc9389cb191bd97b6ac47f165e99",
+    "canary/hosts/codex.py": "3d45416433ded3d84a4532af4f3e79704ee315a7a50a49534253ee57754a8af6",
     "canary/scan.py": "b66fd7c627d995980cf77654728ae42410b1a320dca684d7698f60987688ac58",
     "canary/setup.py": "9acb5e2fba19e73f0826618e13809954ce03da1d9a28084619cd5eb277f4b217",
-    "canary/shellparse.py": "19220ace248b9d39106dbb8a35430d08863777c2c5a98a48b71dd87384e39ad7"
+    "canary/shellparse.py": "a19e7ba7baef9ecad44881e89fd807dbdd4f01ff3b290277de9af6a83e3a7a9b"
   }
 }

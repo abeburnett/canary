@@ -26,11 +26,11 @@ class Home:
         for d in (".claude/skills/notes", ".agents/skills", ".codex", "work/app/src"):
             os.makedirs(os.path.join(self.path, d), exist_ok=True)
 
-    def hook(self, host, tool, tool_input, raw=None):
+    def hook(self, host, tool, tool_input, raw=None, env=None):
         payload = raw if raw is not None else json.dumps({
             "hook_event_name": "PreToolUse", "tool_name": tool,
             "tool_input": tool_input, "cwd": self.project})
-        env = {"HOME": self.path, "PATH": os.environ.get("PATH", "")}
+        env = {"HOME": self.path, "PATH": os.environ.get("PATH", ""), **(env or {})}
         proc = subprocess.run([sys.executable, CANARY, "hook", "--host", host],
                               input=payload, capture_output=True, text=True, env=env,
                               timeout=60)
@@ -120,6 +120,79 @@ class TheHookNeverFailsOpen(unittest.TestCase):
         with unittest.mock.patch.object(gate, "_protected_hit", side_effect=RuntimeError):
             reason = gate.decide(call, ["/y"], home="/h")
         self.assertIsNotNone(reason)
+
+
+class DenialsNameTheSanctionedRoute(unittest.TestCase):
+    def test_each_deny_says_what_to_do_instead(self):
+        h = Home()
+        skill = os.path.join(h.path, ".claude", "skills", "notes", "SKILL.md")
+        settings = os.path.join(h.path, ".claude", "settings.json")
+        for host in ("claude", "codex"):
+            with self.subTest(host=host, kind="skill"):
+                proc = h.hook(host, "Bash", {"command": f"echo x > '{skill}'"})
+                self.assertIn("canary edit start", proc.stdout + proc.stderr)
+                self.assertIn("canary edit apply", proc.stdout + proc.stderr)
+            with self.subTest(host=host, kind="settings"):
+                proc = h.hook(host, "Bash", {"command": f"echo x > '{settings}'"})
+                self.assertTrue(h.denied(host, "Bash", {"command": f"echo x > '{settings}'"}))
+                self.assertNotIn("canary edit apply", proc.stdout + proc.stderr)
+                # No route exists, so the agent must hand the person a command,
+                # not invent a SkillCanary feature.
+                self.assertIn("own terminal", proc.stdout + proc.stderr)
+                self.assertIn("no SkillCanary command allows it", proc.stdout + proc.stderr)
+            with self.subTest(host=host, kind="mention"):
+                command = "cat > /tmp/note.md <<'EOF'\nsee ~/.claude/skills\nEOF"
+                proc = h.hook(host, "Bash", {"command": command})
+                self.assertTrue(h.denied(host, "Bash", {"command": command}))
+                self.assertIn("Write tool", proc.stdout + proc.stderr)
+
+
+class NotesNeverCoverWhatCodexLoads(unittest.TestCase):
+    def test_every_note_shaped_file_the_adapter_protects_in_the_home_is_no_note(self):
+        # Fable, text-screen refutation (2026-09-29): the note exception rests on
+        # the list of home-level files Codex loads. Tie the two together.
+        from canary.hosts import codex
+        h = Home()
+        codex_home = os.path.join(h.path, ".codex")
+        with unittest.mock.patch.dict(os.environ, {"CODEX_HOME": codex_home}):
+            listed = (codex.discovery_roots(h.path, h.project) + codex.config_files(h.path)
+                      + [os.path.join(codex_home, "instructions.md")])  # legacy, codex-facts.md
+            notes = gate.note_folders(h.path, h.project, [codex])
+        self.assertEqual(notes, [os.path.realpath(codex_home)])
+        checked = 0
+        for path in listed:
+            if os.path.dirname(path) == os.path.realpath(codex_home) and gate.NOTE.fullmatch(
+                    os.path.basename(path)):
+                checked += 1
+                with self.subTest(path=path):
+                    self.assertFalse(gate._is_note(path, notes))
+        self.assertGreaterEqual(checked, 3, "AGENTS.md, AGENTS.override.md and instructions.md")
+
+
+class ARepointedCodexHomeGetsNoNotes(unittest.TestCase):
+    def test_codex_home_on_another_hosts_folder_or_home_grants_nothing(self):
+        # Fable, notes refutation (2026-09-29): CODEX_HOME aimed at ~/.claude
+        # made ~/.claude/CLAUDE.md writable as a "note".
+        h = Home()
+        for codex_home in (os.path.join(h.path, ".claude"), h.path):
+            target = os.path.join(codex_home, "CLAUDE.md" if codex_home != h.path else "notes.md")
+            with self.subTest(codex_home=codex_home):
+                proc = h.hook("claude", "Bash", {"command": f"echo x >> '{target}'"},
+                              env={"CODEX_HOME": codex_home})
+                self.assertEqual(proc.returncode, 2, "a note was allowed in a repointed home")
+
+
+class NotesStayInsideOtherProtection(unittest.TestCase):
+    def test_a_note_folder_inside_another_protected_folder_grants_nothing(self):
+        # CODEX_HOME can point anywhere, including inside a skills folder.
+        root = os.path.realpath(tempfile.mkdtemp(prefix="canary-notes-"))
+        outer = os.path.join(root, "protected")
+        notes = os.path.join(outer, "codex-home")
+        os.makedirs(notes)
+        note = os.path.join(notes, "log.md")
+        call = gate.ToolCall("Write", None, [], [note], root)
+        self.assertIsNone(gate.decide(call, [notes], root, notes=[notes]))
+        self.assertIsNotNone(gate.decide(call, [notes, outer], root, notes=[notes]))
 
 
 class TheQuarantineIsNotReadable(unittest.TestCase):

@@ -156,18 +156,82 @@ Decision rules (`canary/gate.py`, `decide`), in order:
 3. `canary` itself is allowed when the command's first word is exactly
    `canary`, it has no other shell syntax, and the `canary` on `PATH` is the
    root-owned install (so an agent cannot put its own `canary` first).
-4. The adapter mapped the call exactly (a file tool, or a simple shell
-   command): deny when a written path is inside a protected location, or a
-   read path is inside the quarantine. Writing to a folder that contains a
-   protected location (`rm -rf ~/.claude`) counts as writing into it.
-5. The adapter could not map it exactly (compound shell, variables,
+4. The adapter mapped the call (a file tool, a tool that only carries text,
+   or a shell command `canary/shellparse.py` can lex): deny when a written
+   path is inside a protected location or inside any repository's
+   `.claude/skills`, `.claude/commands`, `.claude/agents`, `.agents/skills`
+   or `.codex/skills`; when a read path is inside the quarantine; or when a
+   recursive read (`grep -r`, `find`, `rg`, a glob, Claude Code's Grep and
+   Glob) covers it. Writing to a folder that contains a protected location
+   (`rm -rf ~/.claude`) counts as writing into it.
+   - Shell: `canary/shellparse.py` lexes quotes itself, so a quoted `;` is an
+     argument and `2>` is a file descriptor. It maps pipelines and `&&`/`;`
+     chains, follows a plain `cd dir &&`, and models read-only commands
+     (`ls`, `cat`, `grep`, `find` without actions, `sed -n 'N,Mp'`, …), the
+     writers `touch`, `mkdir`, `rm`, `rmdir`, `tee`, `cp`, `mv`, and
+     redirection. A glob stands for its fixed folder. Backslashes, `$`,
+     backticks, newlines, subshells and heredocs cannot be mapped (rule 5).
+   - `git`: subcommands that touch only the index and history (`status`,
+     `log`, `diff`, `show`, `add`, `commit`, `fetch`, `push`, …) are reads;
+     `--output=<file>` is a write. Every other subcommand, and any alias,
+     rewrites the repository at `-C` or the working folder, walked up to its
+     root: deny when that repository holds a protected location that exists
+     on disk. (A skills folder that does not exist yet is not protected
+     against a checkout that creates it; see "Enforcement layers".)
+   - Any other command is unknown: every argument, including option values
+     such as `--out=<path>`, counts as a path it reads and writes, resolved
+     against the tracked working folder (so `cd ~/.claude && tool
+     skills/x.md` writes into a skills folder). An option with its value
+     attached (`-oskills/x.md`) counts every suffix up to its first `/` as a
+     candidate. A bare `.` or `..` may only be read (`prettier --check .`),
+     so it counts as written only when it is the home folder or above, a host
+     folder (`.claude`, `.agents`, `.codex`) or inside a protected location;
+     a whole-repository run in a repository is allowed. Its text is also
+     screened as in rule 5.
+   - Tools that only carry text to a person or another agent
+     (AskUserQuestion, TodoWrite, Agent, SendMessage, plan-mode tools,
+     spawn_task) touch no files; whatever they start is checked in turn.
+5. The adapter could not map it exactly (variables, escapes, heredocs,
    unknown tools such as MCP calls): the call's text is screened. Deny when
    it names a protected location (the resolved paths, their `~` and `$HOME`
    spellings, and the fragments `.claude/skills`, `.agents/skills`,
-   `.claude/plugins`, `.codex/skills`, `.canary-lock`,
-   `Application Support/Canary`, `managed-settings`, `/etc/codex`);
-   allow otherwise, so ordinary compound commands keep working.
+   `.claude/plugins`, `.codex/skills`, `.claude/commands`, `.claude/agents`,
+   `.claude/settings`, `.claude.json`, `.mcp.json`, `AGENTS.md`,
+   `.codex/config`, `.codex/hooks`, `.codex/rules`, `.canary-lock`,
+   `Application Support/Canary`, `Application Support/SkillCanary`,
+   `managed-settings`, `/etc/codex`). A call the adapter could not map at
+   all is also denied when it names a bare `.claude`, `.agents` or `.codex`
+   folder, because relative writes after `cd` into one cannot be seen.
+   Allow otherwise, so ordinary compound commands keep working.
 6. Otherwise allow.
+
+Notes: an adapter may name protected folders whose top-level notes agents
+may write (`note_folders(home)`; Codex returns its home folder, which is
+protected whole so that a profile created later is covered). A note is a
+`.md`, `.txt` or `.log` file directly in that folder, judged on its resolved
+path, that is a regular file with one name and is not `AGENTS.md`,
+`AGENTS.override.md` or `instructions.md`. Writing one is checked against
+every other protected location, so a note that is really a skills file, or a
+note folder inside another protected folder, is still denied. A note folder
+that is the home folder or above it, or overlaps another host's protected
+locations (`CODEX_HOME` pointed at `~/.claude`), grants no notes. This lets an
+agent keep a delegation log in `~/.codex`; everything else there stays
+protected. The exception rests on one fact, that `AGENTS.md`,
+`AGENTS.override.md` and the legacy `instructions.md` are the only such files
+a host loads from its home folder; a test ties the exclusion list to the
+Codex adapter's own list of loaded files.
+
+In the text screen (rule 5, commands that cannot be mapped: `printf` with
+escapes, heredocs), a note folder's name is fine when each mention is
+followed by one plain note file name that passes the same on-disk checks
+(regular, one name, resolved directly in the folder). Any other mention of the
+folder, and every other protected location, still denies.
+
+Deny messages name the way forward: a write into a skills folder names
+`canary edit start` and `canary edit apply`; a write to settings says no
+SkillCanary command allows it and tells the agent to give the person a
+command to paste into their own terminal; a text-screen deny says to read with plain commands and to
+write a file that mentions a protected folder with the Write tool.
 
 ## Host adapters (`canary/hosts/<host>.py`)
 
@@ -194,6 +258,10 @@ def parse_pre_tool_use(payload: dict) -> "ToolCall":
 
 def deny(reason: str) -> tuple[str, int]:
     """The exact stdout text and exit code that make this host block the call."""
+
+def note_folders(home: str) -> list[str]:   # optional
+    """Protected folders whose top-level notes agents may write (see
+    "Notes" under the decision rules). Codex: its home folder."""
 
 def install_root(home: str) -> str:
     """The user-level folder `canary add` installs skills into for this
@@ -411,6 +479,52 @@ renamed:
    "ref": "…", "commit": "…", "path": "…", "package_digest": "sha256:…",
    "verdict": "…", "installed": ["…"], "installed_at": "2026-09-26T00:00:00Z"}}}
 ```
+
+## `canary edit start|apply|allow|allowances|revoke`
+
+The one supported way to change an installed skill (`canary/edit.py`;
+design and owner decisions in `docs/program-2026-09-28-skill-edits.md`).
+
+- `start <name | folder>` finds every copy of a name in the user skill
+  folders, or takes a folder directly inside any folder named `skills`,
+  follows links to the real folder, and refuses copies that differ. It copies
+  the skill without `.git` to `~/.skillcanary/drafts/<name>-<id>/skill/` and
+  records each file's SHA-256 in `edit.json` beside it.
+- `apply <draft>` re-validates the targets named in `edit.json` (the agent
+  can write that file), copies the draft to a private snapshot under
+  `~/Library/Application Support/Canary/edits/<run>/`, and compares it with
+  the installed skill. A skill that changed since `start` is a `conflict`.
+  - A *code change* touches a file that has, or gains, a capability that
+    blocks auto-approval, a file the scanner cannot read as text, a program
+    bit, or the SKILL.md frontmatter (including `description`). Anything
+    else is a *text change*.
+  - Layers 1 and 2 run on a package of only the added and changed files.
+    `UNSAFE` is refused without asking.
+  - One dialog asks the person; a code change or a verdict other than
+    `LIKELY_SAFE` uses the caution form with Cancel as the default. It shows
+    file names (labelled as the skill's), lines added and the path of the
+    full diff. At Lockdown the write is one administrator step that stages
+    each file in a root-owned folder inside the skill, checks its SHA-256
+    with `/usr/bin/shasum`, then moves it into place.
+  - Writes happen under `canary add`'s lock, after re-checking the skill
+    and snapshot, file by file through a temporary file and a rename. Files
+    outside the change, and `.git`, are not touched. The lockfile entry gets
+    the new `package_digest` and `edited_at`; `edits.jsonl` records the
+    change, and the previous files stay under the run folder.
+- `allow <name | folder> <pattern> [--days 1-30]` (Guard only): after a
+  dialog, the administrator step writes `allowances.json` beside
+  `state.json`. An allowance is read only when the file and its folder
+  belong to root and are not writable by group or others. It covers a
+  change when every changed file already exists, matches the pattern
+  segment by segment, ends in `.md` and is not `SKILL.md`; the change is a
+  text change; the change scan is `LIKELY_SAFE` with the classifier run; it
+  adds at most 200 lines and 16 KiB; and it adds no URL or shell fence. Then
+  no dialog is shown, and a notification follows. `revoke` also takes the
+  password; `allowances` lists them.
+
+Exit codes: 0 `started`, `applied`, `unchanged`, `allowed`, `revoked`; 10
+`declined`, `not_applied`, `conflict`; 20 `refused`; 2 usage or an unusable
+draft or folder; 3 internal error. No flag approves an edit.
 
 ## `canary setup [--level scan|guard|lockdown]` and `canary doctor`
 
