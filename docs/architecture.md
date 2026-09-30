@@ -224,8 +224,16 @@ Codex adapter's own list of loaded files.
 In the text screen (rule 5, commands that cannot be mapped: `printf` with
 escapes, heredocs), a note folder's name is fine when each mention is
 followed by one plain note file name that passes the same on-disk checks
-(regular, one name, resolved directly in the folder). Any other mention of the
-folder, and every other protected location, still denies.
+(regular, one name, resolved directly in the folder), and no quote sits
+directly before the mention or after the name. A quote glued to the name can
+change the file the shell means (`x.md'.config.toml'`, `''$HOME/.codex/x.md'
+  .config.toml'`, `x.md'/../config.toml'`), and telling a closing quote from a
+glued one needs the whole command's quote state, so a quoted note path is
+denied there: write the path without quotes, or use the Write or Edit tool.
+The name must end at white space, `;`, `&`, `|`, `<`, `>`, `)`, the end of
+the text, or (in JSON text) an escaped newline, return or tab or the string's
+closing quote. Any other mention of the folder, and every other protected
+location, still denies.
 
 Deny messages name the way forward: a write into a skills folder names
 `canary edit start` and `canary edit apply`; a write to settings says no
