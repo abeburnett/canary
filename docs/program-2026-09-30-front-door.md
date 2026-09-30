@@ -163,6 +163,38 @@ Every slice: the suite passes on Python 3.10 and `/usr/bin/python3`;
 deliberate breaks turn named tests red; an independent review, and a
 done-when audit by a model other than the author.
 
+## Probe results (step 1, 2026-09-30)
+
+- **Claude Code rewrites a command: verified live.** A PreToolUse hook that
+  returned `permissionDecision: "allow"` with `updatedInput` changed
+  `echo PROBE_A > out.txt` into `PROBE_B` before it ran (`claude -p`,
+  Claude Code's current release).
+- **Codex rewrites a command: documented, not yet run live.** The Codex hooks
+  page says a PreToolUse hook rewrites a call with `permissionDecision:
+  "allow"` plus `updatedInput`, and does not support `ask`. A live run waits
+  until the Codex usage limit resets (2026-10-03). Until then the plan
+  assumes deny-and-redirect for Codex.
+- **SessionStart runs after the session lists its skills: verified live.** A
+  skill created by a SessionStart hook was missing from the session's init
+  event and the model said it was unavailable; a positive control (the skill
+  created before the session) showed up in both. So the session-start line
+  can only report; holding a skill back is the watcher's job.
+- **Skills arriving mid-session: inconclusive.** The probe model backgrounded
+  its wait and ended early on two of three runs. The plan keeps assuming what
+  `docs/architecture.md` records: both hosts reload skills mid-session.
+- **The watcher: fast, and it must wait for a folder to settle.** A kqueue
+  watch noticed a new folder in under 1 ms (median 0.13 ms over 20 trials)
+  and moved it in under 1 ms. Moving a folder on first sight broke a write
+  into it in 1 of 40 trials, so the watcher waits until a new folder stops
+  changing before it moves it.
+- **Installer staging: waiting on the owner.** `scripts/probe-installer-staging.sh`
+  runs `npx skills add` with a staging `HOME` and `claude plugin install`
+  with a staging `CLAUDE_CONFIG_DIR`, then checks the real folders did not
+  change. The owner runs it, because the hook blocks agents from running
+  installers.
+- **Found on the way:** the hook denies `claude plugin install --help`,
+  which only prints help. Slice A exempts help and list commands.
+
 ## Unverified; probed before building on them
 
 - Whether Codex hooks can rewrite a command.
