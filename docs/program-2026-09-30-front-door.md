@@ -1,8 +1,10 @@
 # Program 2026-09-30: back to the front door
 
-Status: design for owner approval. Branch `program/2026-09-30-front-door`,
-based on `main` (`140d87e`). PR 6 (the quote-glue fix) merges first; this
-program then removes the code it patched.
+Status: approved by the owner on 2026-09-30, with every recommendation
+below: the watcher is on by default, Lockdown is removed, SkillCanary
+publishes a catch rate only after the benchmark measures it, and the
+protected-file program is closed unmerged (branch deleted). Branch
+`program/2026-09-30-front-door`, based on `main` (`1307a53`, after PR 6).
 
 ## Goal
 
@@ -171,15 +173,66 @@ done-when audit by a model other than the author.
 - How quickly a launch agent reacts to a new folder, and whether a running
   session can load a skill inside that gap.
 
-## Decisions for the owner
+## Owner decisions (2026-09-30)
 
-1. **The watcher:** on by default (I recommend it; it is the only thing that
-   catches terminal installs without asking people to change habits), or
-   opt-in?
-2. **Lockdown:** remove it (I recommend it), or keep it as an opt-in strict
-   mode?
-3. **The benchmark target:** measure first, then set the number SkillCanary
-   may claim. I recommend not publishing "99%" before the benchmark shows it.
-4. **The protected-file program** (`program/2026-09-29-protected-file-edits`):
-   close it unmerged, since edits are no longer blocked. I recommend closing
-   it.
+1. The watcher is on by default.
+2. Lockdown is removed; setup returns locked skill folders to the person.
+3. The benchmark measures first; SkillCanary publishes a catch rate only
+   once the benchmark shows it.
+4. The protected-file program is closed unmerged; its branch is deleted.
+
+## Plan
+
+Each step ships as its own pull request, so the friction goes away as soon
+as step 2 merges instead of at the end. The coordinator is Opus 5.5, because
+the hook and installer work is fail-closed security work (the owner's
+escalation list). Reviews and audits go to a model other than the author.
+Hook refutations go to Muse Spark 1.3 Contributor (`spark-muse`, read-only):
+two of this week's Fable and Opus refutations were stopped by a safety
+classifier before probing, and Spark completed its review.
+
+1. **Probes, before any design depends on them** (coordinator, about half a
+   day). Answer the four questions under "Unverified" with runs that could
+   fail, and record the answers in `docs/architecture.md` and
+   `docs/codex-facts.md`. If a probe fails, the owner decides the fallback
+   before step 4 starts.
+2. **Slice A: take the guard out** (coordinator). This is the step that
+   removes the everyday friction.
+   - Write the new hook's cases first: the reads, edits, heredocs and
+     `git` commands that must pass, and the installer commands and
+     file-tool skill creations that must not.
+   - Delete the shell write parser, the text screen, `canary edit`,
+     allowances, the notes exception and Lockdown; keep the installer rule
+     and the new-skill-folder rule.
+   - Setup undoes Lockdown on a Mac that has it; `canary doctor` drops the
+     Lockdown gaps, which also clears the owner's hard-link gap.
+   - Review: Spark refutation of the remaining hook; done-when audit.
+   - The owner reinstalls with `python3 bin/canary setup --level guard`
+     from an updated main checkout.
+3. **Slice C: the guest list** (coordinator, or a worker with a frozen
+   contract). The ledger, `canary list`, `canary trust`, and the
+   SessionStart line. It comes before interception because interception and
+   the watcher both write to the ledger.
+4. **Slice B: intercept installs** (coordinator; the installer staging is
+   the riskiest code in the program).
+   - `canary install -- <command>`: run the installer against a staging
+     home, check, ask, copy, record.
+   - The Claude Code hook rewrites installer commands with `updatedInput`;
+     Codex rewrites or denies with a redirect, depending on the probe.
+   - The watcher: a launch agent that moves a new unchecked skill folder
+     into quarantine and shows the dialog.
+   - Review: Spark refutation aimed at one question: can a new skill reach
+     a skills folder, usable by an agent, without the check?
+5. **Slice D: the benchmark** (runs in parallel with steps 3 and 4). A
+   worker builds the malicious and benign corpus from a frozen contract;
+   the coordinator reviews every sample, adds `canary bench` and the CI
+   check, and records the first catch and false-alarm rates. The owner then
+   sets the target.
+6. **Claims and docs.** `SECURITY.md`, the README, the SkillCanary skill that
+   setup installs, `canary --help` and `doctor` describe the front door and
+   what it does not do. The site copy changes only after step 5's numbers
+   exist.
+
+Per slice: the tests run on Python 3.10 and `/usr/bin/python3` before each
+commit, the review runs before the full gate, and the done-when audit runs
+before the slice is called done.
