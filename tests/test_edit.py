@@ -255,6 +255,7 @@ NOT_COVERED = [
 ]
 
 
+@unittest.skipUnless(sys.platform == "darwin", "creating an allowance runs the macOS administrator script")
 class AllowancesCoverOnlyWhatTheyPromise(unittest.TestCase):
     def allowed_home(self, days=7, now=None):
         h = Home()
@@ -321,6 +322,10 @@ class AllowancesCoverOnlyWhatTheyPromise(unittest.TestCase):
                     edit.apply(draft, home=h.path, support_dir=h.support, approve=approver,
                                backend="none", prefix=h.path, uid=os.getuid())
                 self.assertEqual(out["outcome"], "declined")
+
+
+class AllowancesNeedGuardAndNarrowPatterns(unittest.TestCase):
+    """Allowance rules that need no macOS administrator script, so CI runs them."""
 
     def test_patterns_can_never_reach_skill_md_or_code(self):
         for pattern in ("SKILL.md", "*.md", "S*", "scripts/*.sh", "../x.md", "/abs.md", "**/x.md"):
