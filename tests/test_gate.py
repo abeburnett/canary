@@ -147,6 +147,28 @@ class DenialsNameTheSanctionedRoute(unittest.TestCase):
                 self.assertIn("Write tool", proc.stdout + proc.stderr)
 
 
+class NotesNeverCoverWhatCodexLoads(unittest.TestCase):
+    def test_every_note_shaped_file_the_adapter_protects_in_the_home_is_no_note(self):
+        # Fable, text-screen refutation (2026-09-29): the note exception rests on
+        # the list of home-level files Codex loads. Tie the two together.
+        from canary.hosts import codex
+        h = Home()
+        codex_home = os.path.join(h.path, ".codex")
+        with unittest.mock.patch.dict(os.environ, {"CODEX_HOME": codex_home}):
+            listed = (codex.discovery_roots(h.path, h.project) + codex.config_files(h.path)
+                      + [os.path.join(codex_home, "instructions.md")])  # legacy, codex-facts.md
+            notes = gate.note_folders(h.path, h.project, [codex])
+        self.assertEqual(notes, [os.path.realpath(codex_home)])
+        checked = 0
+        for path in listed:
+            if os.path.dirname(path) == os.path.realpath(codex_home) and gate.NOTE.fullmatch(
+                    os.path.basename(path)):
+                checked += 1
+                with self.subTest(path=path):
+                    self.assertFalse(gate._is_note(path, notes))
+        self.assertGreaterEqual(checked, 3, "AGENTS.md, AGENTS.override.md and instructions.md")
+
+
 class ARepointedCodexHomeGetsNoNotes(unittest.TestCase):
     def test_codex_home_on_another_hosts_folder_or_home_grants_nothing(self):
         # Fable, notes refutation (2026-09-29): CODEX_HOME aimed at ~/.claude

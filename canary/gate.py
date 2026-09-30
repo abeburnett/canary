@@ -74,6 +74,11 @@ class PlannedFile:
 
 
 NOTE = re.compile(r"[^/]+\.(md|txt|log)", re.I)
+# The note exception is safe only while these are the only .md/.txt/.log files
+# a host loads from its home folder (docs/codex-facts.md: AGENTS.md,
+# AGENTS.override.md and the legacy instructions.md; fallback names such as
+# GUIDE.md are project-level only). When a host starts loading another, add it
+# here; tests/test_gate.py checks the Codex adapter's own list against it.
 NOT_NOTES = {"agents.md", "agents.override.md", "instructions.md"}
 
 
@@ -183,18 +188,38 @@ def _write_reason(paths, protected):
     return PROTECTED
 
 
-def _names_protected(text, protected, home):
+def _spellings(root, home):
+    found = {root}
+    for base in {home, os.path.realpath(home)}:
+        if root.startswith(base + "/"):
+            rest = root[len(base):]
+            found.update({"~" + rest, "$home" + rest, "${home}" + rest})
+    return found
+
+
+# What may follow a note folder's name in text: one plain note file, then the
+# end of the word.
+NOTE_TAIL = re.compile(r"/([^/\s'\"`;&|<>()*?\[\]{}$\\~]+\.(?:md|txt|log))(?=$|[\s'\";&|<>)])", re.I)
+
+
+def _names_protected(text, protected, home, notes=()):
     t = text.casefold()
     if any(f in t for f in FRAGMENTS):
         return True
-    spellings = set()
+    folded_notes = {_fold(n) for n in notes}
     for r in protected:
-        spellings.add(r)
-        for base in {home, os.path.realpath(home)}:
-            if r.startswith(base + "/"):
-                rest = r[len(base):]
-                spellings.update({"~" + rest, "$home" + rest, "${home}" + rest})
-    return any(s.casefold() in t for s in spellings)
+        if _fold(r) not in folded_notes and any(s.casefold() in t for s in _spellings(r, home)):
+            return True
+    # A note folder's own name is fine when each mention is followed by one
+    # plain note file that checks out on disk (a link, a hard link or a loaded
+    # file under a note-like name is not a note). Anything else counts.
+    for n in notes:
+        for s in _spellings(n, home):
+            for m in re.finditer(re.escape(s), text, re.I):
+                tail = NOTE_TAIL.match(text, m.end())
+                if not tail or not _is_note(os.path.join(n, tail.group(1)), [n]):
+                    return True
+    return False
 
 
 def _is_canary(command, canary_bin):
@@ -250,10 +275,10 @@ def decide(call, protected, home, canary_bin=None, notes=()):
             if (any(_reads_inside(p, quarantine) for p in call.paths_read)
                     or any(_protected_hit(p, quarantine) for p in call.trees_read)):
                 return QUARANTINED
-            if call.screen and _names_protected(text, protected, home):
+            if call.screen and _names_protected(text, protected, home, notes):
                 return MENTIONED
             return None
-        if _names_protected(text, protected, home) or HOST_FOLDER.search(text.casefold()):
+        if _names_protected(text, protected, home, notes) or HOST_FOLDER.search(text.casefold()):
             return MENTIONED
         return None
     except Exception:

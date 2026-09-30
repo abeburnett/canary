@@ -296,6 +296,18 @@ exist. The owner asked for two changes here and a third as its own program
    turns it red). Findings outside this change go to the protected-file
    program: `~/.claude/CLAUDE.md` is not protected at all, and a hard link
    made out of a protected file elsewhere can change it.
+   The first version handled only commands the parser can map. The owner
+   then still hit a block on the usual ways to append a row (`printf` with
+   escapes, a heredoc), which fall to the text screen; a probe against the
+   real home layout showed it. The text screen now lets a note folder's name
+   through only when each mention is followed by one plain note file that
+   passes the on-disk checks (`H_note_codex_heredoc_*`, `printf_append`;
+   five breaks each turn named cases red). Fable's review of that change
+   (about 45 probes, both hosts) found no bypass. Its one should-fix, that the
+   exception depends on an unwritten list of files Codex loads, is fixed with
+   a comment at `NOT_NOTES` and `NotesNeverCoverWhatCodexLoads`. An Opus
+   review of the same change was stopped by a safety classifier before it
+   probed anything and produced no findings.
 2. **No invented features.** The settings deny says no SkillCanary command
    allows the write and tells the agent to hand the person a command to
    paste; the shipped SkillCanary skill (both hosts) says never to tell the

@@ -216,7 +216,16 @@ note folder inside another protected folder, is still denied. A note folder
 that is the home folder or above it, or overlaps another host's protected
 locations (`CODEX_HOME` pointed at `~/.claude`), grants no notes. This lets an
 agent keep a delegation log in `~/.codex`; everything else there stays
-protected.
+protected. The exception rests on one fact, that `AGENTS.md`,
+`AGENTS.override.md` and the legacy `instructions.md` are the only such files
+a host loads from its home folder; a test ties the exclusion list to the
+Codex adapter's own list of loaded files.
+
+In the text screen (rule 5, commands that cannot be mapped: `printf` with
+escapes, heredocs), a note folder's name is fine when each mention is
+followed by one plain note file name that passes the same on-disk checks
+(regular, one name, resolved directly in the folder). Any other mention of the
+folder, and every other protected location, still denies.
 
 Deny messages name the way forward: a write into a skills folder names
 `canary edit start` and `canary edit apply`; a write to settings says no
