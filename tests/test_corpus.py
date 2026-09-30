@@ -815,6 +815,50 @@ HOOK_CASES = [
               "cat >> ~/.codex/delegation-log.md <<'EOF'\n| row |\nEOF"),
     hook_case("H_note_codex_heredoc_absolute", "allow",
               "cat >> {H}/.codex/delegation-log.md <<'EOF'\n| a row that mentions config.toml |\nEOF"),
+    # 2026-09-30: the text screen sees the command as JSON, so a path that ends a
+    # line or sits in quotes is followed by a backslash sequence, not white space.
+    hook_case("H_note_codex_multiline_append", "allow",
+              "grep -v '^$' /etc/hosts >> ~/.codex/delegation-log.md\n"
+              "wc -l < ~/.codex/delegation-log.md; tail -n 8 ~/.codex/delegation-log.md | cut -c1-90"),
+    hook_case("H_note_codex_quoted_path", "deny",
+              "printf '%s\\n' x >> \"{H}/.codex/delegation-log.md\""),
+    hook_case("H_note_codex_tab_after_path", "allow", "echo $V >> ~/.codex/delegation-log.md\t# row"),
+    hook_case("H_note_codex_multiline_to_config", "deny",
+              "echo $V >> ~/.codex/delegation-log.md\necho $V >> ~/.codex/config.toml"),
+    hook_case("H_note_codex_multiline_to_link", "deny",
+              "echo $V >> ~/.codex/delegation-log.md\necho $V >> ~/.codex/linked.md"),
+    # Policy (after three holes in quote pairing): in the text screen a note mention
+    # with a quote directly before or after it is denied, so no quoted path is a note.
+    # Quote glue: a quote after a note name can extend the name the shell sees
+    # (Fable's second look, 2026-09-30). Four of these were allowed by main.
+    hook_case("H_note_codex_glue_single", "deny", "echo $V > ~/.codex/x.md'.config.toml'"),
+    hook_case("H_note_codex_glue_double", "deny", "echo $V > ~/.codex/x.md\"\".config.toml"),
+    hook_case("H_note_codex_glue_after_close", "deny", "echo $V > \"~/.codex/x.md\".config.toml"),
+    hook_case("H_note_codex_glue_open_single", "deny", "echo $V > ~/.codex/x.md' .config.toml'"),
+    hook_case("H_note_codex_glue_space_in_double", "deny", "echo $V > \"~/.codex/x.md .config.toml\""),
+    hook_case("H_note_codex_glue_space_in_single", "deny", "echo $V > '~/.codex/x.md .config.toml'"),
+    hook_case("H_note_codex_glue_traversal", "deny",
+              "mkdir ~/.codex/x.md; echo $V > ~/.codex/x.md'/../config.toml'",
+              why="x.md is a directory, so x.md/../config.toml is the config file"),
+    # Spark 1.3 Contributor's review: an empty quote pair before $HOME looks like
+    # an opening quote, and the quote after the name then looks like its close.
+    hook_case("H_note_codex_empty_pair_single", "deny", "echo $V > ''$HOME/.codex/x.md' .config.toml'"),
+    hook_case("H_note_codex_empty_pair_double", "deny", "echo $V > \"\"$HOME/.codex/x.md\" .config.toml\""),
+    hook_case("H_note_codex_empty_pair_braced", "deny", "echo $V > ''${HOME}/.codex/x.md' .config.toml'"),
+    hook_case("H_note_codex_empty_pair_ansi_c", "deny", "echo $V > $''$HOME/.codex/x.md' .config.toml'"),
+    hook_case("H_note_codex_empty_pair_traversal", "deny",
+              "mkdir $HOME/.codex/x.md; echo $V > ''$HOME/.codex/x.md'/../config.toml'"),
+    hook_case("H_note_codex_backslash_opener", "deny", "echo $V > \\'$HOME/.codex/x.md' .config.toml'"),
+    hook_case("H_note_codex_equals_quoted", "deny", "echo $V --out='$HOME/.codex/delegation-log.md'"),
+    hook_case("H_note_codex_leading_quote", "deny", "'$HOME/.codex/delegation-log.md' <<< $V"),
+    hook_case("H_note_codex_glue_unknown_command", "deny", "node w.js ~/.codex/x.md'.config.toml'"),
+    hook_case("H_note_codex_glue_unknown_double", "deny", "node w.js \"~/.codex/x.md\".config.toml"),
+    hook_case("H_note_codex_quoted_single", "deny", "echo $V >> '{H}/.codex/delegation-log.md'"),
+    hook_case("H_note_codex_escaped_dot_profile", "deny", "echo $V > ~/.codex/x.md\\.config.toml",
+              why="the shell reads x.md\\.config.toml as one name: a new profile"),
+    hook_case("H_note_codex_escaped_space_name", "deny", "echo $V > ~/.codex/x.md\\ y",
+              why="the shell reads x.md\\ y as one name that is no note"),
+    hook_case("H_note_codex_quoted_to_profile", "deny", "echo $V >> \"{H}/.codex/new.config.toml\""),
     hook_case("H_note_codex_heredoc_to_config", "deny", "cat >> ~/.codex/config.toml <<'EOF'\nx\nEOF"),
     hook_case("H_note_codex_heredoc_profile", "deny", "cat > ~/.codex/new.config.toml <<'EOF'\nx\nEOF"),
     hook_case("H_note_codex_heredoc_agents_md", "deny", "cat >> ~/.codex/AGENTS.md <<'EOF'\nx\nEOF"),

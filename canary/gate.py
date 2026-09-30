@@ -43,6 +43,7 @@ PROTECTED = ("This would change a folder or file agents load skills or settings 
 MENTIONED = ("SkillCanary could not tell whether this command changes the protected folder "
              "it names, so it is blocked. To read, use plain commands (ls, grep, cat) or the "
              "Read tool. To write a file whose text mentions the folder, use the Write tool. "
+             "To append to a note in the Codex home, write its path without quotes. "
              "To change a skill, use `canary edit start <name>`.")
 QUARANTINED = ("That file is a quarantined package SkillCanary has not approved. "
                "Agents may not read it; use `canary check` for a verdict.")
@@ -197,12 +198,34 @@ def _spellings(root, home):
     return found
 
 
-# What may follow a note folder's name in text: one plain note file, then the
-# end of the word.
-NOTE_TAIL = re.compile(r"/([^/\s'\"`;&|<>()*?\[\]{}$\\~]+\.(?:md|txt|log))(?=$|[\s'\";&|<>)])", re.I)
+# What may follow a note folder's name in text: one plain note file name...
+NOTE_NAME = re.compile(r"/([^/\s'\"`;&|<>()*?\[\]{}$\\~]+\.(?:md|txt|log))", re.I)
+# ...then the end of the word. Unmapped calls arrive as JSON (`json_text`): an
+# end of line is the two characters backslash-n, a backslash the person typed is
+# doubled (so `x.md\.config.toml`, one file name to the shell, never matches),
+# and a bare `"` is the JSON string's ending, which is a word end. Raw command
+# text has none of these.
+WORD_END = re.compile(r"$|[\s;&|<>)]")
+WORD_END_JSON = re.compile(r"$|[\s;&|<>)\"]|\\[nrt]")
 
 
-def _names_protected(text, protected, home, notes=()):
+def _note_mention_ok(text, start, end, json_text=False):
+    """The name after a note folder in `text[start:end]` is a whole shell word,
+    with no quote next to it. A quote glued to the name can change what file the
+    shell means (`x.md'.config.toml'`, `''$HOME/.codex/x.md' .config.toml'`, or
+    `x.md'/../config.toml'` with a directory called x.md), and telling a closing
+    quote from a glued one takes the whole command's quote state. So a quoted
+    note path is never a note here; write it without quotes."""
+    tail = NOTE_NAME.match(text, end)
+    if not tail:
+        return None
+    before = text[start - 1:start]
+    if before == "'" or (before == '"' and (not json_text or text[start - 2:start - 1] == "\\")):
+        return None  # a quote right before the mention (a bare `"` in JSON is structure)
+    return tail.group(1) if (WORD_END_JSON if json_text else WORD_END).match(text, tail.end()) else None
+
+
+def _names_protected(text, protected, home, notes=(), json_text=False):
     t = text.casefold()
     if any(f in t for f in FRAGMENTS):
         return True
@@ -216,8 +239,8 @@ def _names_protected(text, protected, home, notes=()):
     for n in notes:
         for s in _spellings(n, home):
             for m in re.finditer(re.escape(s), text, re.I):
-                tail = NOTE_TAIL.match(text, m.end())
-                if not tail or not _is_note(os.path.join(n, tail.group(1)), [n]):
+                name = _note_mention_ok(text, m.start(), m.end(), json_text)
+                if not name or not _is_note(os.path.join(n, name), [n]):
                     return True
     return False
 
@@ -278,7 +301,7 @@ def decide(call, protected, home, canary_bin=None, notes=()):
             if call.screen and _names_protected(text, protected, home, notes):
                 return MENTIONED
             return None
-        if _names_protected(text, protected, home, notes) or HOST_FOLDER.search(text.casefold()):
+        if _names_protected(text, protected, home, notes, bool(call.text)) or HOST_FOLDER.search(text.casefold()):
             return MENTIONED
         return None
     except Exception:
