@@ -440,19 +440,18 @@ renamed:
    "verdict": "…", "installed": ["…"], "installed_at": "2026-09-26T00:00:00Z"}}}
 ```
 
-## `canary setup [--level scan|guard|lockdown]` and `canary doctor`
+## `canary setup [--level scan|guard]` and `canary doctor`
 
 `setup` asks which level the person wants in a native dialog, with the
 recommended one preselected (Guard when Claude Code or Codex is present).
 `--level` skips that question, so an agent can start setup on the person's
-behalf; Guard and Lockdown still need the person's password in the macOS
-administrator dialog, which an agent cannot answer.
+behalf; Guard still needs the person's password in the macOS administrator
+dialog, which an agent cannot answer.
 
 | Level | Password | What setup does |
 |---|---|---|
 | Scan | no | Nothing machine-wide. Reports the existing library. |
 | Guard | once | Installs Canary root-owned in `/Library/Application Support/SkillCanary`, a path macOS keeps root-owned all the way up (link `/usr/local/bin/canary`; 0.1.0 used `/usr/local/lib/skillcanary`, which old Homebrew installs leave owned by the person); writes the Claude Code drop-in `managed-settings.d/canary.json` and creates `/etc/codex/requirements.toml` when absent (else prints the block to add). |
-| Lockdown | once, and at every `canary add` | Guard, plus the user-level roots `~/.claude/skills` and `~/.agents/skills` become owned by root, so nothing running as the person (an agent, `npx skills`, a script inside a skill) can change them. `canary add` then installs through the administrator dialog (password or Touch ID). |
 
 The privileged step is one shell script passed to
 `do shell script … with administrator privileges` as a string, never a file
@@ -462,22 +461,31 @@ extracting. The script records the level and every file it created in
 `/Library/Application Support/SkillCanary/state.json` (root-owned; setup reads a 0.1.0 `state.json` from the old location only as a hint to the previous level, because the person may control that folder, and never deletes inside it as root). Nothing read from disk authorizes a root operation by itself. Setup only
 ever writes or removes its two policy files, and only when their content is
 exactly what this or an earlier SkillCanary writes, or their hash is recorded
-in the root-owned state; any other content is a manual step. It only ever
-locks or unlocks the two user skill roots, through the root-owned `canary`,
-which opens each folder from `/` without following links and skips (and
-`canary doctor` reports) a root reached through a link. Moving to a lower
-level removes those files and returns the roots to the person. The program itself stays installed at every
-level, since the Mac installer may have put it there.
+in the root-owned state; any other content is a manual step. Moving to
+Scan removes those files.
 
-At Lockdown, `canary add` copies the checked snapshot into a root-owned
-staging folder inside the root, has the root-owned `canary digest` confirm the
-staged copy's tree digest, and only then renames it into place, all in
-one administrator step.
+Lockdown, a third level that made the two user skill roots root-owned, was
+removed in the front-door program (2026-09-30). `canary setup --level
+lockdown` is a usage error that names Guard, and so is asking the Python
+API for it. When the root-owned `state.json` records Lockdown (never the
+0.1.0 state the person may control), setup returns the two user skill roots
+of the account running it (from the account database, not `$HOME`) to the
+person, through the root-owned `canary _roots unlock`. That helper refuses to
+run as anyone but the owner the setup step names (root), accepts only those
+two roots, opens each folder from `/` without following links, skips a root
+reached through a link, hands files back before their folders, and checks
+and re-owns each regular file through one handle, never a file with more
+than one name. A failed unlock fails the whole step: the recorded level stays
+Lockdown (the state file survives the reinstall) and `doctor` keeps saying
+so. The program itself stays installed at every
+level, since the Mac installer may have put it there.
 
 `canary doctor` reads `state.json` and checks the machine against it: the
 install and the hook command are root-owned and not writable by the person,
-each host's policy file carries the hook, Lockdown roots are root-owned, and
-the hook's Python runs. It prints the level, every gap in plain words, and the
+each host's policy file carries the hook, and the hook's Python runs. On a
+Mac still recorded at Lockdown it reports that, with the command that leaves
+it; it reports a user skills folder still owned by root; and a recorded level
+it does not know is reported as such, never as Scan. It prints the level, every gap in plain words, and the
 public-claims row that applies. Exit 0 when the machine matches its level, 10
 when there is a gap.
 
@@ -489,12 +497,7 @@ folder that is missing or holds just a SKILL.md ending in SkillCanary's marker
 line. A marker can be copied, so this keeps setup from replacing other skills;
 it is not proof of who wrote the folder. The skill is always written as the
 person, through open folder handles that never follow links, and never by the
-privileged step: at Lockdown it is written before the roots are locked.
-
-For Lockdown, the Mac installer is the recommended channel: Homebrew keeps
-programs in a folder the person's account can write, so software already
-running as them could alter SkillCanary before `canary setup` copies it into
-the root-owned location. `SECURITY.md` lists this with the other known limits.
+privileged step, after it has run.
 
 Setup never sets `allowManagedHooksOnly`, because that would disable the
 person's own hooks; a managed hook cannot be disabled from user settings
@@ -509,16 +512,15 @@ page to install it.
 1. **Install:** `brew install skillcanary/tap/canary` (signed GitHub release
    behind a Homebrew tap), or a signed, notarized macOS `.pkg`. An agent may
    run that exact command when asked; it never fetches instructions from a page.
-2. **Setup:** `canary setup` detects Claude Code and Codex, shows the three
-   protection levels (Scan, Guard, Lockdown) with their trade-offs, recommends
-   one, and asks for the password once for Guard or Lockdown. It then scans the
+2. **Setup:** `canary setup` detects Claude Code and Codex, shows the two
+   protection levels (Scan, Guard) with their trade-offs, recommends one, and
+   asks for the password once for Guard. It then scans the
    existing library in report-only mode and prints the counts.
 3. **Every install:** the person says "use Canary to install <link>" in chat,
    or runs `canary add <link>`. The agent only passes the link. Canary fetches
    into quarantine, scans, classifies, and asks the person in a native macOS
    dialog that summarizes publisher, version and capabilities in plain words.
-   At Lockdown the dialog requires Touch ID or the password. The agent receives
-   only the outcome.
+   The agent receives only the outcome.
 4. **Redirects:** at Guard and above, `npx skills add`, plugin installs and
    file-tool creation of a new skill are denied with the message "use `canary
    add <source>`", so the insecure path points to the secure one.
@@ -532,8 +534,9 @@ missing, to tell the person the install command. Each plugin must scan
 
 ## Enforcement layers and their limits
 
-No single mechanism enforces the goal, so Canary stacks four layers and
-states what each one covers.
+SkillCanary is a front door (program 2026-09-30): it checks a skill before
+any agent can use it, and does not try to stop software already running on
+the Mac from changing files. Three layers, and what each covers:
 
 1. **Install path.** `canary add` is the supported way in: fetch to quarantine,
    scan an immutable snapshot, install that exact snapshot. It is only as
@@ -548,30 +551,21 @@ states what each one covers.
    input sent with `write_stdin` to an already-approved process does not
    re-run the hook; hooks run concurrently; and a shell command can hide its
    target from any parser. Hooks are a guard, not proof.
-3. **Filesystem ownership.** *Proposed; needs an owner decision.* Setup makes
-   the user-level discovery roots root-owned, so no user-level process (an
-   agent, `npx skills`, a script inside an approved skill) can add or change a
-   skill there; `canary add` writes through a root-owned helper after the
-   person approves. This is the layer that closes the hook gaps for
-   user-level roots. Cost: plugin managers' own installs and auto-updates into
-   those roots stop working and go through `canary update` instead.
-   Repository-local roots (`.agents/skills`, `.claude/skills` in any repo)
-   cannot be root-owned; layer 2 guards them, and `canary scan` runs on them
-   when a session starts in a new repo.
-4. **Detection.** `canary doctor` and an alert-only watcher report packages and
-   configuration that changed without passing through Canary.
+3. **Detection.** A guest list of what arrived and what changed, and a
+   watcher that holds a new, unchecked skill for the person's decision (both
+   in progress in the front-door program), report skills that came in or
+   changed some other way. Root-owned skill folders (Lockdown) were tried and
+   removed: they blocked ordinary work, and the hook is not proof either.
 
 Public claims follow the layers actually installed:
 
 | Installed | What Canary may say |
 |---|---|
 | 1 and 2 | "Guards installs by agents in Claude Code and Codex." |
-| 1, 2 and 3 | "Enforces vetting for user-level skill directories on this Mac, and guards repository skills." |
 | any | Cursor, opencode and Gemini: "scanned and monitored, not enforced." |
 
-At Scan and Guard, the `canary add` dialog is the person's checkpoint; an
-agent that can control the screen could click it. Lockdown's Touch ID or
-password step is what closes that, and no claim above says otherwise.
+The `canary add` dialog is the person's checkpoint; an agent that can
+control the screen could click it, and no claim above says otherwise.
 
 `canary doctor` prints which row applies to the machine it runs on.
 

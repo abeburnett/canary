@@ -23,7 +23,10 @@ from canary import frontdoor
 from canary.hosts import claude as claude_host
 from canary.hosts import codex as codex_host
 
-LEVELS = ("scan", "guard", "lockdown")
+LEVELS = ("scan", "guard")
+# Lockdown was removed in the front-door program (2026-09-30). A recorded
+# Lockdown level is still read, so setup can return the skill folders.
+RECORDED_LEVELS = LEVELS + ("lockdown",)
 # macOS keeps every folder on this path root-owned, so no user account can
 # swap the install. 0.1.0 used usr/local/lib, which old Homebrew installs
 # leave owned by the person.
@@ -35,15 +38,11 @@ PACKAGE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CLAIMS = {
     "scan": "Scans skills when asked. Nothing is enforced.",
     "guard": "Guards installs by agents in Claude Code and Codex.",
-    "lockdown": "Enforces vetting for user-level skill folders on this Mac, and guards "
-                "repository skills.",
 }
 LEVEL_TEXT = {
     "scan": "Scan: check skills when you ask. No password, nothing enforced.",
     "guard": "Guard (recommended): block agents from installing skills any way but "
              "canary add. Password once.",
-    "lockdown": "Lockdown: Guard, and only canary add can change your skill folders. "
-                "Password now and at each install.",
 }
 
 
@@ -93,7 +92,17 @@ def _state_at(prefix, lib):
             state = json.load(fh)
     except (OSError, ValueError):
         return None
-    return state if isinstance(state, dict) and state.get("level") in LEVELS else None
+    return state if isinstance(state, dict) and state.get("level") in RECORDED_LEVELS else None
+
+
+def _raw_state(prefix):
+    """The level string in the root-owned state file, whatever it is, or None."""
+    try:
+        with open(_at(prefix, LIB + "/state.json"), encoding="utf-8") as fh:
+            state = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    return state.get("level") if isinstance(state, dict) else None
 
 
 def read_state(prefix="/"):
@@ -167,11 +176,12 @@ def plan(level, home, prefix="/"):
     roots = lock_roots(home)
     return {"level": level, "files": files, "remove": remove, "manual": manual,
             "frontdoor": frontdoor.targets(home, roots),
-            "lock": roots if level == "lockdown" else [],
-            "unlock": roots if level != "lockdown" and hint.get("level") == "lockdown" else [],
+            # Only the root-owned state may start a root operation; a Lockdown
+            # level in 0.1.0's user-controlled state is a hint and unlocks nothing.
+            "unlock": roots if trusted.get("level") == "lockdown" else [],
             "home": home,
             "state": {"level": level, "created": created,
-                      "locked": roots if level == "lockdown" else [],
+                      "locked": [],
                       "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}}
 
 
@@ -212,42 +222,57 @@ def _ids(spec):
 
 
 def change_roots(action, owner, person, home, roots):
-    """Lock (owner, no group/other write) or unlock (back to the person) each
-    skill root through folder handles, never following links. A root reached
-    through a link is skipped and reported; `canary doctor` shows it as a gap.
-    Runs as root inside the privileged step, from the root-owned install."""
-    uid, gid = _ids(owner if action == "lock" else person)
-    pid = _ids(person)
+    """Return each skill root to the person (Lockdown, removed 2026-09-30, made
+    them root-owned) through folder handles, never following links. A root
+    reached through a link is skipped. Runs as root inside the privileged
+    step, from the root-owned install. `action` must be "unlock"."""
+    if action != "unlock":
+        raise ValueError("SkillCanary no longer locks skill folders")
+    known = {os.path.normpath(r) for r in lock_roots(home)}
+    if not roots or any(os.path.normpath(r) not in known for r in roots):
+        raise ValueError("Only the two user skill folders can be returned")
+    uid, gid = _ids(person)
     skipped = []
     for root in roots:
         try:
-            fd = _open_dirs(root, create_under=home if action == "lock" else None, person=pid)
+            fd = _open_dirs(root)
         except FileNotFoundError:
             continue
         except OSError:
             skipped.append(root)
             continue
         try:
-            for _, dirnames, filenames, dfd in os.fwalk(".", dir_fd=fd, follow_symlinks=False):
+            # Bottom up: a folder becomes the person's only after everything in
+            # it, so nothing can be swapped in below a folder already handed back.
+            for _, dirnames, filenames, dfd in os.fwalk(".", dir_fd=fd, topdown=False,
+                                                        follow_symlinks=False):
+                for name in filenames:
+                    _return_file(name, dfd, uid, gid)
                 os.fchown(dfd, uid, gid)
-                if action == "lock":
-                    os.fchmod(dfd, os.fstat(dfd).st_mode & 0o7755 | 0o755)
-                for name in filenames + dirnames:
-                    st = os.stat(name, dir_fd=dfd, follow_symlinks=False)
-                    if stat.S_ISDIR(st.st_mode):
-                        continue  # fwalk visits it next, through its own handle
-                    if stat.S_ISREG(st.st_mode) and st.st_nlink > 1:
-                        # Another name for this file may live outside the
-                        # root; changing it would change that file too.
-                        continue
-                    os.chown(name, uid, gid, dir_fd=dfd, follow_symlinks=False)
-                    if action == "lock" and stat.S_ISREG(st.st_mode):
-                        os.chmod(name, st.st_mode & 0o7755, dir_fd=dfd, follow_symlinks=False)
         finally:
             os.close(fd)
     for root in skipped:
         print(f"canary: skipped {root}: it is reached through a link", file=sys.stderr)
     return 0
+
+
+def _return_file(name, dfd, uid, gid):
+    """Hand one entry back. A regular file is opened without following links
+    and checked and re-owned through the same handle, so the file checked is
+    the file changed; one with more than one name (another file elsewhere on
+    the Mac) is left alone."""
+    try:
+        ffd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dfd)
+    except OSError:
+        os.chown(name, uid, gid, dir_fd=dfd, follow_symlinks=False)  # a link or special file
+        return
+    try:
+        st = os.fstat(ffd)
+        if stat.S_ISREG(st.st_mode) and st.st_nlink > 1:
+            return
+        os.fchown(ffd, uid, gid)
+    finally:
+        os.close(ffd)
 
 
 def script(p, prefix="/", owner="root:wheel", person=None):
@@ -261,6 +286,8 @@ def script(p, prefix="/", owner="root:wheel", person=None):
                   f"printf '%s  %s\\n' {q(sha)} \"$T/c.tgz\" | /usr/bin/shasum -a 256 -c - >/dev/null",
                   f"rm -rf {q(lib + '.new')}", f"mkdir -p {q(lib + '.new')}",
                   f"tar -xzf \"$T/c.tgz\" -C {q(lib + '.new')}",
+                  # Keep the recorded level if a later step fails.
+                  f"[ ! -f {q(lib + '/state.json')} ] || cp {q(lib + '/state.json')} {q(lib + '.new/state.json')}",
                   f"rm -rf {q(lib)}", f"mv {q(lib + '.new')} {q(lib)}",
                   f"mkdir -p {q(os.path.dirname(link))}", f"ln -sfn {q(lib + '/bin/canary')} {q(link)}"]
     for f in p["files"]:
@@ -273,11 +300,11 @@ def script(p, prefix="/", owner="root:wheel", person=None):
     # Locking and unlocking run the root-owned canary, which walks each skill
     # root from / through folder handles and never follows a link.
     helper = f"{PYTHON} -I -B {q(lib + '/bin/canary')}"
-    for action, roots in (("lock", p["lock"]), ("unlock", p["unlock"] if person else [])):
-        if roots:
-            lines.append(f"[ ! -x {q(lib + '/bin/canary')} ] || {helper} _roots {action} "
-                         f"{q(owner)} {q(person or owner)} {q(p['home'])} "
-                         + " ".join(q(r) for r in roots))
+    if p["unlock"] and person:
+        # No escape when the helper is missing: a failed unlock fails the whole
+        # step, so the recorded level stays Lockdown and doctor keeps saying so.
+        lines.append(f"{helper} _roots unlock {q(owner)} {q(person)} {q(p['home'])} "
+                     + " ".join(q(r) for r in p["unlock"]))
     # Scan keeps the program (the Mac installer may have put it there) and
     # records the level; only the protection is removed.
     state = base64.b64encode(json.dumps(p["state"], indent=2).encode()).decode("ascii")
@@ -303,7 +330,7 @@ def run_as_admin(text):
 
 
 CHOOSE_SCRIPT = """on run argv
-  set r to choose from list {item 1 of argv, item 2 of argv, item 3 of argv} with title "SkillCanary setup" with prompt "How much protection do you want? You can change this later with canary setup." default items {item 2 of argv}
+  set r to choose from list {item 1 of argv, item 2 of argv} with title "SkillCanary setup" with prompt "How much protection do you want? You can change this later with canary setup." default items {item 2 of argv}
   if r is false then return ""
   return item 1 of r
 end run"""
@@ -333,7 +360,13 @@ def _write_frontdoor(p):
 def setup(level=None, *, home=None, prefix="/", runner=run_as_admin, chooser=choose_level,
           owner="root:wheel", person=None):
     """Move this Mac to `level`. Returns (outcome dict, exit code)."""
-    home = home or os.path.expanduser("~")
+    if level == "lockdown":
+        raise ValueError("Lockdown was removed; use guard, which also returns locked folders")
+    # The root step acts on this home, so it comes from the account database,
+    # never from $HOME, which whoever launched setup controls.
+    if home is None:
+        import pwd
+        home = pwd.getpwuid(os.getuid()).pw_dir
     person = person or f"{os.getuid()}:{os.getgid()}"
     level = level or chooser()
     if level not in LEVELS:
@@ -341,30 +374,24 @@ def setup(level=None, *, home=None, prefix="/", runner=run_as_admin, chooser=cho
     p = plan(level, home, prefix)
     previous = (read_state(prefix) or {}).get("level", "scan")
     needs_admin = level != "scan" or previous != "scan"
-    # The SkillCanary skill is written as the person, never by the root step.
-    # At Lockdown that happens before the roots are locked (a Mac already at
-    # Lockdown keeps the copy it has); otherwise after the root step, which
-    # may have just unlocked them.
-    if level == "lockdown" and previous != "lockdown":
-        _write_frontdoor(p)
+    # The SkillCanary skill is written as the person, never by the root step,
+    # and after it, which may have just returned the skill folders.
     if needs_admin and not runner(script(p, prefix, owner, person)):
         return {"outcome": "not_changed", "level": previous, "manual": []}, 10
-    if level != "lockdown":
-        _write_frontdoor(p)
+    _write_frontdoor(p)
     return {"outcome": "done", "level": level,
             "manual": [{"path": m["path"], "block": m["block"]} for m in p["manual"]]}, 0
 
 
-def _below(home, path):
-    """Each folder from just under home down to path."""
-    rel = os.path.relpath(path, home).split(os.sep)
-    return [os.path.join(home, *rel[:i + 1]) for i in range(len(rel))]
-
-
-def doctor(home=None, prefix="/", expected_uid=0):
+def doctor(home=None, prefix="/", expected_uid=0, root_uid=0):
     """(level, gaps in plain words, claim)."""
     home = home or os.path.expanduser("~")
     state = read_state(prefix)
+    raw = _raw_state(prefix)
+    if state is None and raw is not None:
+        return "unknown", [f"SkillCanary's recorded level ({raw!r}) is not one it knows. "
+                           "Run canary setup to set it again."], \
+            "SkillCanary's state is not one it understands; nothing is claimed."
     if not state or state["level"] == "scan":
         return "scan", [], CLAIMS["scan"]
     level, gaps = state["level"], []
@@ -397,31 +424,19 @@ def doctor(home=None, prefix="/", expected_uid=0):
             has_hook = False
         if not has_hook:
             gaps.append(f"{name} is not running Canary's hook ({policy} lacks it).")
-    for root in lock_roots(home):
-        linked = [c for c in _below(home, root) if os.path.islink(c)]
-        if linked:
-            gaps.append(f"{linked[0]} is a link, so SkillCanary cannot lock or safely write "
-                        f"{root}; make it a real folder.")
-    for root in lock_roots(home):
-        if os.path.islink(root) or not os.path.isdir(root):
-            continue
-        for dirpath, _, filenames in os.walk(root):
-            if any(os.lstat(os.path.join(dirpath, f)).st_nlink > 1
-                   for f in filenames if not os.path.islink(os.path.join(dirpath, f))):
-                gaps.append(f"{root} contains a file with more than one name (a hard link); "
-                            "SkillCanary leaves it unlocked. Replace it with a plain copy.")
-                break
-        else:
-            continue
     if level == "lockdown":
+        gaps.append("This Mac is still at Lockdown, which SkillCanary no longer has. Run "
+                    "canary setup --level guard to return your skill folders to you.")
+    if root_uid != os.getuid():
         for root in lock_roots(home):
             try:
-                st = os.stat(root)
-                ok = st.st_uid == expected_uid and not st.st_mode & 0o022
+                owned_by_root = os.stat(root).st_uid == root_uid
             except OSError:
-                ok = False
-            if not ok:
-                gaps.append(f"{root} is not locked; anything running as you can change it.")
+                continue
+            if owned_by_root:
+                gaps.append(f"{root} is still owned by root, so you cannot add or change "
+                            "skills there. Run canary setup --level guard; if it is reached "
+                            "through a link, change the folder it leads to back yourself.")
     try:
         ok = subprocess.run([PYTHON, "-I", "-c", "pass"], capture_output=True,
                             timeout=30).returncode == 0
@@ -432,7 +447,11 @@ def doctor(home=None, prefix="/", expected_uid=0):
                     "Install the command-line tools: xcode-select --install")
     # With a gap, the level's claim does not hold yet, but saying "nothing is
     # enforced" would be wrong too: the hooks are in place.
-    claim = CLAIMS[level] if not gaps else (
-        f"{level.capitalize()} is set up but not fully in force until the gaps "
-        "below are fixed.")
+    if level == "lockdown":
+        claim = ("This Mac is still at Lockdown, left over from an earlier SkillCanary; "
+                 "the hooks are in place, but run the setup step below.")
+    else:
+        claim = CLAIMS[level] if not gaps else (
+            f"{level.capitalize()} is set up but not fully in force until the gaps "
+            "below are fixed.")
     return level, gaps, claim

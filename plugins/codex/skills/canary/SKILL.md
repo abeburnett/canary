@@ -10,9 +10,8 @@ plugin provides onboarding instructions. Protection comes from the Canary
 CLI and the protection level the person chooses during setup.
 
 When the person wants to set up Canary, run `canary setup`. It asks the
-person to choose a protection level in a Mac dialog and, for Guard or
-Lockdown, asks for their password in the standard macOS window. Report its
-result.
+person to choose a protection level in a Mac dialog and, for Guard, asks
+for their password in the standard macOS window. Report its result.
 
 When Canary is not installed, tell the person to set it up from
 https://skillcanary.com, which gives a sentence to paste into this app. Do
