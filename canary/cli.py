@@ -215,7 +215,11 @@ def _list(args):
     if args not in ([], ["--json"]):
         print(USAGE, file=sys.stderr)
         return EXIT_USAGE
-    report = guestlist.scan(cwd=os.getcwd())
+    try:
+        report = guestlist.scan(cwd=os.getcwd())
+    except OSError as exc:
+        print(f"canary: could not read the guest list ({exc.strerror or exc}).", file=sys.stderr)
+        return 1
     print(json.dumps(report, indent=2) if args else guestlist.render_text(report))
     return 0
 
@@ -230,6 +234,9 @@ def _trust(args):
     except ValueError as exc:
         print(f"canary: {exc}", file=sys.stderr)
         return EXIT_USAGE
+    except OSError as exc:
+        print(f"canary: could not write the guest list ({exc.strerror or exc}).", file=sys.stderr)
+        return 1
     print("Marked as yours: " + ", ".join(names))
     return 0
 

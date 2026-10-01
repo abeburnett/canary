@@ -291,10 +291,28 @@ installs the SessionStart hook in both hosts; the hook denies file-tool
 writes to the ledger and the lockfile. Interface: `docs/architecture.md`,
 "The guest list".
 
-- Tests: `tests/test_guestlist.py` (12), two in `tests/test_setup.py`, and
+- Tests: `tests/test_guestlist.py` (17), two in `tests/test_setup.py`, and
   four hook cases in the corpus (three record writes denied, a read
   allowed).
-- Deliberate breaks: 14, each turning a named test red. The first run found
+- Review: Muse Spark 1.3 Contributor, read-only, one round, 10 findings.
+  Fixed, each with a test that failed first:
+  - a same-size edit with its modification time put back reused the cached
+    fingerprint; the cache key now includes the change time and inode;
+  - a change to a file a link inside the skill points at went unseen; links
+    are now followed, each folder once, within a size limit;
+  - a deleted ledger made every skill "yours" again; only setup takes the
+    first look now, and any other scan reports skills it has no record of;
+  - a refused install, and one stopped before the dialog, were not recorded;
+  - one skill under two names showed only one; both are listed.
+  Also fixed: fingerprinting before taking the ledger lock; `canary list`
+  and `canary trust` report a file error instead of a traceback; the docs
+  now say `list` scans the current repository too.
+  Recorded, not changed: a tool the hook does not read (an MCP server's file
+  tool) can write the ledger, as with every hook rule (documented); an
+  unknown `--host` prints nothing, which only a hand-edited hook command
+  can cause. Owner decision pending: repository skills are not in setup's
+  first look, so the first session in each repository reports them once.
+- Deliberate breaks: 19, each turning a named test red. The first run found
   one gap: the "never fails the session" test fed a damaged ledger, which is
   skipped without an error, so it could not fail; it now makes the scan
   itself raise.

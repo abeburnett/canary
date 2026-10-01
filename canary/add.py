@@ -495,6 +495,7 @@ def add(source, *, home=None, support_dir=None, approve=None, fetch=None,
         if verdict == "UNSAFE":
             out["outcome"] = "refused"
             out["reasons"].append("Not installed: SkillCanary judged it unsafe.")
+            _record(guestlist.record_decision, home, name, verdict, "refused", support=support_dir)
             return out
 
         destinations = [os.path.join(HOSTS[h][1].install_root(home), name) for h in hosts]
@@ -502,6 +503,8 @@ def add(source, *, home=None, support_dir=None, approve=None, fetch=None,
             out["outcome"] = "not_installed"
             out["reasons"].append(f"A skill named {name} is already installed; "
                                   "use canary update to replace it.")
+            _record(guestlist.record_decision, home, name, verdict, "not_installed",
+                    support=support_dir)
             return out
         unwritable = [os.path.dirname(d) for d in destinations
                       if os.path.isdir(os.path.dirname(d))
@@ -512,6 +515,8 @@ def add(source, *, home=None, support_dir=None, approve=None, fetch=None,
             out["reasons"].append(f"SkillCanary cannot write to {unwritable[0]}. If this Mac "
                                   "was set to Lockdown by an earlier SkillCanary, run canary "
                                   "setup --level guard to return the folder to you.")
+            _record(guestlist.record_decision, home, name, verdict, "not_installed",
+                    support=support_dir)
             return out
 
         summary = {"verdict": verdict, "reasons": reasons, "name": name, "owner": owner,

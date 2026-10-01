@@ -9,8 +9,10 @@ reports two things, and only these:
 - a skill that came in through the check and has changed since it was
   approved ("changed since approval").
 
-Skills present the first time SkillCanary looks, and skills the person marks
-with `canary trust`, are theirs: their changes are recorded, never reported.
+Skills present at setup's first look, and skills the person marks with
+`canary trust`, are theirs: their changes are recorded, never reported.
+Without a ledger, every skill counts as unchecked until setup or `canary
+trust` says otherwise.
 
 This is a report, not proof: the ledger lives in the person's account, and
 software running as them can change it.
@@ -31,6 +33,9 @@ LEDGER = "ledger.jsonl"
 CACHE = "guestlist-cache.json"
 REPO_ROOTS = (".claude/skills", ".agents/skills", ".codex/skills")
 YOURS, CHECKED, UNCHECKED = "yours", "checked", "unchecked"
+# A link inside a skill is followed, so a change to what it points at is a
+# change to the skill. These bound how much one skill costs to fingerprint.
+MAX_ENTRIES, MAX_BYTES = 5000, 64 << 20
 
 
 def _support(support):
@@ -60,8 +65,9 @@ def repo_roots(cwd):
 
 
 def _skills(roots):
-    """{real path of each skill folder: name}. A skill folder is a folder (or
-    a link to one) directly in a skills folder, holding a SKILL.md."""
+    """{real path of each skill folder: [names]}. A skill folder is a folder
+    (or a link to one) directly in a skills folder, holding a SKILL.md; one
+    skill reached under several names lists them all."""
     found = {}
     for root in roots:
         try:
@@ -71,55 +77,94 @@ def _skills(roots):
         for name in names:
             folder = os.path.join(root, name)
             if os.path.isfile(os.path.join(folder, "SKILL.md")):
-                found.setdefault(os.path.realpath(folder), name)
-    return found
+                found.setdefault(os.path.realpath(folder), [])
+                if name not in found[os.path.realpath(folder)]:
+                    found[os.path.realpath(folder)].append(name)
+    return {path: sorted(names) for path, names in found.items()}
+
+
+def _walk(folder):
+    """(relative path, path, lstat, stat) for everything in the skill except
+    `.git`, following links (each folder once, so a loop ends), up to
+    MAX_ENTRIES. stat is None when a link leads nowhere."""
+    seen, stack, count = set(), [(folder, "")], 0
+    while stack:
+        directory, rel_dir = stack.pop()
+        try:
+            st = os.stat(directory)
+            names = sorted(os.listdir(directory))
+        except OSError:
+            continue
+        if (st.st_dev, st.st_ino) in seen:
+            continue
+        seen.add((st.st_dev, st.st_ino))
+        for name in names:
+            if name == ".git":
+                continue
+            count += 1
+            if count > MAX_ENTRIES:
+                yield "\0too-many", None, None, None
+                return
+            path = os.path.join(directory, name)
+            rel = os.path.join(rel_dir, name) if rel_dir else name
+            try:
+                lst = os.lstat(path)
+            except OSError:
+                continue
+            try:
+                full = os.stat(path) if stat.S_ISLNK(lst.st_mode) else lst
+            except OSError:
+                full = None
+            yield rel, path, lst, full
+            if full is not None and stat.S_ISDIR(full.st_mode):
+                stack.append((path, rel))
 
 
 def _quick_key(folder):
-    """Names, sizes and modification times of everything in the skill: cheap
-    to read, and it changes whenever the content can have."""
+    """Names, sizes, times and inodes of everything in the skill, and of what
+    its links point at. Cheap to read, and the change time (ctime) moves with
+    every write; software cannot set it back."""
     rows = []
-    for dirpath, dirnames, filenames in os.walk(folder, followlinks=False):
-        dirnames[:] = sorted(d for d in dirnames if d != ".git")
-        for name in sorted(filenames) + [d for d in dirnames if os.path.islink(os.path.join(dirpath, d))]:
-            path = os.path.join(dirpath, name)
-            try:
-                st = os.lstat(path)
-            except OSError:
-                continue
-            rows.append(f"{os.path.relpath(path, folder)}\0{st.st_size}\0{st.st_mtime_ns}\0{st.st_mode}")
+    for rel, _path, lst, full in _walk(folder):
+        for st in (lst, full):
+            rows.append(f"{rel}\0" + ("-" if st is None else
+                        f"{st.st_size}\0{st.st_mtime_ns}\0{st.st_ctime_ns}\0{st.st_ino}\0{st.st_mode}"))
     return hashlib.sha256("\n".join(rows).encode("utf-8", "surrogateescape")).hexdigest()
 
 
 def digest(folder):
-    """A fingerprint of every file's bytes, path and program bit (and each
-    link's target), without `.git`. Links are recorded, never followed."""
-    entries = []
-    for dirpath, dirnames, filenames in os.walk(folder, followlinks=False):
-        dirnames[:] = sorted(d for d in dirnames if d != ".git")
-        for name in sorted(filenames) + sorted(dirnames):
-            path = os.path.join(dirpath, name)
-            rel = os.path.relpath(path, folder)
+    """A fingerprint of every file's bytes, path and program bit, without
+    `.git`. A link is recorded with its target and followed, so a change to
+    what it points at changes the fingerprint. Past MAX_ENTRIES files or
+    MAX_BYTES read, the rest is left out and the fingerprint says so."""
+    entries, budget = [], MAX_BYTES
+    for rel, path, lst, full in _walk(folder):
+        if path is None:
+            entries.append("!\0too many files")
+            break
+        if stat.S_ISLNK(lst.st_mode):
             try:
-                st = os.lstat(path)
+                entries.append(f"l\0{rel}\0{os.readlink(path)}")
+            except OSError:
+                entries.append(f"?\0{rel}")
+        if full is None:
+            entries.append(f"?\0{rel}")
+        elif stat.S_ISREG(full.st_mode):
+            h, budget = hashlib.sha256(), budget - full.st_size
+            if budget < 0:
+                entries.append(f"!\0{rel}\0too large")
+                break
+            try:
+                with open(path, "rb") as fh:
+                    for chunk in iter(lambda: fh.read(1 << 16), b""):
+                        h.update(chunk)
             except OSError:
                 entries.append(f"?\0{rel}")
                 continue
-            if stat.S_ISLNK(st.st_mode):
-                entries.append(f"l\0{rel}\0{os.readlink(path)}")
-            elif stat.S_ISREG(st.st_mode):
-                h = hashlib.sha256()
-                try:
-                    with open(path, "rb") as fh:
-                        for chunk in iter(lambda: fh.read(1 << 16), b""):
-                            h.update(chunk)
-                except OSError:
-                    entries.append(f"?\0{rel}")
-                    continue
-                entries.append(f"f\0{rel}\0{'x' if st.st_mode & 0o100 else '-'}\0{h.hexdigest()}")
-            elif not stat.S_ISDIR(st.st_mode):
-                entries.append(f"s\0{rel}")
-    data = "skillcanary.guest.v1\n" + "\n".join(sorted(entries))
+            entries.append(f"f\0{rel}\0{'x' if full.st_mode & 0o100 else '-'}\0{h.hexdigest()}")
+        elif not stat.S_ISDIR(full.st_mode):
+            entries.append(f"s\0{rel}")
+    data = "skillcanary.guest.v2\n" + "\n".join(sorted(entries))
     return "sha256:" + hashlib.sha256(data.encode("utf-8", "surrogateescape")).hexdigest()
 
 
@@ -170,11 +215,11 @@ def _now():
 
 def _state(events):
     """Replay the ledger: {skill path: {status, digest, approved, name, since}}."""
-    skills, started = {}, False
+    skills, looked = {}, False
     for e in events:
         path, kind = e.get("skill"), e["event"]
-        if kind == "started":
-            started = True
+        if kind == "first_look":
+            looked = True
         if not isinstance(path, str):
             continue
         s = skills.get(path)
@@ -191,7 +236,7 @@ def _state(events):
             s["digest"] = e.get("digest")
         elif kind == "removed":
             skills.pop(path, None)
-    return skills, started
+    return skills, looked
 
 
 def _cached_digest(folder, cache):
@@ -220,25 +265,31 @@ def _write_cache(support, cache):
     os.replace(tmp, os.path.join(support, CACHE))
 
 
-def scan(home=None, support=None, cwd=None):
+def scan(home=None, support=None, cwd=None, first_look=False):
     """Compare the skills folders with the ledger, record what is new,
-    changed or gone, and return the report."""
+    changed or gone, and return the report. Setup passes `first_look`: if
+    the ledger has no first look yet, the skills here now are the person's.
+    Any other scan counts a skill it has no record of as unchecked."""
     home = home or os.path.expanduser("~")
     support = _support(support) if support else os.path.join(home, SUPPORT[2:])
+    present = _skills(user_roots(home) + repo_roots(cwd))
+    # Fingerprint before taking the lock, so a large skill never holds up
+    # another session's scan.
+    os.makedirs(support, mode=0o700, exist_ok=True)
+    cache = _read_cache(support)
+    digests = {path: _cached_digest(path, cache) for path in present}
     with _Lock(support):
         events = _events(support)
-        known, started = _state(events)
-        present = _skills(user_roots(home) + repo_roots(cwd))
-        cache = _read_cache(support)
+        known, looked = _state(events)
         new, at = [], _now()
-        if not started:
-            new.append({"at": at, "event": "started"})
-        for path, name in present.items():
-            d = _cached_digest(path, cache)
+        baseline = first_look and not looked
+        if baseline:
+            new.append({"at": at, "event": "first_look"})
+        for path, names in present.items():
+            d, name = digests[path], names[0]
             s = known.get(path)
             if s is None:
-                # On the very first look, what is already here is the person's.
-                kind = "baseline" if not started else "arrived"
+                kind = "baseline" if baseline else "arrived"
                 new.append({"at": at, "event": kind, "skill": path, "name": name, "digest": d,
                             **({"how": "found"} if kind == "arrived" else {})})
             elif s.get("digest") != d:
@@ -251,11 +302,13 @@ def scan(home=None, support=None, cwd=None):
         _write_cache(support, cache)
         state, _ = _state(events + new)
     skills = []
-    for path, name in sorted(present.items(), key=lambda kv: (kv[1], kv[0])):
+    for path, names in sorted(present.items(), key=lambda kv: (kv[1], kv[0])):
         s = state.get(path, {})
         changed = s.get("status") == CHECKED and s.get("digest") != s.get("approved")
-        skills.append({"name": name, "path": path, "status": s.get("status", UNCHECKED),
-                       "changed_since_approval": changed, "since": s.get("since")})
+        for name in names:
+            skills.append({"name": name, "names": names, "path": path,
+                           "status": s.get("status", UNCHECKED),
+                           "changed_since_approval": changed, "since": s.get("since")})
     return {"schema": "canary.list/1", "skills": skills,
             "unchecked": [s for s in skills if s["status"] == UNCHECKED],
             "changed": [s for s in skills if s["changed_since_approval"]]}
@@ -287,7 +340,7 @@ def trust(folder, home=None, support=None):
     support = _support(support) if support else os.path.join(home, SUPPORT[2:])
     real = os.path.realpath(folder)
     targets = ({real: os.path.basename(real)} if os.path.isfile(os.path.join(real, "SKILL.md"))
-               else _skills([real]))
+               else {p: names[0] for p, names in _skills([real]).items()})
     if not targets:
         raise ValueError("That is neither a skill folder nor a folder of skills.")
     at = _now()

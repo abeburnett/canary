@@ -382,7 +382,7 @@ def setup(level=None, *, home=None, prefix="/", runner=run_as_admin, chooser=cho
     # The guest list's first look: the skills here now are the person's.
     try:
         from canary import guestlist
-        guestlist.scan(home)
+        guestlist.scan(home, first_look=True)
     except (OSError, ValueError):
         pass
     return {"outcome": "done", "level": level,

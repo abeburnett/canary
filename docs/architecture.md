@@ -512,28 +512,38 @@ anyway.
 SkillCanary records every skill in a skills folder, how it got there, and
 every later change or removal (`canary/guestlist.py`). The record is an
 append-only ledger, `ledger.jsonl` in `~/Library/Application Support/Canary`,
-one JSON event per line, written under a file lock: `started`, `baseline`,
-`arrived` (with `how`), `checked`, `approved` (with `how: canary add`),
-`declined` or another `canary add` outcome, `changed`, `removed` and
+one JSON event per line, written under a file lock: `first_look`,
+`baseline`, `arrived` (with `how`), `checked`, `approved` (with `how: canary
+add`), `declined`, `refused` or `not_installed`, `changed`, `removed` and
 `trusted`. A damaged line is skipped. Each skill is keyed by its resolved
-path and fingerprinted over every file's bytes, path and program bit and each
-link's target, without `.git`; a cache of names, sizes and times keeps a scan
-from rereading unchanged skills.
+path; a skill reached under several names is listed under each. Its
+fingerprint covers every file's bytes, path and program bit, without `.git`.
+Links inside a skill are recorded and followed (each folder once), so a
+change to what a link points at is a change to the skill; past 5,000 files or
+64 MB, the rest is left out. A cache keyed on names, sizes, modification and
+change times and inodes keeps a scan from rereading unchanged skills; the
+change time moves with every write and software cannot set it back. Skills
+are fingerprinted before the lock is taken, so a large skill does not hold up
+another session.
 
 Every skill has one status:
 
-- **yours**: present the first time SkillCanary looked (setup takes that
-  first look), or marked with `canary trust`. Changes are recorded and never
-  reported.
+- **yours**: in a user skills folder at setup's first look, or marked with
+  `canary trust`. Changes are recorded and never reported. Only setup takes
+  the first look, once per ledger: without a ledger, every skill counts as
+  unchecked until setup runs again or the person trusts it.
 - **checked**: installed by `canary add`. A change after approval is
   reported as **changed since approval**.
 - **unchecked**: arrived any other way. Reported until the person trusts it
   or removes it.
 
 The folders scanned are the user skills folders (each host's `install_root`
-and `CODEX_HOME/skills`) and, for `session-start`, the `.claude/skills`,
-`.agents/skills` and `.codex/skills` folders of the repository around the
-session's `cwd`.
+and `CODEX_HOME/skills`) and the `.claude/skills`, `.agents/skills` and
+`.codex/skills` folders of the repository around the current folder (the
+session's `cwd` for `session-start`). Setup's first look does not cover
+repositories, so the first session in a repository reports its skills once;
+`canary trust <repo>/.claude/skills` marks them all as the person's. A cloned
+repository's skills are what this report is for.
 
 - `canary list` prints each skill, its status and path; `--json` prints
   `{"schema": "canary.list/1", "skills": [{"name", "path", "status",
@@ -552,7 +562,8 @@ session's `cwd`.
 
 The guest list is a report, not proof. The ledger lives in the person's
 account; the hook keeps agents' file tools from rewriting it, but a shell
-command or other software running as the person can change it.
+command, a tool the hook does not read (such as an MCP server's file tool),
+or other software running as the person can change it.
 
 ## How people get Canary and use it
 
