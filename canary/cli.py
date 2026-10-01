@@ -18,7 +18,7 @@ USAGE = ("usage: canary scan <skill-file-or-directory> [--json | --text] [--exce
          " [--timeout <seconds>]\n"
          "       canary add <github-link-or-folder> [--host claude|codex]... [--json | --text]"
          " [--backend <name>] [--model <id>] [--timeout <seconds>]\n"
-         "       canary setup [--level scan|guard|lockdown]\n"
+         "       canary setup [--level scan|guard]\n"
          "       canary doctor [--json]\n"
          "       canary digest <folder>")
 VALUE_FLAGS = {"--backend", "--model", "--timeout"}
@@ -174,6 +174,10 @@ def _setup(args):
     level = None
     if args[:1] == ["--level"] and len(args) == 2 and args[1] in setup.LEVELS:
         level = args[1]
+    elif args == ["--level", "lockdown"]:
+        print("canary: Lockdown was removed; use canary setup --level guard, which also "
+              "returns locked skill folders to you.", file=sys.stderr)
+        return EXIT_USAGE
     elif args:
         print(USAGE, file=sys.stderr)
         return EXIT_USAGE
@@ -248,8 +252,14 @@ def main(argv):
             ev = evidence.produce(rest[0])
             print(json.dumps(ev, indent=2))
             return evidence.EXIT[ev["deterministic"]["verdict"]]
-        if command == "_roots" and len(rest) >= 5 and rest[0] in ("lock", "unlock"):
+        if command == "_roots" and len(rest) >= 5 and rest[0] == "unlock":
             # Internal: run by the privileged setup step only.
+            # It acts as the owner the setup step names: root on a real Mac
+            # (tests stand the current user in for root, with owner set to it).
+            if os.geteuid() != setup._ids(rest[1])[0]:
+                print("canary: _roots runs only inside canary setup's administrator step",
+                      file=sys.stderr)
+                return EXIT_USAGE
             return setup.change_roots(rest[0], rest[1], rest[2], rest[3], rest[4:])
     except Exception as exc:  # fail closed: callers treat 3 as NEEDS_REVIEW
         # Exception text can quote file names from the package being checked.

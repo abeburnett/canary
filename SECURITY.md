@@ -20,7 +20,6 @@ SkillCanary makes only the claims `canary doctor` prints for your Mac:
 |---|---|
 | Scan | Scans skills when asked. Nothing is enforced. |
 | Guard | Guards installs by agents in Claude Code and Codex. |
-| Lockdown | Enforces vetting for user-level skill folders on this Mac, and guards repository skills. |
 
 A report that SkillCanary fails to meet its claim at a level is in scope. So is
 anything that makes a skill look safer than it is, lets package text reach an
@@ -36,30 +35,26 @@ These are documented, not bugs; the site and `docs/architecture.md` state them.
   through `canary add`. It does not stop an agent, or other software, from
   editing an installed skill or creating one with a shell command; skills in
   a repository can also arrive with a `git checkout`. SkillCanary's guest
-  list and watcher (in progress) report those. Lockdown makes the user-level
-  skill folders root-owned for anyone who wants writes blocked as well.
-- **The approval dialog can be clicked by an agent that controls the screen**
-  at Scan and Guard. Lockdown also asks for your password at each install.
+  list and watcher (in progress) report those.
+- **The approval dialog can be clicked by an agent that controls the screen.**
 - **A missing Python fails open.** Claude Code and Codex let a call through
   when a hook cannot run. The hook runs on macOS's `/usr/bin/python3`, which
   needs Apple's command-line tools; `canary doctor` reports when it can't run.
-- **For Lockdown, install with the Mac installer.** Homebrew keeps programs in
-  a folder your account can write to, so software already running as you
-  could change SkillCanary before you run `canary setup`. The Mac installer
-  puts it in `/Library/Application Support/SkillCanary`, which macOS keeps
-  root-owned.
+- **Install with the Mac installer if you can.** Homebrew keeps programs in a
+  folder your account can write to, so software already running as you could
+  change SkillCanary before you run `canary setup`. The Mac installer puts it
+  in `/Library/Application Support/SkillCanary`, which macOS keeps root-owned.
 - **The `canary` command link can be replaced on some Macs.** It lives in
   `/usr/local/bin`, which an older Homebrew may have given to your account.
   Something running as you could then point `canary` at another program. The
   hooks are unaffected: they run SkillCanary by its full, root-owned path,
   `/Library/Application Support/SkillCanary/bin/canary`, which you can also
   use yourself for setup.
-- **Skill roots reached through a link are not locked.** If `~/.claude`,
-  `~/.agents` or a `skills` folder in them is a symbolic link, Lockdown skips
-  it rather than follow the link, and `canary doctor` reports it.
-- **Hard-linked files in a skill root stay unlocked.** A file with more than
-  one name could be another file elsewhere on the Mac, so SkillCanary never
-  changes its owner or permissions, and `canary doctor` reports it.
+- **Leaving Lockdown skips links and hard-linked files.** On a Mac set up at
+  Lockdown by an earlier SkillCanary, `canary setup --level guard` returns
+  the skill folders to you, but skips a folder reached through a symbolic
+  link and any file with more than one name, which could be another file
+  elsewhere on the Mac. Change those back yourself if needed.
 - **A recently used `sudo` can be reused** from the same terminal window, for
   a few minutes, by anything running there, including an agent. Close the
   window after using `sudo`.

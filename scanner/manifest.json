@@ -1,23 +1,23 @@
 {
-  "version": "2ffe8bca6486d36f9926f713c8cb7c00f7b03a01",
+  "version": "caa89a6c3f6db6382df3ac39bfcc8a0a81d8f122",
   "files": {
     "bin/canary": "6be3492d4a1c5373bf1040f4a612737548593853448d95f436d5828e9545ffa9",
     "canary/__init__.py": "ae739b3e3b817044ada923b44ba82c752fe8b7c2133908d58fff8fd4b5146298",
-    "canary/add.py": "e3127b171b09af3f7bab7a41e4142cac5c505455d117bd37b52753f9ef04c4d0",
+    "canary/add.py": "e1f9bbb831e4fcc1a2cecd447f807657578b387818af6ca9780f6fa92ea5cbed",
     "canary/catalog.py": "abc8c72e727153f0ec035774ac4b0b34fa2d020195a599d1da919840df282372",
     "canary/classifiers/anthropic_api.py": "a38794d24641ab62a3acfa889e6f264ee2f83fe68e42c028d8fe211d01b6f833",
     "canary/classifiers/claude_cli.py": "2120c73e4fe0376ac15fdff06cb256ab526d8b70b2b7705bef7525f22ec33892",
     "canary/classifiers/openai_api.py": "8f12e081140a78b472788263bc483677dabcdc547082cb034849d7d5cb569dc6",
     "canary/classify.py": "721f07a640928eec3ec4c9198c53ba5fc34870a0125882ba3814570321453e06",
-    "canary/cli.py": "cfcd613620d9dc6f0b66482a3e0906fec57a287ff531962689b20e9c191971c7",
+    "canary/cli.py": "6a814beef77067fa656a6deffd7c46f8ed609eccc001c56f640fb410784004c7",
     "canary/evidence.py": "cb4d5de6b3d4567b39706dfff8f022a59f24eca1bc6052dc8c3a99ee688c353b",
-    "canary/frontdoor.py": "7c7cea1b86c3c4a6620f2fd48db87df18de06f9751f3958ed09c806d39fb469b",
+    "canary/frontdoor.py": "96e1e29a716b0d01b5663ec5e1e28aed45517448a8bb853fb0c2434141215c7e",
     "canary/gate.py": "c35311569db602c92551f03a6b1ee28807c110ad2b9cbf761499babc32f0e105",
     "canary/hosts/claude.py": "09fdf38c1c38fbd2619bdca853d36375ccc7d6b758540057529a780f6a1744fa",
     "canary/hosts/codex.py": "c35a2cb7125599874a4e2a988bb17a35f55fa7fca7f05dc9146d5c557280fe51",
     "canary/installers.py": "44793450efde8bfeeaf6784d901eccf7b6216b63d2e655930da4f3a355044dd6",
     "canary/scan.py": "b66fd7c627d995980cf77654728ae42410b1a320dca684d7698f60987688ac58",
-    "canary/setup.py": "9acb5e2fba19e73f0826618e13809954ce03da1d9a28084619cd5eb277f4b217",
+    "canary/setup.py": "bffc30e75c826a4e1c32e40caf21f1060a3e674c698655ea06619e535ff2cee2",
     "canary/shellparse.py": "ed1a73a3121d4e35cf6491ed83951bbdf45de3516ebbca438b47898369c7436e"
   }
 }

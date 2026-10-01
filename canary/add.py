@@ -14,7 +14,6 @@ import json
 import os
 import re
 import secrets
-import shlex
 import shutil
 import stat
 import subprocess
@@ -23,7 +22,7 @@ import tarfile
 import tempfile
 import time
 
-from canary import classify, scan, setup
+from canary import classify, scan
 from canary.hosts import claude as claude_host
 from canary.hosts import codex as codex_host
 
@@ -432,24 +431,6 @@ def _hosts(home, wanted):
             if any(os.path.isdir(os.path.join(home, d)) for d in dirs)]
 
 
-def _admin_install(snapshot, destinations, digest, run_id, canary_bin, owner):
-    """Lockdown: stage every copy, have the root-owned canary confirm each
-    staged copy is the checked package, then rename them all, in one
-    administrator step. The quarantine is the person's, so only a copy
-    verified after it became root-owned is trusted."""
-    q = shlex.quote
-    stages = [os.path.join(os.path.dirname(d), f".canary-staging-{run_id}") for d in destinations]
-    lines = ["set -eu", "cleanup() { rm -rf " + " ".join(q(x) for x in stages) + "; }",
-             "trap cleanup EXIT"]
-    for stage, dest in zip(stages, destinations):
-        lines += [f"[ ! -e {q(dest)} ]", f"mkdir -p {q(os.path.dirname(dest))}",
-                  f"cp -R {q(snapshot)} {q(stage)}", f"chown -R {q(owner)} {q(stage)}",
-                  f"chmod -R u+w,go-w {q(stage)}",
-                  f"[ \"$(/usr/bin/python3 -I -B {q(canary_bin)} digest {q(stage)})\" = {q(digest)} ]"]
-    lines += [f"mv {q(stage)} {q(dest)}" for stage, dest in zip(stages, destinations)]
-    return "\n".join(lines) + "\n"
-
-
 def _unpack(kind, rest, fetch, work, quarantine):
     """Fetch or copy the package, select the linked skill, and move it into
     a read-only quarantine snapshot."""
@@ -479,7 +460,7 @@ def _unpack(kind, rest, fetch, work, quarantine):
 
 def add(source, *, home=None, support_dir=None, approve=None, fetch=None,
         backend="auto", model=None, timeout_s=classify.DEFAULT_TIMEOUT_S, hosts=None,
-        prefix="/", admin=None, admin_owner="root:wheel"):
+        prefix="/"):
     """Run the whole add flow and return a canary.add/1 result.
     Raises SourceError (exit 2) or LockError (exit 3)."""
     home = home or os.path.expanduser("~")
@@ -522,6 +503,16 @@ def add(source, *, home=None, support_dir=None, approve=None, fetch=None,
             out["reasons"].append(f"A skill named {name} is already installed; "
                                   "use canary update to replace it.")
             return out
+        unwritable = [os.path.dirname(d) for d in destinations
+                      if os.path.isdir(os.path.dirname(d))
+                      and not os.access(os.path.dirname(d), os.W_OK)]
+        if unwritable:
+            # Ask nobody to approve an install that cannot happen.
+            out["outcome"] = "not_installed"
+            out["reasons"].append(f"SkillCanary cannot write to {unwritable[0]}. If this Mac "
+                                  "was set to Lockdown by an earlier SkillCanary, run canary "
+                                  "setup --level guard to return the folder to you.")
+            return out
 
         summary = {"verdict": verdict, "reasons": reasons, "name": name, "owner": owner,
                    "capabilities": sorted({c["kind"] for c in result["scan"]["capabilities"]}),
@@ -543,20 +534,9 @@ def add(source, *, home=None, support_dir=None, approve=None, fetch=None,
                 out["reasons"].append(f"A skill named {name} was installed meanwhile; "
                                       "use canary update to replace it.")
                 return out
-            if (setup.read_state(prefix) or {}).get("level") == "lockdown":
-                canary_bin = os.path.join(prefix, setup.LIB, "bin", "canary")
-                text = _admin_install(snapshot, destinations, snapshot_digest, run_id,
-                                      canary_bin, admin_owner)
-                if not (admin or setup.run_as_admin)(text):
-                    out["outcome"] = "not_installed"
-                    out["reasons"].append("The password step was declined, or the copy did "
-                                          "not match what was checked; nothing was installed.")
-                    return out
-                done = list(destinations)
-            else:
-                done = _install(snapshot, destinations, snapshot_digest, run_id, name, out)
-                if done is None:
-                    return out
+            done = _install(snapshot, destinations, snapshot_digest, run_id, name, out)
+            if done is None:
+                return out
             try:
                 return _finish(out, lock, home, name, verdict, result, done, fields)
             except OSError:

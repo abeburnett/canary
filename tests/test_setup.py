@@ -42,6 +42,20 @@ class Mac:
     def at(self, path):
         return os.path.join(self.prefix, path.lstrip("/"))
 
+    def at_old_lockdown(self):
+        """This Mac as SkillCanary 0.1.x left it at Lockdown: installed, with
+        the root-owned state recording the level."""
+        out, _ = self.setup("guard")
+        assert out["outcome"] == "done", out
+        state_path = os.path.join(self.at(setup.LIB), "state.json")
+        with open(state_path) as fh:
+            state = json.load(fh)
+        state["level"] = "lockdown"
+        state["locked"] = setup.lock_roots(self.home)
+        with open(state_path, "w") as fh:
+            json.dump(state, fh)
+        self.scripts.clear()
+
 
 DROP_IN = "/Library/Application Support/ClaudeCode/managed-settings.d/canary.json"
 CODEX = "/etc/codex/requirements.toml"
@@ -105,7 +119,7 @@ class AdministratorFilesAreNeverOverwritten(unittest.TestCase):
 
     def test_going_back_to_scan_keeps_files_someone_else_changed(self):
         mac = Mac()
-        mac.setup("lockdown")
+        mac.setup("guard")
         with open(mac.at(DROP_IN), "a") as fh:
             fh.write("\n")
         mac.setup("scan")
@@ -125,17 +139,17 @@ class DoctorReportsWhatIsWeak(unittest.TestCase):
         level, gaps, _ = mac.doctor()
         self.assertTrue(any("installed files" in g for g in gaps))
 
-    def test_lockdown_roots_must_be_locked(self):
+    def test_guard_does_not_report_lockdown_gaps(self):
+        # The owner's 2026-09-30 doctor run reported a hard link in a skills
+        # folder: a gap only Lockdown's locking cared about.
         mac = Mac()
-        inside = os.path.join(mac.home, ".claude", "skills", "notes.md")
-        with open(inside, "w") as fh:
+        outside = mac.at("etc/outside.conf")
+        os.makedirs(os.path.dirname(outside))
+        with open(outside, "w") as fh:
             fh.write("x")
-        os.chmod(inside, 0o666)
-        mac.setup("lockdown")
-        self.assertEqual(os.stat(inside).st_mode & 0o022, 0)
+        os.link(outside, os.path.join(mac.home, ".agents", "skills", "linked.bin"))
+        mac.setup("guard")
         self.assertEqual(mac.doctor()[1], [])
-        os.chmod(os.path.join(mac.home, ".agents", "skills"), 0o777)
-        self.assertTrue(any(".agents/skills" in g for g in mac.doctor()[1]))
 
 
 
@@ -151,7 +165,7 @@ class SetupTeachesAgentsAboutSkillCanary(unittest.TestCase):
 
     def test_each_level_installs_the_skill_in_both_hosts(self):
         from canary import frontdoor
-        for level in ("scan", "guard", "lockdown"):
+        for level in ("scan", "guard"):
             with self.subTest(level):
                 mac = Mac()
                 out, code = mac.setup(level)
@@ -159,8 +173,6 @@ class SetupTeachesAgentsAboutSkillCanary(unittest.TestCase):
                 for path in self.skill_paths(mac):
                     with open(path) as fh:
                         self.assertEqual(fh.read(), frontdoor.installed_text())
-                if level == "lockdown":
-                    self.assertEqual(mac.doctor()[1], [])
 
     def test_a_canary_skill_someone_else_put_there_is_left_alone(self):
         mac = Mac()
@@ -181,36 +193,28 @@ class SetupTeachesAgentsAboutSkillCanary(unittest.TestCase):
 
     def test_the_privileged_step_never_writes_the_skill(self):
         mac = Mac()
-        mac.setup("lockdown")
+        mac.setup("guard")
         self.assertTrue(mac.scripts)
         for text in mac.scripts:
             self.assertNotIn("SKILL.md", text)
 
     def test_a_folder_swapped_for_a_link_during_setup_is_not_followed(self):
-        for level in ("guard", "lockdown"):
-            with self.subTest(level):
-                mac = Mac()
-                outside = os.path.join(mac.prefix, "outside")
-                os.makedirs(outside)
-                victim = os.path.join(outside, "SKILL.md")
-                with open(victim, "w") as fh:
-                    fh.write("KEEP\n")
-                folder = os.path.join(mac.home, ".claude", "skills", "canary")
+        mac = Mac()
+        outside = os.path.join(mac.prefix, "outside")
+        os.makedirs(outside)
+        victim = os.path.join(outside, "SKILL.md")
+        with open(victim, "w") as fh:
+            fh.write("KEEP\n")
+        folder = os.path.join(mac.home, ".claude", "skills", "canary")
 
-                def swap_then_run(text):
-                    if not os.path.lexists(folder):
-                        os.symlink(outside, folder)
-                    return mac.run_script(text)
+        def swap_then_run(text):
+            if not os.path.lexists(folder):
+                os.symlink(outside, folder)
+            return mac.run_script(text)
 
-                if level == "lockdown":
-                    # At Lockdown the skill is written before the privileged
-                    # step; swap before setup starts instead.
-                    os.symlink(outside, folder)
-                    mac.setup(level)
-                else:
-                    mac.setup(level, runner=swap_then_run)
-                with open(victim) as fh:
-                    self.assertEqual(fh.read(), "KEEP\n")
+        mac.setup("guard", runner=swap_then_run)
+        with open(victim) as fh:
+            self.assertEqual(fh.read(), "KEEP\n")
 
     def test_a_linked_skill_file_is_not_followed(self):
         mac = Mac()
@@ -319,35 +323,203 @@ class OldStateIsAHintNotPermission(unittest.TestCase):
         self.assertEqual([m["path"] for m in out["manual"]], [policy])
 
 
-@MACOS
-class LockdownNeverFollowsLinks(unittest.TestCase):
-    def test_a_linked_skills_root_is_not_locked_and_doctor_says_so(self):
+class LockdownIsGone(unittest.TestCase):
+    """Front door, slice A2 (owner decision 2026-09-30): Lockdown is removed,
+    and a Mac still at Lockdown gets its skill folders back."""
+
+    def test_lockdown_can_no_longer_be_chosen(self):
+        self.assertEqual(setup.LEVELS, ("scan", "guard"))
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        proc = subprocess.run([sys.executable, os.path.join(root, "bin", "canary"), "setup",
+                               "--level", "lockdown"], capture_output=True, text=True, timeout=60)
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("guard", proc.stderr)
+
+    @MACOS
+    def test_doctor_tells_a_mac_still_at_lockdown_how_to_leave_it(self):
+        mac = Mac()
+        mac.at_old_lockdown()
+        level, gaps, _ = mac.doctor()
+        self.assertTrue(any("canary setup --level guard" in g for g in gaps))
+
+    @MACOS
+    def test_setup_returns_the_skill_folders_and_records_guard(self):
+        mac = Mac()
+        mac.at_old_lockdown()
+        out, code = mac.setup("guard")
+        self.assertEqual((out["outcome"], code), ("done", 0))
+        self.assertTrue(any("_roots unlock" in t for t in mac.scripts))
+        self.assertFalse(any("_roots lock" in t for t in mac.scripts))
+        self.assertEqual(mac.doctor()[:2], ("guard", []))
+
+    def chowned_inodes(self, home, roots):
+        """Run the root step's unlock and record the inode of everything it
+        re-owns. In a test the owner and the person are the same account, so
+        ownership itself cannot show what was touched."""
+        import unittest.mock
+        touched = set()
+        real_fchown, real_chown = os.fchown, os.chown
+
+        def fchown(fd, uid, gid):
+            touched.add(os.fstat(fd).st_ino)
+            return real_fchown(fd, uid, gid)
+
+        def chown(name, uid, gid, dir_fd=None, follow_symlinks=True):
+            touched.add(os.stat(name, dir_fd=dir_fd, follow_symlinks=False).st_ino)
+            return real_chown(name, uid, gid, dir_fd=dir_fd, follow_symlinks=follow_symlinks)
+
+        with unittest.mock.patch.object(os, "fchown", fchown), \
+                unittest.mock.patch.object(os, "chown", chown):
+            setup.change_roots("unlock", ME, ME, home, roots)
+        return touched
+
+    def test_unlock_reowns_the_folder_but_not_a_linked_one_or_a_hard_link(self):
+        base = os.path.realpath(tempfile.mkdtemp(prefix="canary-unlock-"))
+        home = os.path.join(base, "home")
+        real_root = os.path.join(home, ".agents", "skills")
+        os.makedirs(os.path.join(real_root, "notes"))
+        with open(os.path.join(real_root, "notes", "SKILL.md"), "w") as fh:
+            fh.write("x")
+        private = os.path.join(base, "private")
+        os.makedirs(private)
+        linked_root = os.path.join(home, ".claude", "skills")
+        os.makedirs(os.path.dirname(linked_root))
+        os.symlink(private, linked_root)
+        outside = os.path.join(base, "outside.conf")
+        with open(outside, "w") as fh:
+            fh.write("x")
+        os.link(outside, os.path.join(real_root, "notes", "linked.conf"))
+        touched = self.chowned_inodes(home, [real_root, linked_root])
+        self.assertIn(os.stat(real_root).st_ino, touched)
+        self.assertIn(os.stat(os.path.join(real_root, "notes", "SKILL.md")).st_ino, touched)
+        self.assertNotIn(os.stat(private).st_ino, touched)
+        self.assertNotIn(os.stat(outside).st_ino, touched)
+
+    def test_the_root_step_can_no_longer_lock(self):
+        home = os.path.realpath(tempfile.mkdtemp(prefix="canary-lock-"))
+        with self.assertRaises(ValueError):
+            setup.change_roots("lock", ME, ME, home, setup.lock_roots(home))
+
+    @MACOS
+    def test_going_to_scan_without_the_helper_keeps_lockdown_recorded(self):
+        mac = Mac()
+        mac.at_old_lockdown()
+        os.chmod(mac.at(setup.LIB + "/bin"), 0o755)
+        os.unlink(mac.at(setup.LIB + "/bin/canary"))
+        out, code = mac.setup("scan")
+        self.assertEqual((out["outcome"], code), ("not_changed", 10))
+        self.assertEqual(setup.read_state(mac.prefix)["level"], "lockdown")
+
+    # Spark 1.3 Contributor's review of slice A2 (2026-10-01).
+    @MACOS
+    def test_a_lockdown_level_in_the_old_user_folder_unlocks_nothing(self):
+        mac = Mac()
+        old = mac.at("usr/local/lib/skillcanary")
+        os.makedirs(old)
+        with open(os.path.join(old, "state.json"), "w") as fh:
+            json.dump({"level": "lockdown", "created": {}, "locked": []}, fh)
+        self.assertEqual(setup.plan("guard", mac.home, mac.prefix)["unlock"], [])
+        mac.setup("guard")
+        self.assertFalse(any("_roots" in t for t in mac.scripts))
+
+    def test_setup_takes_the_home_folder_from_the_account_not_the_environment(self):
+        import pwd
+        import unittest.mock
+        seen = {}
+
+        def chooser():
+            return None
+        with unittest.mock.patch.dict(os.environ, {"HOME": "/Users/someone-else"}), \
+                unittest.mock.patch.object(setup, "plan", side_effect=lambda level, home, prefix:
+                                           seen.setdefault("home", home) and {}):
+            try:
+                setup.setup("guard", runner=lambda text: False, chooser=chooser)
+            except Exception:
+                pass
+        self.assertEqual(seen.get("home"), pwd.getpwuid(os.getuid()).pw_dir)
+
+    def test_the_root_step_only_unlocks_the_two_known_folders(self):
+        base = os.path.realpath(tempfile.mkdtemp(prefix="canary-unlock-"))
+        home = os.path.join(base, "home")
+        victim = os.path.join(base, "victim")
+        os.makedirs(victim)
+        with self.assertRaises(ValueError):
+            setup.change_roots("unlock", ME, ME, home, [victim])
+
+    def test_the_root_step_refuses_to_run_as_anyone_but_root(self):
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if os.geteuid() == 0:
+            self.skipTest("runs as root")
+        proc = subprocess.run([sys.executable, os.path.join(root, "bin", "canary"), "_roots",
+                               "unlock", "root:wheel", ME, "/nonexistent-home",
+                               "/nonexistent-home/.claude/skills"],
+                              capture_output=True, text=True, timeout=60)
+        self.assertNotEqual(proc.returncode, 0)
+
+    @MACOS
+    def test_a_failed_unlock_does_not_record_guard(self):
+        mac = Mac()
+        mac.at_old_lockdown()
+        broken = lambda text: mac.run_script(text.replace(" _roots unlock ", " _roots no-such-verb "))
+        out, code = mac.setup("guard", runner=broken)
+        self.assertEqual((out["outcome"], code), ("not_changed", 10))
+        self.assertEqual(setup.read_state(mac.prefix)["level"], "lockdown")
+
+    @MACOS
+    def test_doctor_reports_a_skills_folder_still_owned_by_root(self):
+        import unittest.mock
+        mac = Mac()
+        mac.setup("guard")
+        root = os.path.join(mac.home, ".agents", "skills")
+        real_stat = os.stat
+        fake_root = os.getuid() + 1
+
+        def stat(path, *a, **k):
+            st = real_stat(path, *a, **k)
+            if os.path.realpath(path) == os.path.realpath(root):
+                return os.stat_result((st.st_mode, st.st_ino, st.st_dev, st.st_nlink, fake_root,
+                                       st.st_gid, st.st_size, st.st_atime, st.st_mtime, st.st_ctime))
+            return st
+        with unittest.mock.patch.object(os, "stat", stat):
+            gaps = setup.doctor(mac.home, mac.prefix, expected_uid=os.getuid(), root_uid=fake_root)[1]
+        self.assertTrue(any(".agents/skills" in g and "root" in g for g in gaps), gaps)
+
+    @MACOS
+    def test_doctor_does_not_call_an_unknown_level_scan(self):
+        mac = Mac()
+        mac.setup("guard")
+        state = os.path.join(mac.at(setup.LIB), "state.json")
+        with open(state) as fh:
+            data = json.load(fh)
+        data["level"] = "weird"
+        with open(state, "w") as fh:
+            json.dump(data, fh)
+        level, gaps, claim = mac.doctor()
+        self.assertNotEqual(level, "scan")
+        self.assertTrue(gaps)
+
+    def test_asking_the_api_for_lockdown_is_an_error(self):
+        with self.assertRaises(ValueError):
+            setup.setup("lockdown", runner=lambda text: self.fail("ran the root step"))
+
+    @MACOS
+    def test_returning_folders_never_follows_a_link(self):
         mac = Mac()
         private = mac.at("private-folder")
         os.makedirs(private)
         os.chmod(private, 0o700)
+        mac.at_old_lockdown()
         root = os.path.join(mac.home, ".claude", "skills")
+        for name in os.listdir(root):
+            path = os.path.join(root, name)
+            if os.path.isdir(path):
+                for f in os.listdir(path):
+                    os.unlink(os.path.join(path, f))
+                os.rmdir(path)
         os.rmdir(root)
         os.symlink(private, root)
-        mac.setup("lockdown")
+        mac.setup("guard")
         self.assertEqual(os.stat(private).st_mode & 0o777, 0o700)
-        self.assertTrue(any(".claude/skills" in g for g in mac.doctor()[1]))
-
-    def test_a_link_above_the_skills_root_is_refused_too(self):
-        mac = Mac()
-        elsewhere = mac.at("elsewhere")
-        os.makedirs(os.path.join(elsewhere, "skills"))
-        os.chmod(elsewhere, 0o700)
-        claude = os.path.join(mac.home, ".claude")
-        os.rmdir(os.path.join(claude, "skills"))
-        os.rmdir(claude)
-        os.symlink(elsewhere, claude)
-        mac.setup("lockdown")
-        self.assertEqual(os.stat(os.path.join(elsewhere, "skills")).st_mode & 0o022,
-                         os.stat(os.path.join(elsewhere, "skills")).st_mode & 0o022)
-        self.assertFalse(os.path.exists(os.path.join(elsewhere, "skills", "canary")))
-        self.assertTrue(any(".claude" in g for g in mac.doctor()[1]))
-
 
 
 @MACOS
@@ -370,7 +542,7 @@ class NeverTouchesWhatItCannotSeeOrOwn(unittest.TestCase):
         with open(policy) as fh:
             self.assertEqual(fh.read(), "# the administrator's policy\n")
 
-    def test_hard_linked_files_are_left_alone_and_reported(self):
+    def test_hard_linked_files_are_left_alone_when_folders_are_returned(self):
         mac = Mac()
         outside = mac.at("etc/outside.conf")
         os.makedirs(os.path.dirname(outside))
@@ -378,10 +550,8 @@ class NeverTouchesWhatItCannotSeeOrOwn(unittest.TestCase):
             fh.write("x")
         os.chmod(outside, 0o666)
         os.link(outside, os.path.join(mac.home, ".claude", "skills", "linked.md"))
-        mac.setup("lockdown")
-        self.assertEqual(os.stat(outside).st_mode & 0o777, 0o666)
-        self.assertTrue(any("more than one name" in g for g in mac.doctor()[1]))
-        mac.setup("scan")
+        mac.at_old_lockdown()
+        mac.setup("guard")
         self.assertEqual(os.stat(outside).st_mode & 0o777, 0o666)
 
 

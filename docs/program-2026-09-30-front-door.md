@@ -237,6 +237,37 @@ removed). Contract: `docs/architecture.md`, "canary hook", rules 1 to 6.
 - No third review round (the two-round limit); the words-based check has had
   no independent review of its own.
 
+## Slice A2: Lockdown removed (2026-10-01)
+
+Lockdown can no longer be chosen (`canary setup --level lockdown` and the
+Python API both refuse it and name Guard). A Mac whose root-owned state still
+records Lockdown gets its two user skill folders back through `canary setup
+--level guard`. `canary doctor` drops the Lockdown-only gaps (links and hard
+links in skills folders; the owner's 2026-09-30 doctor gap was one), and
+`canary add` loses its administrator install path.
+
+- Review: Muse Spark 1.3 Contributor, read-only, one round. Confirmed and
+  fixed, each with a test:
+  - (blocking, older than this slice) a Lockdown level in the 0.1.0 state
+    file, which the person controls, started the root unlock, and setup took
+    the home folder from `$HOME`, so root could be aimed at another
+    account's skill folders. Now only the root-owned state starts it, and
+    the home comes from the account database;
+  - a skipped or failed unlock still recorded Guard (the state file was lost
+    when the install was replaced, and a missing helper was skipped);
+  - the root-only helper accepted any folders from any caller; it now
+    accepts only the two known folders, as the owner the setup step names;
+  - `doctor` called an unknown recorded level Scan, and did not report a
+    skills folder still owned by root;
+  - `canary add` on a Mac left at Lockdown blamed a changed package; it now
+    names the unwritable folder and the setup command before asking;
+  - `setup("lockdown")` from Python reported "cancelled".
+- Plausible, not reproduced: a race in handing back a folder before its
+  contents. The unlock now works bottom up and checks and re-owns each file
+  through one handle; no test can create the race.
+- Deliberate breaks: 16 (15 in setup, 1 in add), each turning a named test
+  red.
+
 ## Unverified; probed before building on them
 
 - Whether Codex hooks can rewrite a command.

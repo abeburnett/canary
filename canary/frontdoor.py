@@ -67,8 +67,8 @@ yourself.
 ## When they ask what they are protected against
 
 Run `canary doctor` and relay its output. To change the level, run
-`canary setup`; it asks the person in a Mac dialog and, for Guard or
-Lockdown, asks for their password in the standard macOS window.
+`canary setup`; it asks the person in a Mac dialog and, for Guard, asks
+for their password in the standard macOS window.
 """
 
 
