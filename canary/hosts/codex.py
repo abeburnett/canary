@@ -165,7 +165,11 @@ def managed_install_plan(canary_bin: str):
     content = ('[features]\nhooks = true\n\n[hooks]\nmanaged_dir = "/etc/codex"\n'
                '\n[[hooks.PreToolUse]]\nmatcher = ".*"\n'
                '\n[[hooks.PreToolUse.hooks]]\ntype = "command"\ncommand = '
-               + json.dumps(command, ensure_ascii=False) + '\n')
+               + json.dumps(command, ensure_ascii=False) + '\n'
+               '\n[[hooks.SessionStart]]\nmatcher = "startup|resume"\n'
+               '\n[[hooks.SessionStart.hooks]]\ntype = "command"\ncommand = '
+               + json.dumps(command.replace(" hook --host codex", " session-start --host codex"),
+                            ensure_ascii=False) + '\n')
     target = "/etc/codex/requirements.toml"
     try:
         os.lstat(target)

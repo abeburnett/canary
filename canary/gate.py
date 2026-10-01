@@ -31,6 +31,8 @@ REDIRECT = ("This installs skills or plugins without SkillCanary checking them f
 NEW_SKILL = ("This creates a new skill without SkillCanary checking it first. To install a "
              "skill, use `canary add <link or folder>`; it checks it and asks the person. "
              "Editing a skill that is already installed is allowed.")
+RECORD = ("That is SkillCanary's own record of what was installed and checked. "
+          "Agents may read it but not rewrite it; canary trust and canary add change it.")
 QUARANTINED = ("That file is a quarantined package SkillCanary has not approved. "
                "Agents may not read it; use `canary check` for a verdict.")
 UNREADABLE = ("SkillCanary could not check this tool call, so it is blocked. "
@@ -139,6 +141,13 @@ def decide(call, home, roots, canary_bin=None):
             return UNREADABLE  # a patch the adapter could not read
         if any(_creates_skill(p, roots) for p in call.paths_written):
             return NEW_SKILL
+        support = _fold(os.path.realpath(os.path.join(home, SUPPORT)))
+        lockfile = _fold(os.path.realpath(os.path.join(home, ".agents", ".canary-lock.json")))
+        quarantine_root = _fold(os.path.realpath(quarantine_dir(home)))
+        for p in call.paths_written:
+            f = _fold(os.path.realpath(p))
+            if (_inside(f, support) and not _inside(f, quarantine_root)) or f == lockfile:
+                return RECORD
         quarantine = _fold(os.path.realpath(quarantine_dir(home)))
         if any(_inside(_fold(os.path.realpath(p)), quarantine)
                for p in call.paths_read + call.paths_written):

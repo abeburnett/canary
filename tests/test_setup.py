@@ -82,6 +82,36 @@ class GuardInstallsBothHooks(unittest.TestCase):
                               input="not json", capture_output=True, text=True, timeout=60)
         self.assertEqual(proc.returncode, 2)
 
+    def test_guard_adds_the_guest_list_hook_in_both_hosts(self):
+        mac = Mac()
+        mac.setup("guard")
+        with open(mac.at(DROP_IN)) as fh:
+            session = json.load(fh)["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+        self.assertTrue(session.endswith("session-start --host claude"))
+        self.assertTrue(session.startswith("/usr/bin/python3 -I "))
+        with open(mac.at(CODEX)) as fh:
+            codex = fh.read()
+        self.assertIn("[[hooks.SessionStart]]", codex)
+        self.assertIn("session-start --host codex", codex)
+
+    def test_setup_takes_the_guest_lists_first_look(self):
+        from canary import guestlist
+        mac = Mac()
+        folder = os.path.join(mac.home, ".agents", "skills", "mine")
+        os.makedirs(folder)
+        with open(os.path.join(folder, "SKILL.md"), "w") as fh:
+            fh.write("---\nname: mine\ndescription: x\n---\nBody.\n")
+        mac.setup("scan")
+        self.assertTrue(os.path.exists(os.path.join(
+            mac.home, "Library", "Application Support", "Canary", "ledger.jsonl")))
+        later = os.path.join(mac.home, ".agents", "skills", "later")
+        os.makedirs(later)
+        with open(os.path.join(later, "SKILL.md"), "w") as fh:
+            fh.write("---\nname: later\ndescription: x\n---\nBody.\n")
+        report = guestlist.scan(mac.home)
+        statuses = {s["name"]: s["status"] for s in report["skills"]}
+        self.assertEqual((statuses["mine"], statuses["later"]), ("yours", "unchecked"))
+
     def test_scan_asks_for_no_password(self):
         mac = Mac()
         out, code = mac.setup("scan", runner=lambda text: self.fail("asked for a password"))

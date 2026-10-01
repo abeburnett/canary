@@ -185,9 +185,13 @@ Decision rules (`canary/gate.py`, `decide`), in order:
    checks it as given and as resolved, so a link into a skills folder, or a
    link inside one that leads elsewhere, counts. Editing a skill that has a
    `SKILL.md` is allowed. A Codex patch the adapter cannot read is denied.
-5. The quarantine (a package waiting for its check): a file tool reading or
+5. SkillCanary's record: a file tool writing inside the support folder
+   (`~/Library/Application Support/Canary`, outside the quarantine) or to
+   the lockfile (`~/.agents/.canary-lock.json`) is denied, "canary trust
+   and canary add change it". Reading them is allowed.
+6. The quarantine (a package waiting for its check): a file tool reading or
    writing inside it, or a shell command naming it, is denied.
-6. Otherwise allow. The hook does not parse shell commands for writes and
+7. Otherwise allow. The hook does not parse shell commands for writes and
    does not screen text; a shell command that creates a skill is the
    watcher's to catch.
 
@@ -503,6 +507,53 @@ Setup never sets `allowManagedHooksOnly`, because that would disable the
 person's own hooks; a managed hook cannot be disabled from user settings
 anyway.
 
+## The guest list: `canary list [--json]`, `canary trust <folder>`, `canary session-start --host claude|codex`
+
+SkillCanary records every skill in a skills folder, how it got there, and
+every later change or removal (`canary/guestlist.py`). The record is an
+append-only ledger, `ledger.jsonl` in `~/Library/Application Support/Canary`,
+one JSON event per line, written under a file lock: `started`, `baseline`,
+`arrived` (with `how`), `checked`, `approved` (with `how: canary add`),
+`declined` or another `canary add` outcome, `changed`, `removed` and
+`trusted`. A damaged line is skipped. Each skill is keyed by its resolved
+path and fingerprinted over every file's bytes, path and program bit and each
+link's target, without `.git`; a cache of names, sizes and times keeps a scan
+from rereading unchanged skills.
+
+Every skill has one status:
+
+- **yours**: present the first time SkillCanary looked (setup takes that
+  first look), or marked with `canary trust`. Changes are recorded and never
+  reported.
+- **checked**: installed by `canary add`. A change after approval is
+  reported as **changed since approval**.
+- **unchecked**: arrived any other way. Reported until the person trusts it
+  or removes it.
+
+The folders scanned are the user skills folders (each host's `install_root`
+and `CODEX_HOME/skills`) and, for `session-start`, the `.claude/skills`,
+`.agents/skills` and `.codex/skills` folders of the repository around the
+session's `cwd`.
+
+- `canary list` prints each skill, its status and path; `--json` prints
+  `{"schema": "canary.list/1", "skills": [{"name", "path", "status",
+  "changed_since_approval", "since"}], "unchecked": [...], "changed": [...]}`.
+  Listing scans first, so it also records what changed.
+- `canary trust <folder>` marks one skill, or every skill in a skills
+  folder, as the person's.
+- `canary session-start --host claude|codex` is the SessionStart hook that
+  setup installs at Guard in both hosts (Claude Code matcher
+  `startup|resume|clear`, Codex `startup|resume`). It prints nothing when
+  nothing is unchecked or changed. Otherwise it prints one notice as
+  `{"systemMessage": …, "hookSpecificOutput": {"hookEventName":
+  "SessionStart", "additionalContext": …}}`, so the person and the agent
+  both see it. It always exits 0, and any error is silence: the guest list
+  never blocks a session.
+
+The guest list is a report, not proof. The ledger lives in the person's
+account; the hook keeps agents' file tools from rewriting it, but a shell
+command or other software running as the person can change it.
+
 ## How people get Canary and use it
 
 Canary itself is the one install that happens without Canary, so it only
@@ -551,10 +602,10 @@ the Mac from changing files. Three layers, and what each covers:
    input sent with `write_stdin` to an already-approved process does not
    re-run the hook; hooks run concurrently; and a shell command can hide its
    target from any parser. Hooks are a guard, not proof.
-3. **Detection.** A guest list of what arrived and what changed, and a
-   watcher that holds a new, unchecked skill for the person's decision (both
-   in progress in the front-door program), report skills that came in or
-   changed some other way. Root-owned skill folders (Lockdown) were tried and
+3. **Detection.** The guest list (above) reports skills that arrived without
+   the check or changed since approval, once per session. A watcher that
+   holds a new, unchecked skill for the person's decision is in progress in
+   the front-door program. Root-owned skill folders (Lockdown) were tried and
    removed: they blocked ordinary work, and the hook is not proof either.
 
 Public claims follow the layers actually installed:

@@ -91,12 +91,13 @@ approval. Nothing is deleted: a declined skill stays in quarantine, and
 
 SkillCanary records every skill and what happened to it: arrived (and how),
 checked, approved or declined, changed, removed, with dates. It keeps these
-in the lockfile and an append-only ledger in its support folder.
+in an append-only ledger in its support folder.
 
 - `canary list` shows each skill as **checked**, **changed since approval**,
   **unchecked** (arrived another way) or **yours**.
-- At session start, a Claude Code SessionStart hook prints one line when
-  something is unchecked or changed, and nothing otherwise. It never blocks.
+- At session start, a SessionStart hook (Claude Code and Codex) prints one
+  line when something is unchecked or changed, and nothing otherwise. It
+  never blocks.
 - **Your own skills are never flagged.** Skills present when SkillCanary is
   set up, and skills the person marks with `canary trust <folder>`, count as
   theirs. Their changes are recorded, never reported.
@@ -280,6 +281,26 @@ the re-audit passed it. Gate evidence: step 1 of the CI workflow over the
 final tree on Python 3.10 and 3.9; step 2 (the composite Action on GitHub)
 runs only in CI. Limit the auditor noted: the Lockdown unlock has not been
 run as root on a real Lockdown Mac.
+
+## Slice C: the guest list (2026-10-01)
+
+`canary/guestlist.py` keeps the ledger and works out each skill's status;
+`canary list`, `canary trust` and `canary session-start` use it; `canary add`
+records its checks, approvals and declines; setup takes the first look and
+installs the SessionStart hook in both hosts; the hook denies file-tool
+writes to the ledger and the lockfile. Interface: `docs/architecture.md`,
+"The guest list".
+
+- Tests: `tests/test_guestlist.py` (12), two in `tests/test_setup.py`, and
+  four hook cases in the corpus (three record writes denied, a read
+  allowed).
+- Deliberate breaks: 14, each turning a named test red. The first run found
+  one gap: the "never fails the session" test fed a damaged ledger, which is
+  skipped without an error, so it could not fail; it now makes the scan
+  itself raise.
+- Not verified here: that a SessionStart notice reaches the agent before it
+  uses a skill in a live Claude Code or Codex session. The hook's output
+  shape follows each host's documentation.
 
 ## Unverified; probed before building on them
 

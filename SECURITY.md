@@ -35,7 +35,10 @@ These are documented, not bugs; the site and `docs/architecture.md` state them.
   through `canary add`. It does not stop an agent, or other software, from
   editing an installed skill or creating one with a shell command; skills in
   a repository can also arrive with a `git checkout`. SkillCanary's guest
-  list and watcher (in progress) report those.
+  list reports those at the next session start; the watcher is in progress.
+- **The guest list is a report, not proof.** Its ledger lives in your
+  account. Agents' file tools cannot rewrite it, but a shell command or other
+  software running as you can.
 - **The approval dialog can be clicked by an agent that controls the screen.**
 - **A missing Python fails open.** Claude Code and Codex let a call through
   when a hook cannot run. The hook runs on macOS's `/usr/bin/python3`, which

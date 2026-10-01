@@ -22,7 +22,7 @@ import tarfile
 import tempfile
 import time
 
-from canary import classify, scan
+from canary import classify, guestlist, scan
 from canary.hosts import claude as claude_host
 from canary.hosts import codex as codex_host
 
@@ -520,6 +520,8 @@ def add(source, *, home=None, support_dir=None, approve=None, fetch=None,
         answer = approve(summary)
         if answer is not True:
             out["outcome"] = "declined" if answer is False else "not_installed"
+            _record(guestlist.record_decision, home, name, verdict, out["outcome"],
+                    support=support_dir)
             out["reasons"].append("The person declined the install." if answer is False else
                                   "Nobody approved it on the Mac's screen; ask the person to "
                                   "run canary add again and answer the SkillCanary dialog.")
@@ -538,7 +540,9 @@ def add(source, *, home=None, support_dir=None, approve=None, fetch=None,
             if done is None:
                 return out
             try:
-                return _finish(out, lock, home, name, verdict, result, done, fields)
+                finished = _finish(out, lock, home, name, verdict, result, done, fields)
+                _record(guestlist.record_install, home, done, name, verdict, support=support_dir)
+                return finished
             except OSError:
                 for dest in done:
                     _remove(dest)
@@ -551,6 +555,14 @@ def add(source, *, home=None, support_dir=None, approve=None, fetch=None,
         if work:
             _remove(work)
         _remove(quarantine)
+
+
+def _record(fn, *args, **kwargs):
+    """Write to the guest list; a failure there never undoes an install."""
+    try:
+        fn(*args, **kwargs)
+    except (OSError, ValueError):
+        pass
 
 
 def _install(snapshot, destinations, digest, run_id, name, out):

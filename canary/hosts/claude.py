@@ -89,9 +89,14 @@ def managed_install_plan(canary_bin: str):
     if type(canary_bin) is not str or not os.path.isabs(canary_bin) or any(
             c in canary_bin for c in ("\x00", "\n", "\r", '"', "'")):
         raise ValueError("Expected an absolute Canary executable path")
-    settings = {"hooks": {"PreToolUse": [{"matcher": "*", "hooks": [
-        {"type": "command",
-         "command": f"/usr/bin/python3 -I -B {shlex.quote(canary_bin)} hook --host claude"}]}]}}
+    run = f"/usr/bin/python3 -I -B {shlex.quote(canary_bin)}"
+    settings = {"hooks": {
+        "PreToolUse": [{"matcher": "*", "hooks": [
+            {"type": "command", "command": f"{run} hook --host claude"}]}],
+        # The guest list: one notice when a skill arrived without the check or
+        # changed since approval, nothing otherwise.
+        "SessionStart": [{"matcher": "startup|resume|clear", "hooks": [
+            {"type": "command", "command": f"{run} session-start --host claude"}]}]}}
     target = os.path.join(MANAGED_DIR, "canary.json")
     action = "manual" if os.path.lexists(target) else "create"
     return [PlannedFile(path=target, content=json.dumps(settings, indent=2) + "\n",
