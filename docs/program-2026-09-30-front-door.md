@@ -132,7 +132,8 @@ Slice A, the guard comes out:
 1. Reads, `git`, heredocs, notes, settings and edits to existing skills pass
    in both hosts. The hook denies only installer commands (all of them until
    slice B), file-tool creation of a new skill folder, the quarantine, and
-   the mention-only commands in owner decision 5.
+   the mention-only commands in owner decision 5; failing closed, it also
+   denies a Codex patch it cannot read and any internal error.
 2. The shell parser's write rules, the text screen, `canary edit`,
    allowances, the notes exception and Lockdown are gone; setup undoes
    Lockdown on a Mac that has it.
@@ -268,6 +269,17 @@ links in skills folders; the owner's 2026-09-30 doctor gap was one), and
   through one handle; no test can create the race.
 - Deliberate breaks: 16 (15 in setup, 1 in add), each turning a named test
   red.
+
+## Slice A done-when audit (2026-10-01)
+
+Auditor: Sonnet, read-only (the author was Opus 5.5). First pass: bullets 2
+and 3 shown; bullet 1 blocked as re-scoped, because the hook also denies
+mention-only installer commands, the quarantine and every installer until
+slice B. The owner accepted all three (decision 5) and bullet 1 was amended;
+the re-audit passed it. Gate evidence: step 1 of the CI workflow over the
+final tree on Python 3.10 and 3.9; step 2 (the composite Action on GitHub)
+runs only in CI. Limit the auditor noted: the Lockdown unlock has not been
+run as root on a real Lockdown Mac.
 
 ## Unverified; probed before building on them
 
