@@ -187,11 +187,22 @@ done-when audit by a model other than the author.
   and moved it in under 1 ms. Moving a folder on first sight broke a write
   into it in 1 of 40 trials, so the watcher waits until a new folder stops
   changing before it moves it.
-- **Installer staging: waiting on the owner.** `scripts/probe-installer-staging.sh`
-  runs `npx skills add` with a staging `HOME` and `claude plugin install`
-  with a staging `CLAUDE_CONFIG_DIR`, then checks the real folders did not
-  change. The owner runs it, because the hook blocks agents from running
-  installers.
+- **Installer staging: verified by the owner, 2026-10-01.**
+  `scripts/probe-installer-staging.sh`, run in the owner's terminal (the hook
+  blocks agents from running installers):
+  - `npx skills add mattpocock/skills -g -y -a claude-code --copy` with
+    `HOME` set to a staging folder exited 0 and put all ten skills under the
+    staging home's `.claude/skills`.
+  - `claude plugin marketplace add` and `claude plugin install
+    code-simplifier@claude-plugins-official` with `CLAUDE_CONFIG_DIR` set to a
+    staging folder both exited 0, and the marketplace and plugin files landed
+    under the staging folder's `plugins/`.
+  - The real `~/.claude/skills`, `~/.agents/skills` and `~/.claude/plugins`
+    had the same number of entries before and after (595, 2367, 10416).
+
+  So `canary install -- <command>` can run the person's own installer
+  against a staging home, check what lands, and copy only checked files into
+  place.
 - **Found on the way:** the hook denies `claude plugin install --help`,
   which only prints help. Slice A exempts help and list commands.
 
