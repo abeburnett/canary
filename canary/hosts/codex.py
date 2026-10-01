@@ -10,7 +10,7 @@ import os
 import shlex
 from pathlib import Path
 
-from canary.shellparse import path as _path, shell as _shell
+from canary.shellparse import given as _given, path as _path
 
 _FALLBACK = ('{"hookSpecificOutput":{"hookEventName":"PreToolUse",'
              '"permissionDecision":"deny","permissionDecisionReason":'
@@ -45,7 +45,7 @@ def _patch_paths(command, cwd):
     for line in lines[1:-1]:
         for header in ("*** Add File: ", "*** Update File: ", "*** Delete File: ", "*** Move to: "):
             if line.startswith(header):
-                target = _path(line[len(header):], cwd)
+                target = _given(line[len(header):], cwd)
                 if header == "*** Move to: " and active != "*** Update File: ":
                     raise ValueError("Move without update")
                 writes.append(target)
@@ -77,11 +77,8 @@ def parse_pre_tool_use(payload: dict):
         raise ValueError("Expected command text")
     from canary.gate import ToolCall
     if tool == "Bash":
-        m = _shell(command, cwd)
-        return ToolCall(tool_name=tool, command=command, paths_read=m.reads,
-                        paths_written=m.writes, cwd=_path(cwd, cwd), trees_read=m.trees_read,
-                        trees_written=m.trees_written, screen=m.screen,
-                        folders_written=m.folders_written)
+        return ToolCall(tool_name=tool, command=command, paths_read=[], paths_written=[],
+                        cwd=_path(cwd, cwd))
     if tool == "apply_patch":
         reads, writes = _patch_paths(command, cwd)
         return ToolCall(tool_name=tool, command=command, paths_read=reads,
@@ -153,11 +150,9 @@ def config_files(home: str) -> list[str]:
     return _resolved_unique(paths)
 
 
-def note_folders(home: str) -> list[str]:
-    """Protected folders whose own top-level notes (a delegation log beside the
-    config) agents may write: Codex loads none of them. The gate decides
-    which names count as notes; everything else in the folder stays protected."""
-    return [str(_codex_home(home))]
+def extra_skill_roots(home: str) -> list[str]:
+    """The skills folder inside CODEX_HOME, besides the user one."""
+    return [str(_codex_home(home) / "skills")]
 
 
 def managed_install_plan(canary_bin: str):

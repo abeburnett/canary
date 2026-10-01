@@ -31,26 +31,13 @@ agent, runs code as root that a normal user could have changed, or makes
 
 These are documented, not bugs; the site and `docs/architecture.md` state them.
 
-- **Guard is a guard, not a wall.** Hooks see each tool call, and a command
-  written to hide its target can get past them. Lockdown closes this for
-  user-level skill folders; skills inside a repository are guarded only.
-- **An edit allowance trusts text that passes both scanners.** With
-  `canary edit allow`, an agent can change matching Markdown files in one
-  skill without asking you, until the allowance expires. Canary cannot tell
-  which session or scheduled task is making the change, so the allowance
-  covers files and a time window, not a task. Text copied from an untrusted
-  source (such as a shared lessons inbox) can steer an agent while reading
-  as ordinary advice. The narrow pattern, the size limit, the notification,
-  the log in `~/Library/Application Support/Canary/edits.jsonl` and the
-  expiry limit how far that spreads; they do not prevent it.
-- **Whole-repository commands can change a repository's skills.** Guard
-  blocks git commands that would rewrite a repository holding a skills
-  folder, but a repository with no `.claude/skills` or `.agents/skills` yet
-  can gain one from a branch. And a tool run over a whole repository
-  (`some-tool .`) is allowed, because most such runs only read, so a tool
-  that writes can change that repository's skills. User-level skill folders
-  are not affected. `canary scan` a repository's skills when you start work
-  in it.
+- **Guard checks installs, not every change.** The hook stops an agent's
+  installer commands and file-tool creation of a new skill, and sends them
+  through `canary add`. It does not stop an agent, or other software, from
+  editing an installed skill or creating one with a shell command; skills in
+  a repository can also arrive with a `git checkout`. SkillCanary's guest
+  list and watcher (in progress) report those. Lockdown makes the user-level
+  skill folders root-owned for anyone who wants writes blocked as well.
 - **The approval dialog can be clicked by an agent that controls the screen**
   at Scan and Guard. Lockdown also asks for your password at each install.
 - **A missing Python fails open.** Claude Code and Codex let a call through

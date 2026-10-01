@@ -18,14 +18,6 @@ AI skills are the new npm packages — and nobody is auditing them. Canary scans
 bin/canary scan path/to/skill-folder --text
 ```
 
-To change a skill that SkillCanary protects, work on a draft and approve the change once:
-
-```bash
-canary edit start my-skill
-```
-
-Edit the draft folder it prints, then run `canary edit apply <draft>`. SkillCanary scans only the change and asks you in a dialog.
-
 Verdicts: LIKELY_SAFE (exit 0), NEEDS_REVIEW (exit 10), UNSAFE (exit 20). A package that runs code, or that could not be read in full, is never LIKELY_SAFE. See [`scanner/references/checks.md`](scanner/references/checks.md).
 
 ## GitHub Action

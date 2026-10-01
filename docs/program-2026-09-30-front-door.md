@@ -195,6 +195,37 @@ done-when audit by a model other than the author.
 - **Found on the way:** the hook denies `claude plugin install --help`,
   which only prints help. Slice A exempts help and list commands.
 
+## Slice A1: the hook (2026-09-30 to 2026-10-01)
+
+The hook now stops only installs that skip the check (installer commands,
+`git clone` into a skills folder, a file tool creating a new skill) and the
+quarantine; everything else passes. `canary edit`, allowances, the Codex
+notes exception and the shell write parser are gone (about 2,200 lines
+removed). Contract: `docs/architecture.md`, "canary hook", rules 1 to 6.
+
+- 96 hook cases in `tests/test_corpus.py` (28 allow, 68 deny), 171 runs over
+  both hosts. Against the hook before A1, 27 allow cases were denied.
+- Review: Muse Spark 1.3 Contributor, read-only, two rounds.
+  - Round 1 found installer commands that the first text pattern missed
+    (quoting, line continuations, `npx -p`, `npm exec`, options before
+    `clone` and between `plugin` and its verb), and three quarantine gaps.
+    One reproduction was wrong (`npx\\<newline>skills` joins into the word
+    `npxskills`, checked in bash); the form with a space is real and covered.
+  - Round 2 found that a parser of what *runs* could still be beaten by
+    shell keywords, functions, wrapper options, variables, a fake heredoc
+    marker, `find -exec` and `$"..."`. Instead of patching a third time, the
+    check now looks for the installer's own words anywhere in the tidied
+    text. Accepted cost: `echo` or a heredoc that only mentions an installer
+    is denied. All 18 round-2 forms are covered.
+- Deliberate breaks: every rule in `canary/gate.py` and
+  `canary/installers.py` has a named case that turns red when the rule is
+  removed (36 breaks run).
+- Out of reach, stated in the contract: a command assembled from pieces
+  (`npx $X add`) and a program that starts an installer itself. The watcher
+  (slice B) reports what they put in a skills folder.
+- No third review round (the two-round limit); the words-based check has had
+  no independent review of its own.
+
 ## Unverified; probed before building on them
 
 - Whether Codex hooks can rewrite a command.
