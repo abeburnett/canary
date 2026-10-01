@@ -130,8 +130,9 @@ already running from changing files." `SECURITY.md`, the site claims and
 Slice A, the guard comes out:
 
 1. Reads, `git`, heredocs, notes, settings and edits to existing skills pass
-   in both hosts. The hook denies only uninterceptable installer commands
-   and file-tool creation of a new skill folder.
+   in both hosts. The hook denies only installer commands (all of them until
+   slice B), file-tool creation of a new skill folder, the quarantine, and
+   the mention-only commands in owner decision 5.
 2. The shell parser's write rules, the text screen, `canary edit`,
    allowances, the notes exception and Lockdown are gone; setup undoes
    Lockdown on a Mac that has it.
@@ -285,6 +286,13 @@ links in skills folders; the owner's 2026-09-30 doctor gap was one), and
 3. The benchmark measures first; SkillCanary publishes a catch rate only
    once the benchmark shows it.
 4. The protected-file program is closed unmerged; its branch is deleted.
+5. (2026-10-01, after the slice A done-when audit) The hook may also deny:
+   a shell command that only mentions an installer (`echo`, a heredoc, a
+   commit message, `git clone` text naming a skills folder), because the
+   installer's words decide and parsing what runs kept losing to shell
+   tricks; reads, writes and shell commands touching the quarantine, as
+   before; and every installer command until slice B routes them through
+   `canary install`.
 
 ## Plan
 
