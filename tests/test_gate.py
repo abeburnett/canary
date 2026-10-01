@@ -3,6 +3,9 @@
 They run the real command with a throwaway HOME, the way each host runs it,
 and assert the host-specific deny contract: Claude Code blocks on exit 2,
 Codex on deny JSON with exit 0 (JSON with exit 2 would run the command).
+The per-call allow and deny cases live in tests/test_corpus.py (HOOK_CASES);
+these tests cover what the corpus cannot: the deny contract itself, the
+messages, and failing closed.
 """
 
 import json
@@ -25,16 +28,17 @@ class Home:
         self.project = os.path.join(self.path, "work", "app")
         for d in (".claude/skills/notes", ".agents/skills", ".codex", "work/app/src"):
             os.makedirs(os.path.join(self.path, d), exist_ok=True)
+        with open(os.path.join(self.path, ".claude/skills/notes/SKILL.md"), "w") as fh:
+            fh.write("---\nname: notes\ndescription: Notes.\n---\nBody.\n")
 
     def hook(self, host, tool, tool_input, raw=None, env=None):
         payload = raw if raw is not None else json.dumps({
             "hook_event_name": "PreToolUse", "tool_name": tool,
             "tool_input": tool_input, "cwd": self.project})
         env = {"HOME": self.path, "PATH": os.environ.get("PATH", ""), **(env or {})}
-        proc = subprocess.run([sys.executable, CANARY, "hook", "--host", host],
+        return subprocess.run([sys.executable, CANARY, "hook", "--host", host],
                               input=payload, capture_output=True, text=True, env=env,
                               timeout=60)
-        return proc
 
     def denied(self, host, tool, tool_input, raw=None):
         proc = self.hook(host, tool, tool_input, raw)
@@ -45,64 +49,30 @@ class Home:
                        and json.loads(proc.stdout)["hookSpecificOutput"]
                        ["permissionDecision"] == "deny")
         allowed = proc.returncode == 0 and proc.stdout == "" and proc.stderr == ""
-
         if not (blocked or allowed):
             raise AssertionError(f"neither a clean allow nor a deny: {proc!r}")
         return bool(blocked)
 
 
-class WritesIntoSkillFoldersAreDenied(unittest.TestCase):
-    def test_file_tools_and_simple_shell(self):
-        h = Home()
-        skill = os.path.join(h.path, ".claude", "skills", "notes", "SKILL.md")
-        cases = [
-            ("claude", "Write", {"file_path": skill, "content": "x"}, True),
-            ("claude", "Edit", {"file_path": "~/.claude/skills/notes/SKILL.md",
-                                "old_string": "a", "new_string": "b"}, True),
-            ("claude", "Write", {"file_path": os.path.join(h.project, "src", "a.py"),
-                                 "content": "x"}, False),
-            ("claude", "Read", {"file_path": skill}, False),
-            ("claude", "Bash", {"command": "touch ~/.agents/skills/evil/SKILL.md"}, True),
-            ("codex", "Bash", {"command": "mkdir ~/.agents/skills/evil"}, True),
-            ("codex", "apply_patch", {"command": "*** Begin Patch\n*** Add File: "
-                                      + os.path.join(h.path, ".agents/skills/e/SKILL.md")
-                                      + "\n+x\n*** End Patch"}, True),
-            ("codex", "Bash", {"command": "ls src"}, False),
-        ]
-        for host, tool, tool_input, deny in cases:
-            with self.subTest(host=host, tool=tool, tool_input=tool_input):
-                self.assertEqual(h.denied(host, tool, tool_input), deny)
-
-
-class InstallersRedirectToCanaryAdd(unittest.TestCase):
-    def test_installer_commands_are_denied_with_the_way_in(self):
-        h = Home()
-        for command in ("npx skills add someone/repo", "npx -y skills@latest install x",
-                        "pnpm dlx skills add x", "claude plugin install foo@bar",
-                        "claude plugin marketplace add someone/market",
-                        "cd /tmp && bunx skills update"):
-            for host in ("claude", "codex"):
-                with self.subTest(host=host, command=command):
-                    proc = h.hook(host, "Bash", {"command": command})
-                    self.assertTrue(h.denied(host, "Bash", {"command": command}))
-                    self.assertIn("canary add", proc.stdout + proc.stderr)
-
-
-class CommandsItCannotMapAreScreenedAsText(unittest.TestCase):
-    def test_compound_commands(self):
+class InstallsGoThroughTheDoor(unittest.TestCase):
+    def test_each_host_blocks_an_installer_the_way_it_understands(self):
         h = Home()
         for host in ("claude", "codex"):
             with self.subTest(host=host):
-                self.assertFalse(h.denied(host, "Bash", {"command": "cd src && npm test"}))
-                self.assertFalse(h.denied(host, "Bash", {"command": "echo $PATH | wc -c"}))
-                self.assertTrue(h.denied(host, "Bash", {
-                    "command": "cd ~/.claude/skills && echo x > notes/SKILL.md"}))
-                self.assertTrue(h.denied(host, "Bash", {
-                    "command": 'D="$HOME/.agents/skills"; mkdir -p "$D/x"'}))
-                self.assertTrue(h.denied(host, "mcp__fs__write_file", {
-                    "path": os.path.join(h.path, ".claude/skills/x/SKILL.md")}))
-                self.assertFalse(h.denied(host, "mcp__fs__write_file", {
-                    "path": os.path.join(h.project, "notes.md")}))
+                proc = h.hook(host, "Bash", {"command": "npx skills add someone/repo"})
+                self.assertTrue(h.denied(host, "Bash", {"command": "npx skills add someone/repo"}))
+                self.assertIn("canary add", proc.stdout + proc.stderr)
+
+    def test_a_new_skill_from_a_file_tool_is_sent_to_canary_add(self):
+        h = Home()
+        new = os.path.join(h.path, ".claude", "skills", "brand-new", "SKILL.md")
+        proc = h.hook("claude", "Write", {"file_path": new, "content": "x"})
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("canary add", proc.stderr)
+        self.assertIn("Editing a skill that is already installed is allowed", proc.stderr)
+        self.assertFalse(h.denied("claude", "Write", {
+            "file_path": os.path.join(h.path, ".claude", "skills", "notes", "SKILL.md"),
+            "content": "edited"}))
 
 
 class TheHookNeverFailsOpen(unittest.TestCase):
@@ -116,91 +86,20 @@ class TheHookNeverFailsOpen(unittest.TestCase):
                     self.assertTrue(h.denied(host, None, None, raw=raw))
 
     def test_an_internal_error_still_denies(self):
-        call = gate.ToolCall("Write", None, [], ["/x"], "/", True, "")
-        with unittest.mock.patch.object(gate, "_protected_hit", side_effect=RuntimeError):
-            reason = gate.decide(call, ["/y"], home="/h")
-        self.assertIsNotNone(reason)
-
-
-class DenialsNameTheSanctionedRoute(unittest.TestCase):
-    def test_each_deny_says_what_to_do_instead(self):
-        h = Home()
-        skill = os.path.join(h.path, ".claude", "skills", "notes", "SKILL.md")
-        settings = os.path.join(h.path, ".claude", "settings.json")
-        for host in ("claude", "codex"):
-            with self.subTest(host=host, kind="skill"):
-                proc = h.hook(host, "Bash", {"command": f"echo x > '{skill}'"})
-                self.assertIn("canary edit start", proc.stdout + proc.stderr)
-                self.assertIn("canary edit apply", proc.stdout + proc.stderr)
-            with self.subTest(host=host, kind="settings"):
-                proc = h.hook(host, "Bash", {"command": f"echo x > '{settings}'"})
-                self.assertTrue(h.denied(host, "Bash", {"command": f"echo x > '{settings}'"}))
-                self.assertNotIn("canary edit apply", proc.stdout + proc.stderr)
-                # No route exists, so the agent must hand the person a command,
-                # not invent a SkillCanary feature.
-                self.assertIn("own terminal", proc.stdout + proc.stderr)
-                self.assertIn("no SkillCanary command allows it", proc.stdout + proc.stderr)
-            with self.subTest(host=host, kind="mention"):
-                command = "cat > /tmp/note.md <<'EOF'\nsee ~/.claude/skills\nEOF"
-                proc = h.hook(host, "Bash", {"command": command})
-                self.assertTrue(h.denied(host, "Bash", {"command": command}))
-                self.assertIn("Write tool", proc.stdout + proc.stderr)
-
-
-class NotesNeverCoverWhatCodexLoads(unittest.TestCase):
-    def test_every_note_shaped_file_the_adapter_protects_in_the_home_is_no_note(self):
-        # Fable, text-screen refutation (2026-09-29): the note exception rests on
-        # the list of home-level files Codex loads. Tie the two together.
-        from canary.hosts import codex
-        h = Home()
-        codex_home = os.path.join(h.path, ".codex")
-        with unittest.mock.patch.dict(os.environ, {"CODEX_HOME": codex_home}):
-            listed = (codex.discovery_roots(h.path, h.project) + codex.config_files(h.path)
-                      + [os.path.join(codex_home, "instructions.md")])  # legacy, codex-facts.md
-            notes = gate.note_folders(h.path, h.project, [codex])
-        self.assertEqual(notes, [os.path.realpath(codex_home)])
-        checked = 0
-        for path in listed:
-            if os.path.dirname(path) == os.path.realpath(codex_home) and gate.NOTE.fullmatch(
-                    os.path.basename(path)):
-                checked += 1
-                with self.subTest(path=path):
-                    self.assertFalse(gate._is_note(path, notes))
-        self.assertGreaterEqual(checked, 3, "AGENTS.md, AGENTS.override.md and instructions.md")
-
-
-class ARepointedCodexHomeGetsNoNotes(unittest.TestCase):
-    def test_codex_home_on_another_hosts_folder_or_home_grants_nothing(self):
-        # Fable, notes refutation (2026-09-29): CODEX_HOME aimed at ~/.claude
-        # made ~/.claude/CLAUDE.md writable as a "note".
-        h = Home()
-        for codex_home in (os.path.join(h.path, ".claude"), h.path):
-            target = os.path.join(codex_home, "CLAUDE.md" if codex_home != h.path else "notes.md")
-            with self.subTest(codex_home=codex_home):
-                proc = h.hook("claude", "Bash", {"command": f"echo x >> '{target}'"},
-                              env={"CODEX_HOME": codex_home})
-                self.assertEqual(proc.returncode, 2, "a note was allowed in a repointed home")
-
-
-class NotesStayInsideOtherProtection(unittest.TestCase):
-    def test_a_note_folder_inside_another_protected_folder_grants_nothing(self):
-        # CODEX_HOME can point anywhere, including inside a skills folder.
-        root = os.path.realpath(tempfile.mkdtemp(prefix="canary-notes-"))
-        outer = os.path.join(root, "protected")
-        notes = os.path.join(outer, "codex-home")
-        os.makedirs(notes)
-        note = os.path.join(notes, "log.md")
-        call = gate.ToolCall("Write", None, [], [note], root)
-        self.assertIsNone(gate.decide(call, [notes], root, notes=[notes]))
-        self.assertIsNotNone(gate.decide(call, [notes, outer], root, notes=[notes]))
+        call = gate.ToolCall("Write", None, [], ["/x/.claude/skills/new/SKILL.md"], "/")
+        with unittest.mock.patch.object(gate, "_creates_skill", side_effect=RuntimeError):
+            reason = gate.decide(call, "/h", [])
+        self.assertEqual(reason, gate.UNREADABLE)
 
 
 class TheQuarantineIsNotReadable(unittest.TestCase):
-    def test_reads_of_quarantined_packages_are_denied(self):
+    def test_file_tool_reads_of_quarantined_packages_are_denied(self):
         h = Home()
         q = os.path.join(h.path, "Library/Application Support/Canary/quarantine/r1/package/SKILL.md")
         self.assertTrue(h.denied("claude", "Read", {"file_path": q}))
-        self.assertTrue(h.denied("codex", "Bash", {"command": "cat '" + q + "'"}))
+        self.assertFalse(h.denied("claude", "Read", {
+            "file_path": os.path.join(h.path, ".claude", "skills", "notes", "SKILL.md")}))
+
 
 if __name__ == "__main__":
     unittest.main()

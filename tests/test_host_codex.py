@@ -88,8 +88,10 @@ class HostBoundary(unittest.TestCase):
 
     def test_captured_tool_shapes_preserve_paths_and_reject_unknown_shapes(self):
         skill = str(self.home / '.agents' / 'skills' / 'demo' / 'SKILL.md')
+        # The shell is looked at only for installers (program 2026-09-30), so
+        # the command text is kept whole and no write paths are guessed.
         shell = codex.parse_pre_tool_use(self.payload('Bash', {'command': '/usr/bin/touch ' + skill}))
-        self.assertIn(skill, shell.paths_written)
+        self.assertEqual(shell.paths_written, [])
         self.assertEqual(shell.command, '/usr/bin/touch ' + skill)
         target = str(self.home / '.codex' / 'hooks.json')
         patch_text = '*** Begin Patch\n*** Add File: ' + target + '\n+{}\n*** End Patch'
@@ -100,8 +102,6 @@ class HostBoundary(unittest.TestCase):
         self.assertIn(str(self.cwd / 'old.md'), moved.paths_read)
         self.assertIn(str(self.cwd / 'old.md'), moved.paths_written)
         self.assertIn(str(self.cwd / 'new.md'), moved.paths_written)
-        redirect = codex.parse_pre_tool_use(self.payload('Bash', {'command': 'printf ok > "' + target + '"'}))
-        self.assertIn(target, redirect.paths_written)
         # MCP arguments are not shell commands; unknown tool semantics must deny.
         unknown = [None, {}, self.payload('Bash', {}), self.payload('Bash', {'command': []}),
                    self.payload('mcp__probe__echo', {'message': 'MCP_SENTINEL'}),

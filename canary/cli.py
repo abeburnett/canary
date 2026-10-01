@@ -18,11 +18,6 @@ USAGE = ("usage: canary scan <skill-file-or-directory> [--json | --text] [--exce
          " [--timeout <seconds>]\n"
          "       canary add <github-link-or-folder> [--host claude|codex]... [--json | --text]"
          " [--backend <name>] [--model <id>] [--timeout <seconds>]\n"
-         "       canary edit start <skill-name-or-folder>\n"
-         "       canary edit apply <draft> [--backend <name>] [--model <id>] [--timeout <seconds>]\n"
-         "       canary edit allow <skill-name-or-folder> <pattern> [--days <1-30>]\n"
-         "       canary edit allowances\n"
-         "       canary edit revoke <skill-name-or-folder> <pattern>\n"
          "       canary setup [--level scan|guard|lockdown]\n"
          "       canary doctor [--json]\n"
          "       canary digest <folder>")
@@ -136,61 +131,6 @@ def _add(args):
     return add.EXIT_FOR_OUTCOME[out["outcome"]]
 
 
-def _edit(args):
-    from canary import edit
-    action, rest = (args[0], args[1:]) if args else (None, [])
-    values, words, i = {}, [], 0
-    while i < len(rest):
-        if rest[i] in VALUE_FLAGS | {"--days"}:
-            if i + 1 >= len(rest) or rest[i] in values:
-                print(USAGE, file=sys.stderr)
-                return EXIT_USAGE
-            values[rest[i]] = rest[i + 1]
-            i += 2
-            continue
-        words.append(rest[i])
-        i += 1
-    shape = {"start": 1, "apply": 1, "allow": 2, "allowances": 0, "revoke": 2}
-    allowed = {"apply": VALUE_FLAGS, "allow": {"--days"}}.get(action, set())
-    timeout = values.get("--timeout", str(classify.DEFAULT_TIMEOUT_S))
-    days = values.get("--days", str(edit.DEFAULT_DAYS))
-    if (action not in shape or len(words) != shape[action] or set(values) - allowed
-            or any(w.startswith("-") for w in words) or not days.isdigit()
-            or values.get("--backend", "auto") not in ("auto", "claude", "anthropic_api",
-                                                       "openai_api", "none")):
-        print(USAGE, file=sys.stderr)
-        return EXIT_USAGE
-    try:
-        timeout = float(timeout)
-        if not math.isfinite(timeout) or timeout <= 0:
-            raise ValueError
-    except ValueError:
-        print(USAGE, file=sys.stderr)
-        return EXIT_USAGE
-    # No flag approves an edit: only the person, in the dialog or password step.
-    try:
-        if action == "start":
-            out = edit.start(words[0])
-        elif action == "apply":
-            out = edit.apply(words[0], backend=values.get("--backend", "auto"),
-                             model=values.get("--model"), timeout_s=timeout)
-        elif action == "allow":
-            out = edit.allow(words[0], words[1], int(days))
-        elif action == "revoke":
-            out = edit.revoke(words[0], words[1])
-        else:
-            print(json.dumps(edit.list_allowances(), indent=2))
-            return 0
-    except edit.EditError as exc:
-        print(f"canary: {exc}", file=sys.stderr)
-        return EXIT_USAGE
-    except add.LockError as exc:
-        print(f"canary: {exc}", file=sys.stderr)
-        return EXIT_INTERNAL
-    print(json.dumps(out, indent=2))
-    return edit.EXIT_FOR_OUTCOME[out["outcome"]]
-
-
 CANARY_BIN = "/Library/Application Support/SkillCanary/bin/canary"
 
 
@@ -218,9 +158,8 @@ def _hook(args):
             call = adapter.parse_pre_tool_use(payload)
         except ValueError:
             call = gate.unmapped(payload)
-        protected = gate.protected_paths(home, payload["cwd"], adapters.values())
-        notes = gate.note_folders(home, payload["cwd"], adapters.values())
-        reason = gate.decide(call, protected, home, CANARY_BIN, notes)
+        roots = gate.user_skill_roots(home, adapters.values())
+        reason = gate.decide(call, home, roots, CANARY_BIN)
     except BaseException:
         reason = gate.UNREADABLE
     if reason is None:
@@ -295,8 +234,6 @@ def main(argv):
             return _check(rest)
         if command == "add":
             return _add(rest)
-        if command == "edit":
-            return _edit(rest)
         if command == "setup":
             return _setup(rest)
         if command == "doctor":
