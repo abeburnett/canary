@@ -323,6 +323,17 @@ writes to the ledger and the lockfile. Interface: `docs/architecture.md`,
   uses a skill in a live Claude Code or Codex session. The hook's output
   shape follows each host's documentation.
 
+## Slice C done-when audit (2026-10-01)
+
+Auditor: Sonnet, read-only (the author was Opus 5.5). First pass: bullet 7
+shown; bullet 8 blocked as re-scoped, because repository skills are not in
+setup's first look; the deliberate-break results were blocked as asserted,
+since no log was saved. The owner chose to report repository skills until
+trusted (decision 6), bullet 8 was amended and a test added; the break run
+was saved as a log (20 breaks, all red). The re-audit passed every bullet.
+Gate evidence: step 1 of the CI workflow over the final tree on Python 3.10
+and 3.9 (168 tests); the composite Action steps run only in CI, on the PR.
+
 ## Unverified; probed before building on them
 
 - Whether Codex hooks can rewrite a command.
