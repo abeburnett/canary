@@ -39,6 +39,15 @@ These are documented, not bugs; the site and `docs/architecture.md` state them.
 - **The guest list is a report, not proof.** Its ledger lives in your
   account. Agents' file tools cannot rewrite it, but a shell command or other
   software running as you can.
+- **Another hook can undo the install rewrite.** In Claude Code, when two
+  PreToolUse hooks rewrite the same command, the last to finish wins. A hook
+  of yours that rewrites shell commands could replace SkillCanary's
+  `canary install` with the original installer. The guest list reports what
+  lands that way.
+- **`canary install` runs your installer as you.** It points the installer
+  at a staging folder, but an installer that writes to a fixed path
+  elsewhere is not contained; the guest list reports skills that arrive that
+  way.
 - **The approval dialog can be clicked by an agent that controls the screen.**
 - **A missing Python fails open.** Claude Code and Codex let a call through
   when a hook cannot run. The hook runs on macOS's `/usr/bin/python3`, which

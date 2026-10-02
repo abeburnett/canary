@@ -155,8 +155,16 @@ Decision rules (`canary/gate.py`, `decide`), in order:
 2. `canary` itself is allowed when the command's first word is exactly
    `canary`, it has no other shell syntax, and the `canary` on `PATH` is the
    root-owned install (so an agent cannot put its own `canary` first).
-3. A shell command whose words install a skill or plugin: deny, "use
-   `canary add <source>`" (`canary/installers.py`). The installer's own
+3. A shell command whose words install a skill or plugin
+   (`canary/installers.py`). When the whole command is one plain installer
+   that `canary install` runs (below), Claude Code runs it through
+   `canary install`: the hook allows the call with `updatedInput`, whose
+   command is `/usr/bin/python3 -I -B <root-owned canary> install --
+   <the same words>` and whose timeout is ten minutes, so the checks and
+   the dialog fit. Claude Code does not run hooks again on the new command.
+   Codex is denied with a message naming `canary install -- <the same
+   words>` (whether Codex can rewrite is probed after 2026-10-03). Any other
+   installer command is denied, naming `canary install` and `canary add`. The installer's own
    words decide, wherever they sit: after removing quotes, `$'...'`, line
    continuations and backslashes, the command is searched for a `skills`
    package (`skills`, `@scope/skills`, `skills@1.2.3`) followed, after any
@@ -506,6 +514,61 @@ privileged step, after it has run.
 Setup never sets `allowManagedHooksOnly`, because that would disable the
 person's own hooks; a managed hook cannot be disabled from user settings
 anyway.
+
+## `canary install [--json | --text] [--backend <name>] [--model <id>] [--timeout <seconds>] -- <installer command>`
+
+Runs the person's own installer so that only checked files reach a skills
+folder (`canary/install.py`; program 2026-09-30, slice B1). It accepts only
+plain installer commands (`installers.kind`):
+
+- `npx`, `bunx`, `pnpm dlx` or `yarn dlx`, optionally `-y`, then a `skills`
+  package (`skills`, `@scope/skills`, `skills@<version>`) and `add`, `a`,
+  `install` or `i`; or the `skills` command itself. A launcher option that
+  picks another program (`npx -p`) is refused.
+- `claude plugin install|i|update <name>@<marketplace>` with an optional
+  `--scope user|project|local`.
+- `claude plugin marketplace add <source>`.
+
+Anything else is a usage error (exit 2). No option approves an install.
+
+**Skills.** The installer runs with `HOME` set to an empty staging home in
+the quarantine (holding empty copies of the person's top-level hidden
+folders, so it finds the same agents) and its working folder set to an
+empty staging project. Its Git and npm settings and npm cache stay the
+person's. Its output goes to a log in the support folder, never to the
+agent. Every folder holding a `SKILL.md` that lands under either staging
+root is copied without links into a snapshot (a link or special file
+refuses the whole install), named, and checked with `canary check`'s two
+layers, four at a time; each skill costs one classifier call. The person
+sees one dialog for everything the command adds. On approval, under `canary
+add`'s commit lock, each snapshot is copied to the same place under the real
+home or the real working folder and confirmed byte for byte, the links the
+installer made between those skills (for example `.claude/skills/<name>` to
+`.agents/skills/<name>`) are recreated, and the lockfile and guest list
+record each skill. Nothing else the installer wrote is copied, including its
+own record (so `npx skills list` does not show these skills). A failed
+installer, a skill that already exists, two different skills with one name,
+or an unsafe verdict installs nothing.
+
+**Plugins** (owner decision 7). The plugin is installed into a staging
+Claude Code folder (`CLAUDE_CONFIG_DIR`), after adding its marketplace there
+from the source recorded in the person's `known_marketplaces.json`. The
+installed folder is checked and shown once. On approval, the person's real
+`claude plugin install` runs, and the folder Claude Code reports in
+`installed_plugins.json` must match the checked bytes; otherwise SkillCanary
+runs `claude plugin uninstall` and reports it. Claude Code loads plugins when
+a session starts, so nothing uses the plugin before the comparison. A
+marketplace add runs as given: it installs nothing an agent loads.
+
+Result: `{"schema": "canary.install/1", "outcome": "installed" | "declined" |
+"not_installed" | "refused" | "done", "verdict", "kind": "skills" | "plugin"
+| "marketplace", "skills": [{"name", "verdict"}], "installed": [...],
+"reasons": [...]}`, with `canary add`'s exit codes (`done` is 0).
+
+Limits: the installer is the person's program and runs as them; staging
+changes where it writes by default, not where it can write, so an installer
+that writes to an absolute path elsewhere is the guest list's and the
+watcher's to report.
 
 ## The guest list: `canary list [--json]`, `canary trust <folder>`, `canary session-start --host claude|codex`
 

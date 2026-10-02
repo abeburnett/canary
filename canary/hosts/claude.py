@@ -38,6 +38,23 @@ def deny(reason: str) -> tuple[str, int]:
         return _FALLBACK
 
 
+# A rewritten install runs the installer, the checks and the person's dialog,
+# so it gets Claude Code's longest Bash timeout (ten minutes).
+REWRITE_TIMEOUT_MS = 600000
+CAN_REWRITE = True
+
+
+def rewrite(tool_input: dict, command: str) -> tuple[str, int]:
+    """Allow the call with its command replaced. Verified live: Claude Code
+    runs the updatedInput command, and hooks do not run again on it."""
+    updated = dict(tool_input, command=command, timeout=REWRITE_TIMEOUT_MS)
+    updated.pop("run_in_background", None)
+    return json.dumps({"hookSpecificOutput": {
+        "hookEventName": "PreToolUse", "permissionDecision": "allow",
+        "permissionDecisionReason": "SkillCanary runs this installer through its check.",
+        "updatedInput": updated}}, ensure_ascii=True), 0
+
+
 def parse_pre_tool_use(payload: dict):
     """File tools and simple shell commands map exactly; anything else
     raises ValueError and the gate screens it as text."""

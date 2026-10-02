@@ -23,6 +23,7 @@ program that starts an installer itself; the watcher reports what lands.
 
 import os
 import re
+import shlex
 
 SKILLS_CLI = re.compile(
     r"(?<![\w.-])(?:@[\w.-]+/)?skills(?:@[^\s/;&|()]*)?"
@@ -56,3 +57,71 @@ def installs(command, cwd, in_skills):
         return False
     plain = not any(c in COMPOUND for c in command)
     return not (plain and HELP.search(text))
+
+
+# ---- commands `canary install` runs (front door, slice B1) -----------------
+
+LAUNCHERS = {("npx",): 1, ("bunx",): 1, ("pnpm", "dlx"): 2, ("yarn", "dlx"): 2}
+SKILLS_PACKAGE = re.compile(r"(?:@[\w.-]+/)?skills(?:@[\w.^~<>=-]+)?")
+LAUNCHER_FLAGS = {"-y", "--yes", "--quiet", "-q"}
+SCOPES = {"user", "project", "local"}
+PLUGIN_ID = re.compile(r"[\w.-]+@[\w.-]+")
+
+
+def kind(argv):
+    """("skills", argv), ("plugin", argv, plugin id, scope) or
+    ("marketplace", argv) for an installer `canary install` can run; None
+    otherwise. Only plain forms: a launcher, the package, the verb, then
+    arguments. A flag that picks a different program (`npx -p`) is not one."""
+    if not argv or not all(isinstance(a, str) for a in argv):
+        return None
+    if argv[0] == "claude":
+        if argv[1:2] not in (["plugin"], ["plugins"]):
+            return None
+        rest = argv[2:]
+        if rest[:2] == ["marketplace", "add"] and len(rest) == 3 and not rest[2].startswith("-"):
+            return ("marketplace", argv)
+        if rest[:1] not in (["install"], ["i"], ["update"]):
+            return None
+        ids, scope, i = [], "user", 1
+        while i < len(rest):
+            a = rest[i]
+            if a in ("--scope", "-s") and i + 1 < len(rest) and rest[i + 1] in SCOPES:
+                scope, i = rest[i + 1], i + 2
+                continue
+            if a.startswith("--scope=") and a.split("=", 1)[1] in SCOPES:
+                scope, i = a.split("=", 1)[1], i + 1
+                continue
+            if a.startswith("-"):
+                return None
+            ids.append(a)
+            i += 1
+        if len(ids) != 1 or not PLUGIN_ID.fullmatch(ids[0]):
+            return None
+        return ("plugin", argv, ids[0], scope)
+    for launcher, width in LAUNCHERS.items():
+        if tuple(argv[:width]) == launcher:
+            i = width
+            while i < len(argv) and argv[i] in LAUNCHER_FLAGS:
+                i += 1
+            if i >= len(argv) or not SKILLS_PACKAGE.fullmatch(argv[i]):
+                return None
+            break
+    else:
+        if argv[0] != "skills":
+            return None
+        i = 0
+    if argv[i + 1:i + 2] not in (["add"], ["a"], ["install"], ["i"]):
+        return None
+    return ("skills", argv)
+
+
+def supported(command):
+    """The parsed installer for a single, plain shell command, else None."""
+    if not isinstance(command, str) or any(c in COMPOUND for c in command):
+        return None
+    try:
+        argv = shlex.split(command)
+    except ValueError:
+        return None
+    return kind(argv)

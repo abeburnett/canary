@@ -334,6 +334,27 @@ was saved as a log (20 breaks, all red). The re-audit passed every bullet.
 Gate evidence: step 1 of the CI workflow over the final tree on Python 3.10
 and 3.9 (168 tests); the composite Action steps run only in CI, on the PR.
 
+## Slice B1: installs through `canary install` (2026-10-01)
+
+`canary install -- <installer command>` (`canary/install.py`) stages, checks,
+asks once and copies skills into place; plugins follow decision 7. The
+Claude Code hook rewrites a plain installer command into it; Codex is told
+the command. Interface: `docs/architecture.md`, "canary install".
+
+- Confirmed in Claude Code's hook documentation before building: hooks do
+  not run again on a rewritten command; deny rules still apply to it; when
+  several hooks rewrite one call the last to finish wins (now a limit in
+  `SECURITY.md`).
+- Tests: `tests/test_install.py` (11, with fake installers on `PATH`),
+  three gate tests, and ten corpus cases moved from deny to rewrite.
+- The code came before its tests in this slice, so the red evidence is the
+  deliberate breaks: 18, each turning a named test red (log in the slice
+  record's evidence). The failed-installer test could not fail at first
+  (the fake wrote nothing on failure); it now writes a skill and exits 1.
+- Not verified here: a real `npx skills add` or `claude plugin install`
+  through `canary install` on the owner's Mac; the hook blocks agents from
+  running installers, so the owner runs that check.
+
 ## Unverified; probed before building on them
 
 - Whether Codex hooks can rewrite a command.

@@ -36,6 +36,7 @@ Left out on purpose:
 """
 
 import json
+import shlex
 import os
 import stat
 import subprocess
@@ -762,13 +763,13 @@ HOOK_CASES = [
     hook_case("H_list_skills_repo", "allow", "npx skills add vercel-labs/agent-skills -l"),
 
     # Installs that skip the check: every host's installer, stopped.
-    hook_case("H_install_npx", "deny", "npx skills add someone/repo"),
-    hook_case("H_install_npx_latest", "deny", "npx -y skills@latest install x"),
-    hook_case("H_install_pnpm", "deny", "pnpm dlx skills add x"),
-    hook_case("H_install_yarn", "deny", "yarn dlx skills add x"),
+    hook_case("H_install_npx", "rewrite", "npx skills add someone/repo"),
+    hook_case("H_install_npx_latest", "rewrite", "npx -y skills@latest install x"),
+    hook_case("H_install_pnpm", "rewrite", "pnpm dlx skills add x"),
+    hook_case("H_install_yarn", "rewrite", "yarn dlx skills add x"),
     hook_case("H_install_bunx_chain", "deny", "cd /tmp && bunx skills update"),
-    hook_case("H_install_plugin", "deny", "claude plugin install foo@bar"),
-    hook_case("H_install_marketplace", "deny", "claude plugin marketplace add someone/market"),
+    hook_case("H_install_plugin", "rewrite", "claude plugin install foo@bar"),
+    hook_case("H_install_marketplace", "rewrite", "claude plugin marketplace add someone/market"),
     hook_case("H_install_codex_plugin", "deny", "codex plugin install foo"),
     hook_case("H_install_help_elsewhere", "deny", "npx skills add evil/repo; echo --help",
               why="a help flag in another command does not make the install one"),
@@ -802,12 +803,12 @@ HOOK_CASES = [
     hook_case("H_new_skill_link_out_patch", "deny",
               patch_add("{H}/.claude/" + "skills/linked-empty/SKILL.md"), tool="apply_patch",
               hosts=("codex",)),
-    hook_case("H_install_plugin_alias", "deny", "claude plugin i foo@bar"),
+    hook_case("H_install_plugin_alias", "rewrite", "claude plugin i foo@bar"),
     # Spark 1.3 Contributor's review of slice A1 (2026-09-30): the shell reads
     # quotes, continuations, runners and options that a text pattern misses.
-    hook_case("H_install_quoted_word", "deny", 'npx "skills" add evil/repo'),
-    hook_case("H_install_split_quote", "deny", "npx sk'ills' add evil/repo"),
-    hook_case("H_install_quoted_runner", "deny", '"npx" skills add evil/repo'),
+    hook_case("H_install_quoted_word", "rewrite", 'npx "skills" add evil/repo'),
+    hook_case("H_install_split_quote", "rewrite", "npx sk'ills' add evil/repo"),
+    hook_case("H_install_quoted_runner", "rewrite", '"npx" skills add evil/repo'),
     hook_case("H_install_continuation", "deny", "npx \\\nskills add evil/repo",
               why="bash joins the lines into `npx skills add`"),
     hook_case("H_install_plugin_continuation", "deny", "claude plugin \\\ninstall foo@bar",
@@ -947,6 +948,23 @@ class HookHome:
                               capture_output=True, text=True, env=env, timeout=TIMEOUT_S)
 
 
+def hook_rewritten(host, proc, command):
+    """True when the hook sends a plain installer through `canary install`:
+    Claude Code runs it rewritten, with the same words and a long timeout;
+    Codex is denied with a message naming the same command."""
+    words = shlex.join(shlex.split(command))
+    if host == "claude":
+        if proc.returncode != 0 or not proc.stdout:
+            return False
+        out = json.loads(proc.stdout)["hookSpecificOutput"]
+        updated = out.get("updatedInput", {})
+        return (out["permissionDecision"] == "allow"
+                and updated.get("command", "").endswith(f" install -- {words}")
+                and updated["command"].startswith("/usr/bin/python3 -I -B ")
+                and updated.get("timeout") == 600000)
+    return hook_blocked(host, proc) and f"canary install -- {words}" in proc.stdout
+
+
 def hook_blocked(host, proc):
     """True for the host's deny, False for a clean allow; anything else fails."""
     if host == "claude" and proc.returncode == 2 and proc.stderr.strip():
@@ -979,6 +997,10 @@ class HookProbeCorpus(unittest.TestCase):
             for host in c["hosts"]:
                 with self.subTest(case=c["name"], host=host):
                     proc = self.home.run(host, c["tool"], tool_input, self.home.fill(c["cwd"]))
+                    if c["expect"] == "rewrite":
+                        self.assertTrue(hook_rewritten(host, proc, tool_input["command"]),
+                                        f"not sent through canary install: {proc!r}"[:300])
+                        continue
                     blocked = hook_blocked(host, proc)
                     note = f" ({c['why']})" if c["why"] else ""
                     if c["expect"] == "deny":
@@ -991,6 +1013,9 @@ class HookProbeCorpus(unittest.TestCase):
 
     def test_H_installs_that_skip_the_check_are_stopped(self):
         self.run_group("deny")
+
+    def test_H_plain_installs_go_through_canary_install(self):
+        self.run_group("rewrite")
 
 
 assert len({c["name"] for c in HOOK_CASES}) == len(HOOK_CASES), "duplicate hook case names"
