@@ -518,6 +518,26 @@ managed-policy and resource-backed sources. No live authenticated request
 was made. No classifier backend will be implemented on the strength of the
 partial local success alone.
 
+## Rewriting an installer command (front door, slice B1; 2026-10-01)
+
+- **Documented:** the Codex hooks page says a PreToolUse hook can rewrite a
+  call by returning `permissionDecision: "allow"` with `updatedInput`, and
+  that `ask` is not supported.
+- **Not run live yet.** The 2026-09-30 attempt hit the Codex usage limit;
+  Codex runs again (checked 2026-10-02). A user hook needs hook trust, so
+  the probe runs with `--dangerously-bypass-hook-trust` for its own hook,
+  which an agent may not launch; the owner runs it. The result goes here.
+- **In force until then:** deny and redirect. The Codex hook denies a plain
+  installer command with a message naming `canary install -- <the same
+  words>` (`gate.INSTALL_INSTEAD`; `tests/test_gate.py`
+  `test_codex_is_told_the_canary_install_command`), and the agent runs that
+  command, which the hook allows.
+- **Open question for the probe:** in Claude Code a rewrite with no decision
+  keeps the person's permission rules, and `allow` skips them (verified live,
+  2026-10-01). Codex documents rewriting only with `allow`, so the probe also
+  has to show whether Codex's own approval policy still applies to the
+  rewritten command.
+
 ## Integration boundaries still unverified
 
 - Shared `canary.gate` dataclasses and `canary hook` dispatch must be connected

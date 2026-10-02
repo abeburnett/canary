@@ -157,6 +157,7 @@ class SkillsComeFromStaging(unittest.TestCase):
                          ("installed", [{"name": "helper", "verdict": "LIKELY_SAFE"}]))
         [run] = mac.runs()
         self.assertNotEqual(run["home"], mac.home)  # the installer wrote to staging
+        self.assertEqual(len(mac.asked), 1)  # one question for the whole install
         self.assertEqual(mac.asked[0]["real_skills"], [])  # nothing in place while asking
         real = os.path.join(mac.home, ".agents", "skills", "helper")
         self.assertTrue(os.path.isfile(os.path.join(real, "SKILL.md")))

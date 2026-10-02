@@ -348,8 +348,8 @@ the command. Interface: `docs/architecture.md`, "canary install".
 - Tests: `tests/test_install.py` (19, with fake installers on `PATH`),
   three gate tests, and ten corpus cases moved from deny to rewrite.
 - The code came before its tests in this slice, so the red evidence is the
-  deliberate breaks: 18, each turning a named test red (log in the slice
-  record's evidence). The failed-installer test could not fail at first
+  deliberate breaks: 29 after the review fold, each turning a named test
+  red (saved log over the final commit). The failed-installer test could not fail at first
   (the fake wrote nothing on failure); it now writes a skill and exits 1.
 - Permission probe (live, `claude -p`, 2026-10-01): a rewrite with no
   `permissionDecision` is checked against the person's permission rules as
@@ -422,6 +422,11 @@ the command. Interface: `docs/architecture.md`, "canary install".
    install paths, `enabledPlugins` in settings), which any release can
    change. Plugins load at session start, so nothing unchecked is used in
    between. Skills are copied from staging, as section 2 says.
+8. (2026-10-02, after the slice B1 done-when audit) A plugin install goes
+   through `canary install` only as `claude plugin install
+   <name>@<marketplace>`: SkillCanary has to know the marketplace to stage
+   the plugin. A bare `claude plugin install <name>` stays denied, with a
+   message naming both routes.
 
 ## Plan
 
