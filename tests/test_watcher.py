@@ -181,6 +181,17 @@ class ThePersonDecides(unittest.TestCase):
         self.assertEqual(len(mac.held()), 1)
 
 
+class TheLaunchAgent(unittest.TestCase):
+    def test_it_finds_the_classifier_your_terminal_finds(self):
+        # launchd starts programs with a minimal PATH; the agent's own PATH
+        # carries the folder that holds `claude`, found when setup runs.
+        path = watcher.agent_path(which=lambda name: "/opt/tools/bin/claude")
+        self.assertEqual(path.split(":")[0], "/opt/tools/bin")
+        self.assertIn("/usr/bin", path.split(":"))
+        plist = watcher.launch_agent_plist("/x/canary", "/x/support", path)
+        self.assertIn(f"<key>PATH</key><string>{path}</string>", plist)
+
+
 class WhatCannotSlipPast(unittest.TestCase):
     """Slice B2 refutation (Muse Spark 1.3 Contributor, 2026-10-02)."""
 
