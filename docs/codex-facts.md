@@ -523,20 +523,31 @@ partial local success alone.
 - **Documented:** the Codex hooks page says a PreToolUse hook can rewrite a
   call by returning `permissionDecision: "allow"` with `updatedInput`, and
   that `ask` is not supported.
-- **Not run live yet.** The 2026-09-30 attempt hit the Codex usage limit;
-  Codex runs again (checked 2026-10-02). A user hook needs hook trust, so
-  the probe runs with `--dangerously-bypass-hook-trust` for its own hook,
-  which an agent may not launch; the owner runs it. The result goes here.
-- **In force until then:** deny and redirect. The Codex hook denies a plain
+- **Run live, 2026-10-01 local (2026-10-02 UTC)** (owner's terminal, Codex CLI 0.159.2, `codex
+  exec`, approval `never`, sandbox `workspace-write`). A probe hook, passed
+  with `-c hooks.PreToolUse=...` and trusted for that run only with
+  `--dangerously-bypass-hook-trust`, rewrote `./PROBE_A.sh` into
+  `./PROBE_B.sh`; each script left a marker, and the hook logged each call.
+
+  | Case | Hook calls | What ran |
+  |---|---|---|
+  | No probe hook (control) | 0 | `PROBE_A` |
+  | `updatedInput` with `permissionDecision: "allow"` | 1 | `PROBE_B` |
+  | `updatedInput` with no decision | 1 | `PROBE_A`: the rewrite is ignored |
+
+  Without hook trust (the first attempt) the probe hook never ran: Codex
+  skips user hooks it has not been told to trust.
+- **Decision for SkillCanary:** Codex keeps deny and redirect. A Codex
+  rewrite takes effect only with `allow`, and in Claude Code `allow` skips
+  the person's permission rules (verified live, 2026-10-01). Whether `allow`
+  also skips Codex's approval policy is unverified here (this run's policy
+  was `never`), so SkillCanary does not rely on it. A rewrite with no
+  decision would be worse: the original installer would run.
+- **In force:** deny and redirect. The Codex hook denies a plain
   installer command with a message naming `canary install -- <the same
   words>` (`gate.INSTALL_INSTEAD`; `tests/test_gate.py`
   `test_codex_is_told_the_canary_install_command`), and the agent runs that
   command, which the hook allows.
-- **Open question for the probe:** in Claude Code a rewrite with no decision
-  keeps the person's permission rules, and `allow` skips them (verified live,
-  2026-10-01). Codex documents rewriting only with `allow`, so the probe also
-  has to show whether Codex's own approval policy still applies to the
-  rewritten command.
 
 ## Integration boundaries still unverified
 

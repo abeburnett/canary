@@ -143,8 +143,9 @@ Slice A, the guard comes out:
 Slice B, installs are intercepted:
 
 4. In Claude Code, an agent's `npx skills add <owner/repo>` and
-   `claude plugin install <name>` become `canary install -- …`, check the
-   files, ask once, and install only the checked files.
+   `claude plugin install <name>@<marketplace>` (owner decision 8) become
+   `canary install -- …`, check the files, ask once, and install only the
+   checked files.
 5. The Codex rewrite probe's result is recorded in `docs/codex-facts.md`,
    with deny-and-redirect as the fallback.
 6. The watcher moves a new unchecked skill folder into quarantine and shows
@@ -178,7 +179,11 @@ done-when audit by a model other than the author.
   page says a PreToolUse hook rewrites a call with `permissionDecision:
   "allow"` plus `updatedInput`, and does not support `ask`. A live run waits
   until the Codex usage limit resets (2026-10-03). Until then the plan
-  assumes deny-and-redirect for Codex.
+  assumes deny-and-redirect for Codex. **Run live 2026-10-01 local
+  (2026-10-02 UTC)** (Codex ran
+  again before that date): Codex applies a rewrite only with `allow`, and
+  ignores one with no decision, so Codex keeps deny-and-redirect
+  (`docs/codex-facts.md`, "Rewriting an installer command").
 - **SessionStart runs after the session lists its skills: verified live.** A
   skill created by a SessionStart hook was missing from the session's init
   event and the model said it was unavailable; a positive control (the skill
@@ -380,9 +385,43 @@ the command. Interface: `docs/architecture.md`, "canary install".
   records and marketplace copy, which are not compared (documented); an
   agent can pass `--backend none` itself, which caps the verdict at "needs
   your judgment" and still asks the person.
-- Not verified here: a real `npx skills add` or `claude plugin install`
-  through `canary install` on the owner's Mac; the hook blocks agents from
-  running installers, so the owner runs that check.
+- Real skills install, owner's terminal, 2026-10-02: `canary install --
+  npx skills add vercel-labs/agent-skills -g -y -s writing-guidelines`
+  installed after one dialog (verdict NEEDS_REVIEW). The first attempt named
+  a skill the repository does not have; the installer failed in staging and
+  nothing was installed, as designed. Without `-a`, the skills installer
+  installs into every agent it supports, so the skill landed as one copy in
+  `~/.agents/skills` plus 46 links, most in agent folders created for it;
+  the dialog listed all 47 places. The owner chose to leave them. Possible
+  follow-up: the dialog warns when an install creates folders for agents
+  the person does not have.
+- Real plugin install, owner's terminal, 2026-10-02: `canary install --
+  claude plugin install code-review@claude-plugins-official` staged and
+  checked the plugin (NEEDS_REVIEW: it grants tools), asked once, ran the
+  real install, and the installed folder
+  (`~/.claude/plugins/cache/claude-plugins-official/code-review/ab024cdcfa7c`)
+  matched the checked bytes, so it stayed installed.
+- Not run for real: the rewrite inside a live Claude Code session, which
+  needs this branch's hook installed (after merge and `canary setup`); its
+  output shape and the permission flow are covered by the tests and the
+  2026-10-01 probe.
+
+## Slice B1 done-when audit (2026-10-01 local)
+
+Auditor: Sonnet, read-only (the author was Opus 5.5). First pass: bullets 4
+and 5 blocked. Bullet 4 lacked an owner decision for the
+`<name>@<marketplace>` plugin form, a real installer run, and an ask-once
+assertion for skills; bullet 5 had no probe result in `docs/codex-facts.md`.
+Then the owner made decision 8 and ran a real skills install and a real
+plugin install through `canary install`, and the live Codex probe ran (the
+October 3 date in the plan was a stale usage-limit note). The ask-once
+assertion and the Codex record were added. The re-audit passed every bullet,
+checking the real installs against the machine (the installed folders,
+`installed_plugins.json` and the ledger). Gate evidence: step 1 of the CI
+workflow over the final tree on Python 3.10 and 3.9 (190 tests); 29
+deliberate breaks red over the final code. Stated limit: the rewrite has not
+run inside a live Claude Code session; that needs this branch's hook,
+installed after merge.
 
 ## Unverified; probed before building on them
 

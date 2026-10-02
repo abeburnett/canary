@@ -167,7 +167,9 @@ Decision rules (`canary/gate.py`, `decide`), in order:
    against the person's rules; with `allow` it would skip them). Claude Code
    does not run hooks again on the new command.
    Codex is denied with a message naming `canary install -- <the same
-   words>` (whether Codex can rewrite is probed after 2026-10-03). Any other
+   words>`, and the agent runs that under the person's Codex approvals:
+   Codex applies a rewrite only with `allow` (live probe, 2026-10-02,
+   `docs/codex-facts.md`), which SkillCanary does not use. Any other
    installer command is denied, naming `canary install` and `canary add`. The installer's own
    words decide, wherever they sit: after removing quotes, `$'...'`, line
    continuations and backslashes, the command is searched for a `skills`
