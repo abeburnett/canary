@@ -474,8 +474,17 @@ before their files appear, so the watcher never holds them. Interface:
   `PATH` would hide `claude`, so a held skill would get only the first
   layer's check; the launch agent now runs with a `PATH` that has the
   folder holding `claude`, found when setup runs (one test, one break).
-  The real run happens after merge: setup, then one throwaway skill held,
-  put back and held again.
+- Real run on the owner's Mac (2026-10-02 UTC, ledger events quoted):
+  after PR 12's merge and `canary setup`, a throwaway skill created in
+  `~/.agents/skills/watcher-test` was `held` at 21:41:53; the dialog was
+  answered Cancel (`declined` at 21:42:00) and it stayed held. That watcher
+  predated the `PATH` fix, so its check was the scanner's alone
+  (NEEDS_REVIEW). After PR 13 and setup again (the launch agent's file now
+  carries `PATH=~/.local/bin:/usr/bin:...`), the restarted watcher asked
+  again about the held skill, the classifier ran (`checked` LIKELY_SAFE),
+  the owner clicked Install, and it was `approved` (how: watcher) and back
+  in place at 21:49:53. Not exercised for real: `canary restore` and the
+  held list in `canary list` (covered by tests).
 - Tests: `tests/test_watcher.py` (26), one setup test, five corpus cases.
   The code came before its tests, so the red evidence is the deliberate
   breaks: 31 after the review fold and the audit fix, each turning a named
