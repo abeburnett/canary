@@ -523,7 +523,7 @@ partial local success alone.
 - **Documented:** the Codex hooks page says a PreToolUse hook can rewrite a
   call by returning `permissionDecision: "allow"` with `updatedInput`, and
   that `ask` is not supported.
-- **Run live, 2026-10-02** (owner's terminal, Codex CLI 0.159.2, `codex
+- **Run live, 2026-10-01 local (2026-10-02 UTC)** (owner's terminal, Codex CLI 0.159.2, `codex
   exec`, approval `never`, sandbox `workspace-write`). A probe hook, passed
   with `-c hooks.PreToolUse=...` and trusted for that run only with
   `--dangerously-bypass-hook-trust`, rewrote `./PROBE_A.sh` into
