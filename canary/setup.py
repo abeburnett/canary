@@ -379,6 +379,12 @@ def setup(level=None, *, home=None, prefix="/", runner=run_as_admin, chooser=cho
     if needs_admin and not runner(script(p, prefix, owner, person)):
         return {"outcome": "not_changed", "level": previous, "manual": []}, 10
     _write_frontdoor(p)
+    # The guest list's first look: the skills here now are the person's.
+    try:
+        from canary import guestlist
+        guestlist.scan(home, first_look=True)
+    except (OSError, ValueError):
+        pass
     return {"outcome": "done", "level": level,
             "manual": [{"path": m["path"], "block": m["block"]} for m in p["manual"]]}, 0
 

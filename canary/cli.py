@@ -18,6 +18,8 @@ USAGE = ("usage: canary scan <skill-file-or-directory> [--json | --text] [--exce
          " [--timeout <seconds>]\n"
          "       canary add <github-link-or-folder> [--host claude|codex]... [--json | --text]"
          " [--backend <name>] [--model <id>] [--timeout <seconds>]\n"
+         "       canary list [--json]\n"
+         "       canary trust <skill-folder-or-skills-folder>\n"
          "       canary setup [--level scan|guard]\n"
          "       canary doctor [--json]\n"
          "       canary digest <folder>")
@@ -208,6 +210,57 @@ def _doctor(args):
     return 10 if gaps else 0
 
 
+def _list(args):
+    from canary import guestlist
+    if args not in ([], ["--json"]):
+        print(USAGE, file=sys.stderr)
+        return EXIT_USAGE
+    try:
+        report = guestlist.scan(cwd=os.getcwd())
+    except OSError as exc:
+        print(f"canary: could not read the guest list ({exc.strerror or exc}).", file=sys.stderr)
+        return 1
+    print(json.dumps(report, indent=2) if args else guestlist.render_text(report))
+    return 0
+
+
+def _trust(args):
+    from canary import guestlist
+    if len(args) != 1 or args[0].startswith("-"):
+        print(USAGE, file=sys.stderr)
+        return EXIT_USAGE
+    try:
+        names = guestlist.trust(args[0])
+    except ValueError as exc:
+        print(f"canary: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    except OSError as exc:
+        print(f"canary: could not write the guest list ({exc.strerror or exc}).", file=sys.stderr)
+        return 1
+    print("Marked as yours: " + ", ".join(names))
+    return 0
+
+
+def _session_start(args):
+    """A host's SessionStart hook: one notice when a skill needs a look,
+    nothing otherwise. Never fails the session: any error is silence."""
+    try:
+        from canary import guestlist
+        host = args[1] if len(args) == 2 and args[0] == "--host" else None
+        try:
+            payload = json.loads(sys.stdin.read() or "{}")
+        except ValueError:
+            payload = {}
+        cwd = payload.get("cwd") if isinstance(payload, dict) else None
+        line = guestlist.session_line(guestlist.scan(cwd=cwd if isinstance(cwd, str) else None))
+        if line and host in ("claude", "codex"):
+            sys.stdout.write(json.dumps({"systemMessage": line, "hookSpecificOutput": {
+                "hookEventName": "SessionStart", "additionalContext": line}}))
+    except BaseException:
+        pass
+    return 0
+
+
 def _digest(args):
     if len(args) != 1 or not os.path.isdir(args[0]):
         print(USAGE, file=sys.stderr)
@@ -227,6 +280,8 @@ def main(argv):
         return 0
     if argv[:1] == ["hook"]:
         return _hook(argv[1:])
+    if argv[:1] == ["session-start"]:
+        return _session_start(argv[1:])
     if not argv or argv[0] in ("-h", "--help", "help"):
         print(USAGE)
         return 0 if argv else EXIT_USAGE
@@ -242,6 +297,10 @@ def main(argv):
             return _setup(rest)
         if command == "doctor":
             return _doctor(rest)
+        if command == "list":
+            return _list(rest)
+        if command == "trust":
+            return _trust(rest)
         if command == "digest":
             return _digest(rest)
         if command == "evidence":

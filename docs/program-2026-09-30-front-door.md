@@ -91,12 +91,13 @@ approval. Nothing is deleted: a declined skill stays in quarantine, and
 
 SkillCanary records every skill and what happened to it: arrived (and how),
 checked, approved or declined, changed, removed, with dates. It keeps these
-in the lockfile and an append-only ledger in its support folder.
+in an append-only ledger in its support folder.
 
 - `canary list` shows each skill as **checked**, **changed since approval**,
   **unchecked** (arrived another way) or **yours**.
-- At session start, a Claude Code SessionStart hook prints one line when
-  something is unchecked or changed, and nothing otherwise. It never blocks.
+- At session start, a SessionStart hook (Claude Code and Codex) prints one
+  line when something is unchecked or changed, and nothing otherwise. It
+  never blocks.
 - **Your own skills are never flagged.** Skills present when SkillCanary is
   set up, and skills the person marks with `canary trust <folder>`, count as
   theirs. Their changes are recorded, never reported.
@@ -155,6 +156,8 @@ Slice C, the guest list:
    and removals. The SessionStart line appears only when something is
    unchecked or changed.
 8. Changes to the person's own skills are recorded and never reported.
+   Their own skills are those in a user skills folder at setup's first look
+   and those they mark with `canary trust` (owner decision 6).
 
 Slice D, a measurable door:
 
@@ -281,6 +284,56 @@ final tree on Python 3.10 and 3.9; step 2 (the composite Action on GitHub)
 runs only in CI. Limit the auditor noted: the Lockdown unlock has not been
 run as root on a real Lockdown Mac.
 
+## Slice C: the guest list (2026-10-01)
+
+`canary/guestlist.py` keeps the ledger and works out each skill's status;
+`canary list`, `canary trust` and `canary session-start` use it; `canary add`
+records its checks, approvals and declines; setup takes the first look and
+installs the SessionStart hook in both hosts; the hook denies file-tool
+writes to the ledger and the lockfile. Interface: `docs/architecture.md`,
+"The guest list".
+
+- Tests: `tests/test_guestlist.py` (18), two in `tests/test_setup.py`, and
+  four hook cases in the corpus (three record writes denied, a read
+  allowed).
+- Review: Muse Spark 1.3 Contributor, read-only, one round, 10 findings.
+  Fixed, each with a test that failed first:
+  - a same-size edit with its modification time put back reused the cached
+    fingerprint; the cache key now includes the change time and inode;
+  - a change to a file a link inside the skill points at went unseen; links
+    are now followed, each folder once, within a size limit;
+  - a deleted ledger made every skill "yours" again; only setup takes the
+    first look now, and any other scan reports skills it has no record of;
+  - a refused install, and one stopped before the dialog, were not recorded;
+  - one skill under two names showed only one; both are listed.
+  Also fixed: fingerprinting before taking the ledger lock; `canary list`
+  and `canary trust` report a file error instead of a traceback; the docs
+  now say `list` scans the current repository too.
+  Recorded, not changed: a tool the hook does not read (an MCP server's file
+  tool) can write the ledger, as with every hook rule (documented); an
+  unknown `--host` prints nothing, which only a hand-edited hook command
+  can cause. Repository skills are not in setup's first look, so they are
+  reported until trusted; the audit called that a re-scope of bullet 8, and
+  the owner accepted it (decision 6).
+- Deliberate breaks: 20, each turning a named test red. The first run found
+  one gap: the "never fails the session" test fed a damaged ledger, which is
+  skipped without an error, so it could not fail; it now makes the scan
+  itself raise.
+- Not verified here: that a SessionStart notice reaches the agent before it
+  uses a skill in a live Claude Code or Codex session. The hook's output
+  shape follows each host's documentation.
+
+## Slice C done-when audit (2026-10-01)
+
+Auditor: Sonnet, read-only (the author was Opus 5.5). First pass: bullet 7
+shown; bullet 8 blocked as re-scoped, because repository skills are not in
+setup's first look; the deliberate-break results were blocked as asserted,
+since no log was saved. The owner chose to report repository skills until
+trusted (decision 6), bullet 8 was amended and a test added; the break run
+was saved as a log (20 breaks, all red). The re-audit passed every bullet.
+Gate evidence: step 1 of the CI workflow over the final tree on Python 3.10
+and 3.9 (168 tests); the composite Action steps run only in CI, on the PR.
+
 ## Unverified; probed before building on them
 
 - Whether Codex hooks can rewrite a command.
@@ -305,6 +358,12 @@ run as root on a real Lockdown Mac.
    tricks; reads, writes and shell commands touching the quarantine, as
    before; and every installer command until slice B routes them through
    `canary install`.
+6. (2026-10-01, after the slice C done-when audit) Skills in a repository's
+   skills folders are not part of setup's first look. They are reported as
+   unchecked in every session in that repository until the person runs
+   `canary trust <repo>/.claude/skills` (or removes them), because a cloned
+   repository full of skills is the main case the guest list exists to
+   catch.
 
 ## Plan
 
