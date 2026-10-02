@@ -547,13 +547,14 @@ def add(source, *, home=None, support_dir=None, approve=None, fetch=None,
                 out["reasons"].append(f"A skill named {name} was installed meanwhile; "
                                       "use canary update to replace it.")
                 return out
+            # Recorded before the files appear, so the watcher leaves them alone.
+            _record(guestlist.record_install, home, destinations, name, verdict,
+                    support=support_dir, source=snapshot)
             done = _install(snapshot, destinations, snapshot_digest, run_id, name, out)
             if done is None:
                 return out
             try:
-                finished = _finish(out, lock, home, name, verdict, result, done, fields)
-                _record(guestlist.record_install, home, done, name, verdict, support=support_dir)
-                return finished
+                return _finish(out, lock, home, name, verdict, result, done, fields)
             except OSError:
                 for dest in done:
                     _remove(dest)

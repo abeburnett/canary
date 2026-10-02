@@ -12,12 +12,23 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 
 from canary import setup
 
 MACOS = unittest.skipUnless(sys.platform == "darwin", "setup runs macOS tools (base64 -D, /Library)")
 ME = f"{os.getuid()}:{os.getgid()}"
 
+
+
+def setUpModule():
+    """A test that reaches the real launchctl fails rather than loading a
+    launch agent on the machine running the tests."""
+    def refuse(args):
+        raise AssertionError(f"a test reached the real launchctl: {args}")
+    patch = unittest.mock.patch.object(setup, "launchctl", refuse)
+    patch.start()
+    unittest.addModuleCleanup(patch.stop)
 
 class Mac:
     def __init__(self):
@@ -26,6 +37,18 @@ class Mac:
         for d in (".claude/skills", ".agents/skills"):
             os.makedirs(os.path.join(self.home, d))
         self.scripts = []
+        self.launches, self.loaded = [], False
+
+    def launch(self, args):
+        """A stand-in for launchctl: tests never load a real launch agent."""
+        self.launches.append(list(args))
+        if args[0] == "bootstrap":
+            self.loaded = True
+        elif args[0] == "bootout":
+            self.loaded = False
+        elif args[0] == "print":
+            return 0 if self.loaded else 113
+        return 0
 
     def run_script(self, text):
         self.scripts.append(text)
@@ -34,10 +57,12 @@ class Mac:
 
     def setup(self, level, runner=None):
         return setup.setup(level, home=self.home, prefix=self.prefix,
-                           runner=runner or self.run_script, owner=ME, person=ME)
+                           runner=runner or self.run_script, owner=ME, person=ME,
+                           launcher=self.launch)
 
     def doctor(self):
-        return setup.doctor(self.home, self.prefix, expected_uid=os.getuid())
+        return setup.doctor(self.home, self.prefix, expected_uid=os.getuid(),
+                            launcher=self.launch)
 
     def at(self, path):
         return os.path.join(self.prefix, path.lstrip("/"))
@@ -81,6 +106,23 @@ class GuardInstallsBothHooks(unittest.TestCase):
         proc = subprocess.run(shlex.split(setup.hook_command(mac.prefix, "claude")),
                               input="not json", capture_output=True, text=True, timeout=60)
         self.assertEqual(proc.returncode, 2)
+
+    def test_guard_starts_the_watcher_and_scan_removes_it(self):
+        from canary import watcher
+        mac = Mac()
+        mac.setup("guard")
+        plist = watcher.plist_path(mac.home)
+        with open(plist) as fh:
+            text = fh.read()
+        self.assertIn("<string>watch</string>", text)
+        self.assertIn(f"<string>{mac.at(setup.LIB)}/bin/canary</string>", text)
+        self.assertEqual(mac.launches[-1], ["bootstrap", f"gui/{os.getuid()}", plist])
+        self.assertEqual(mac.doctor()[1], [])
+        mac.loaded = False  # stopped behind SkillCanary's back
+        self.assertTrue(any("watcher is not running" in g for g in mac.doctor()[1]))
+        mac.setup("scan")
+        self.assertFalse(os.path.exists(plist))
+        self.assertEqual(mac.launches[-1][0], "bootout")
 
     def test_guard_adds_the_guest_list_hook_in_both_hosts(self):
         mac = Mac()
@@ -511,7 +553,8 @@ class LockdownIsGone(unittest.TestCase):
                                        st.st_gid, st.st_size, st.st_atime, st.st_mtime, st.st_ctime))
             return st
         with unittest.mock.patch.object(os, "stat", stat):
-            gaps = setup.doctor(mac.home, mac.prefix, expected_uid=os.getuid(), root_uid=fake_root)[1]
+            gaps = setup.doctor(mac.home, mac.prefix, expected_uid=os.getuid(), root_uid=fake_root,
+                                launcher=mac.launch)[1]
         self.assertTrue(any(".agents/skills" in g and "root" in g for g in gaps), gaps)
 
     @MACOS

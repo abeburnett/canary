@@ -40,6 +40,11 @@ RECORD = ("That is SkillCanary's own record of what was installed and checked. "
           "Agents may read it but not rewrite it; canary trust and canary add change it.")
 QUARANTINED = ("That file is a quarantined package SkillCanary has not approved. "
                "Agents may not read it; use `canary check` for a verdict.")
+WATCHER = ("That is SkillCanary's watcher, which holds skills that arrive without a check. "
+           "Agents may not stop or change it; the person can, with canary setup.")
+# The watcher's label or launch-agent file named in a shell command (decision
+# 10): as with installer words, a command that only mentions it is denied too.
+WATCHER_TEXT = re.compile(r"com\.skillcanary\.watcher", re.I)
 UNREADABLE = ("SkillCanary could not check this tool call, so it is blocked. "
               "If it is harmless, ask the person to run it in their own terminal.")
 
@@ -156,6 +161,8 @@ def decide(call, home, roots, canary_bin=None, can_rewrite=False):
                 return INSTALL_INSTEAD.format(command=words)
             if QUARANTINE_TEXT.search(call.command):
                 return QUARANTINED
+            if WATCHER_TEXT.search(installers.tidy(call.command)):
+                return WATCHER
         if call.tool_name == "apply_patch" and not call.paths_written:
             return UNREADABLE  # a patch the adapter could not read
         if any(_creates_skill(p, roots) for p in call.paths_written):
@@ -163,8 +170,12 @@ def decide(call, home, roots, canary_bin=None, can_rewrite=False):
         support = _fold(os.path.realpath(os.path.join(home, SUPPORT)))
         lockfile = _fold(os.path.realpath(os.path.join(home, ".agents", ".canary-lock.json")))
         quarantine_root = _fold(os.path.realpath(quarantine_dir(home)))
+        agent_file = _fold(os.path.realpath(os.path.join(
+            home, "Library", "LaunchAgents", "com.skillcanary.watcher.plist")))
         for p in call.paths_written:
             f = _fold(os.path.realpath(p))
+            if f == agent_file:
+                return WATCHER
             if (_inside(f, support) and not _inside(f, quarantine_root)) or f == lockfile:
                 return RECORD
         quarantine = _fold(os.path.realpath(quarantine_dir(home)))

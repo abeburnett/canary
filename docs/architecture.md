@@ -649,6 +649,51 @@ account; the hook keeps agents' file tools from rewriting it, but a shell
 command, a tool the hook does not read (such as an MCP server's file tool),
 or other software running as the person can change it.
 
+## The watcher: `canary watch` and `canary restore <id>`
+
+A launch agent (`com.skillcanary.watcher`, `canary/watcher.py`; program
+2026-09-30, slice B2) that holds a new skill that arrived without
+SkillCanary's check until the person decides. `canary setup --level guard`
+writes `~/Library/LaunchAgents/com.skillcanary.watcher.plist` as the person
+and loads it (after writing the SkillCanary skill and taking the guest list's
+first look, so it holds neither); `--level scan` unloads and removes it.
+launchd keeps it running (`KeepAlive`; a probe on 2026-10-02 showed it
+restarted about ten seconds after being killed, and that a launch agent can
+show the person a dialog).
+
+It watches the person's Claude Code and Codex skills folders (each host's
+`install_root` and `CODEX_HOME/skills`) with kqueue, and looks again every
+two seconds for folders that appear later. When a new entry appears:
+
+1. It waits until the entry has not changed for two seconds (a move at first
+   sight broke 1 in 40 writes in the probe), and until it holds a `SKILL.md`
+   (a folder without one is watched for ten minutes, then let go).
+2. It leaves the entry alone when the guest list approves what it resolves to
+   with the same content (SkillCanary's own installs record their approval
+   before their files appear), when it is SkillCanary's own skill exactly as
+   setup writes it, or when it is a link into another watched folder (the
+   target is the one decided).
+3. Otherwise it moves the entry, folder or link, into
+   `quarantine/held/<id>/` and records a `held` event. Then, on its own
+   thread so holding never waits, it checks the skill (both layers) and asks
+   the person in SkillCanary's dialog. Install puts it back where it was,
+   recording the approval first. Cancel, no answer, or no screen keeps it
+   held. An unsafe verdict keeps it held with a notification and no
+   question.
+
+Nothing is deleted. `canary list` shows what is held, where it came from, and
+`canary restore <id>`, which checks it again and asks the person again: an
+agent can run the command, but only the person's answer puts it back. The
+session-start notice counts held skills. What it never holds: what is there
+when it starts, changes to skills already there, and skills in repositories
+(the guest list reports those). Anything that arrives while it is not
+running is reported at the next session start, not held.
+
+At Guard the hook keeps agents from stopping it (owner decision 10): a shell
+command naming its label or launch-agent file is denied, and so is a file
+tool writing that file. `canary doctor` reports a gap when the launch agent
+is missing or not loaded.
+
 ## How people get Canary and use it
 
 Canary itself is the one install that happens without Canary, so it only
@@ -697,10 +742,11 @@ the Mac from changing files. Three layers, and what each covers:
    input sent with `write_stdin` to an already-approved process does not
    re-run the hook; hooks run concurrently; and a shell command can hide its
    target from any parser. Hooks are a guard, not proof.
-3. **Detection.** The guest list (above) reports skills that arrived without
-   the check or changed since approval, once per session. A watcher that
-   holds a new, unchecked skill for the person's decision is in progress in
-   the front-door program. Root-owned skill folders (Lockdown) were tried and
+3. **Detection.** The watcher (above) holds a new skill that arrived in a
+   user skills folder without the check, about two seconds after it stops
+   changing, until the person decides. The guest list reports, once per
+   session, skills that arrived without the check, changed since approval,
+   or are held. Root-owned skill folders (Lockdown) were tried and
    removed: they blocked ordinary work, and the hook is not proof either.
 
 Public claims follow the layers actually installed:

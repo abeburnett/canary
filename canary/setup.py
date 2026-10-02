@@ -357,8 +357,37 @@ def _write_frontdoor(p):
             pass  # the skill is a convenience; protection does not depend on it
 
 
+def launchctl(args):
+    """Run launchctl as the person; its exit code."""
+    try:
+        return subprocess.run(["launchctl", *args], capture_output=True, timeout=60).returncode
+    except (OSError, subprocess.TimeoutExpired):
+        return 1
+
+
+def _watcher(level, home, prefix, launcher):
+    """At Guard, install and start the watcher as the person (after the
+    SkillCanary skill and the first look, so it holds neither); at Scan,
+    stop and remove it."""
+    from canary import watcher
+    path = watcher.plist_path(home)
+    domain = f"gui/{os.getuid()}"
+    launcher(["bootout", f"{domain}/{watcher.LABEL}"])
+    if level != "guard":
+        if os.path.lexists(path):
+            os.unlink(path)
+        return
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    support = os.path.join(home, "Library", "Application Support", "Canary")
+    tmp = path + f".{os.getpid()}"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(watcher.launch_agent_plist(_at(prefix, LIB + "/bin/canary"), support))
+    os.replace(tmp, path)
+    launcher(["bootstrap", domain, path])
+
+
 def setup(level=None, *, home=None, prefix="/", runner=run_as_admin, chooser=choose_level,
-          owner="root:wheel", person=None):
+          owner="root:wheel", person=None, launcher=None):
     """Move this Mac to `level`. Returns (outcome dict, exit code)."""
     if level == "lockdown":
         raise ValueError("Lockdown was removed; use guard, which also returns locked folders")
@@ -385,11 +414,15 @@ def setup(level=None, *, home=None, prefix="/", runner=run_as_admin, chooser=cho
         guestlist.scan(home, first_look=True)
     except (OSError, ValueError):
         pass
+    try:
+        _watcher(level, home, prefix, launcher or launchctl)
+    except OSError:
+        pass  # doctor reports a watcher that is not running
     return {"outcome": "done", "level": level,
             "manual": [{"path": m["path"], "block": m["block"]} for m in p["manual"]]}, 0
 
 
-def doctor(home=None, prefix="/", expected_uid=0, root_uid=0):
+def doctor(home=None, prefix="/", expected_uid=0, root_uid=0, launcher=None):
     """(level, gaps in plain words, claim)."""
     home = home or os.path.expanduser("~")
     state = read_state(prefix)
@@ -430,6 +463,13 @@ def doctor(home=None, prefix="/", expected_uid=0, root_uid=0):
             has_hook = False
         if not has_hook:
             gaps.append(f"{name} is not running Canary's hook ({policy} lacks it).")
+    from canary import watcher
+    launcher = launcher or launchctl
+    if level == "guard" and (not os.path.isfile(watcher.plist_path(home)) or launcher(
+            ["print", f"gui/{os.getuid()}/{watcher.LABEL}"]) != 0):
+        gaps.append("SkillCanary's watcher is not running, so a skill that arrives outside "
+                    "an agent is reported at the next session start but not held. Run "
+                    "canary setup --level guard.")
     if level == "lockdown":
         gaps.append("This Mac is still at Lockdown, which SkillCanary no longer has. Run "
                     "canary setup --level guard to return your skill folders to you.")

@@ -309,19 +309,28 @@ def scan(home=None, support=None, cwd=None, first_look=False):
             skills.append({"name": name, "names": names, "path": path,
                            "status": s.get("status", UNCHECKED),
                            "changed_since_approval": changed, "since": s.get("since")})
+    from canary import watcher
+    held = [{"id": h["id"], "name": h["name"], "origin": h["origin"], "since": h["at"],
+             "restore": f"canary restore {h['id']}"} for h in watcher.held(support)]
     return {"schema": "canary.list/1", "skills": skills,
             "unchecked": [s for s in skills if s["status"] == UNCHECKED],
-            "changed": [s for s in skills if s["changed_since_approval"]]}
+            "changed": [s for s in skills if s["changed_since_approval"]],
+            "held": held}
 
 
-def record_install(home, folders, name, verdict, support=None):
-    """`canary add` installed `folders`: record the check and the approval."""
+def record_install(home, folders, name, verdict, support=None, source=None, how="canary add"):
+    """Record the check and the approval of `folders`. With `source`, the
+    checked copy they are about to be made from: SkillCanary records the
+    approval before the files appear, so the watcher never holds its own
+    installs. A failed install leaves an approval for a path that is not
+    there, which the next scan records as removed."""
     support = _support(support) if support else os.path.join(home, SUPPORT[2:])
     at = _now()
+    fixed = digest(source) if source else None
     with _Lock(support):
         events = [{"at": at, "event": "checked", "name": name, "verdict": verdict}]
-        events += [{"at": at, "event": "approved", "how": "canary add", "name": name,
-                    "skill": os.path.realpath(f), "digest": digest(os.path.realpath(f))}
+        events += [{"at": at, "event": "approved", "how": how, "name": name,
+                    "skill": os.path.realpath(f), "digest": fixed or digest(os.path.realpath(f))}
                    for f in folders]
         _append(support, events)
 
@@ -361,6 +370,9 @@ def session_line(report):
     if report["changed"]:
         names = ", ".join(s["name"] for s in report["changed"][:5])
         parts.append(f"{len(report['changed'])} changed since you approved them ({names})")
+    if report.get("held"):
+        names = ", ".join(h["name"] for h in report["held"][:5])
+        parts.append(f"{len(report['held'])} held for your decision ({names})")
     if not parts:
         return None
     return ("SkillCanary: " + "; ".join(parts) + ". Run canary list to see them; canary trust "
@@ -368,11 +380,16 @@ def session_line(report):
 
 
 def render_text(report):
-    if not report["skills"]:
-        return "No skills found."
-    width = max(len(s["name"]) for s in report["skills"])
     lines = []
-    for s in report["skills"]:
-        status = "changed since approval" if s["changed_since_approval"] else s["status"]
-        lines.append(f"{s['name']:<{width}}  {status:<22}  {s['path']}")
+    if report["skills"]:
+        width = max(len(s["name"]) for s in report["skills"])
+        for s in report["skills"]:
+            status = "changed since approval" if s["changed_since_approval"] else s["status"]
+            lines.append(f"{s['name']:<{width}}  {status:<22}  {s['path']}")
+    else:
+        lines.append("No skills found.")
+    if report.get("held"):
+        lines += ["", "Held by SkillCanary (arrived without its check; nothing is deleted):"]
+        lines += [f"  {h['name']}  from {h['origin']}  to restore: {h['restore']}"
+                  for h in report["held"]]
     return "\n".join(lines)
