@@ -21,6 +21,7 @@ USAGE = ("usage: canary scan <skill-file-or-directory> [--json | --text] [--exce
          "       canary install [--json | --text] [--backend <name>] [--model <id>]"
          " [--timeout <seconds>] -- <installer command>\n"
          "       canary list [--json]\n"
+         "       canary restore <held-id>\n"
          "       canary trust <skill-folder-or-skills-folder>\n"
          "       canary setup [--level scan|guard]\n"
          "       canary doctor [--json]\n"
@@ -284,7 +285,39 @@ def _trust(args):
     except OSError as exc:
         print(f"canary: could not write the guest list ({exc.strerror or exc}).", file=sys.stderr)
         return 1
+    if not names:
+        print("Not marked: the person did not agree in SkillCanary's dialog.")
+        return 10
     print("Marked as yours: " + ", ".join(names))
+    return 0
+
+
+def _restore(args):
+    """Check a held skill again and ask the person; only their approval puts
+    it back."""
+    if len(args) != 1 or args[0].startswith("-"):
+        print(USAGE, file=sys.stderr)
+        return EXIT_USAGE
+    from canary import watcher
+    try:
+        back = watcher.restore(args[0])
+    except ValueError as exc:
+        print(f"canary: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    except OSError as exc:
+        print(f"canary: {exc.strerror or exc}; it stays held.", file=sys.stderr)
+        return 1
+    print("Put back where it was." if back else "Still held; canary list shows where.")
+    return 0 if back else 10
+
+
+def _watch(args):
+    """The launch agent's entry point (canary setup installs it at Guard)."""
+    if args:
+        print(USAGE, file=sys.stderr)
+        return EXIT_USAGE
+    from canary import watcher
+    watcher.Watcher(os.path.expanduser("~")).run()
     return 0
 
 
@@ -350,6 +383,10 @@ def main(argv):
             return _list(rest)
         if command == "trust":
             return _trust(rest)
+        if command == "restore":
+            return _restore(rest)
+        if command == "watch":
+            return _watch(rest)
         if command == "digest":
             return _digest(rest)
         if command == "evidence":

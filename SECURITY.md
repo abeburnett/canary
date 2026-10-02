@@ -34,8 +34,25 @@ These are documented, not bugs; the site and `docs/architecture.md` state them.
   installer commands and file-tool creation of a new skill, and sends them
   through `canary add`. It does not stop an agent, or other software, from
   editing an installed skill or creating one with a shell command; skills in
-  a repository can also arrive with a `git checkout`. SkillCanary's guest
-  list reports those at the next session start; the watcher is in progress.
+  a repository can also arrive with a `git checkout`. The watcher holds a
+  new skill in your user skills folders about two seconds after it stops
+  changing; the guest list reports the rest at the next session start.
+- **The watcher has a window, and can be stopped.** A skill is usable in the
+  seconds before the watcher holds it, and one that arrives while the
+  watcher is not running (after a reboot, before you log in) is reported,
+  not held. The hook keeps agents from naming the watcher in a command, but
+  a command assembled from pieces, or other software running as you, can
+  still stop it; `canary doctor` reports when it is not running.
+- **What was approved is sampled once.** The watcher compares a new entry
+  with its approval when the entry settles; a change after that is a change
+  to an approved skill, which the guest list reports at the next session
+  start (for skills SkillCanary checked) and does not hold.
+- **Agents can ask, repeatedly.** An agent can run `canary restore` or
+  `canary trust`, and each shows you a dialog. Only your answer changes
+  anything, but an agent can ask again and again.
+- **The watcher holds your own new skills too.** A skill folder you create,
+  or a `git pull` that adds skills, is held with one question each; it
+  cannot tell you from software running as you.
 - **The guest list is a report, not proof.** Its ledger lives in your
   account. Agents' file tools cannot rewrite it, but a shell command or other
   software running as you can.

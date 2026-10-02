@@ -314,6 +314,13 @@ def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approv
         if any(os.path.lexists(d) for d in taken) or any(n in lock["skills"] for n in names):
             return _not(out, "Something with the same name was installed meanwhile; nothing "
                              "was installed.")
+        # Recorded before the files appear, so the watcher leaves them alone;
+        # the links resolve to these folders.
+        for name in names:
+            mine = [it for it in items if it["name"] == name]
+            add._record(guestlist.record_install, home, [it["destination"] for it in mine], name,
+                        max((it["verdict"] for it in mine), key=WORST.get),
+                        support=support_dir, source=mine[0]["snapshot"], how="canary install")
         done = []
         try:
             for it in items:
@@ -346,11 +353,6 @@ def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approv
             out["reasons"] = [r for r in out["reasons"] if not r.startswith("The package changed")]
             return _not(out, "SkillCanary could not put the checked files in place, so it "
                              "removed what it had copied.")
-    for name in names:
-        folders = [it["destination"] for it in items if it["name"] == name]
-        add._record(guestlist.record_install, home, folders, name,
-                    max((it["verdict"] for it in items if it["name"] == name), key=WORST.get),
-                    support=support_dir)
     out["outcome"] = "installed"
     out["installed"] = [_short(d, home) for d in done]
     return out

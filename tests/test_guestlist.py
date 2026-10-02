@@ -18,6 +18,7 @@ try:
 except ImportError:  # run as tests.test_guestlist
     from tests.test_add import FakeGitHub, URL, SKILL, Approver, model, tarball
 
+YES = lambda text, verdict: True  # the person agrees
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CANARY = os.path.join(ROOT, "bin", "canary")
 
@@ -90,7 +91,7 @@ class SkillsThatSkippedTheCheckAreReported(unittest.TestCase):
         line = guestlist.session_line(report)
         self.assertIn("dropped-in", line)
         self.assertIn("canary list", line)
-        guestlist.trust(folder, mac.home, support=mac.support)
+        guestlist.trust(folder, mac.home, support=mac.support, ask=YES)
         report = mac.scan()
         self.assertEqual(mac.status(report, "dropped-in")["status"], "yours")
         self.assertIsNone(guestlist.session_line(report))
@@ -143,7 +144,7 @@ class SkillsThatSkippedTheCheckAreReported(unittest.TestCase):
         for _ in range(2):
             report = guestlist.scan(mac.home, support=mac.support, cwd=repo)
             self.assertEqual([s["name"] for s in report["unchecked"]], ["helper"])
-        guestlist.trust(skills, mac.home, support=mac.support)
+        guestlist.trust(skills, mac.home, support=mac.support, ask=YES)
         report = guestlist.scan(mac.home, support=mac.support, cwd=repo)
         self.assertEqual((mac.status(report, "helper")["status"], report["unchecked"]), ("yours", []))
 

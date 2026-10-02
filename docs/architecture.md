@@ -649,6 +649,62 @@ account; the hook keeps agents' file tools from rewriting it, but a shell
 command, a tool the hook does not read (such as an MCP server's file tool),
 or other software running as the person can change it.
 
+## The watcher: `canary watch` and `canary restore <id>`
+
+A launch agent (`com.skillcanary.watcher`, `canary/watcher.py`; program
+2026-09-30, slice B2) that holds a new skill that arrived without
+SkillCanary's check until the person decides. `canary setup --level guard`
+writes `~/Library/LaunchAgents/com.skillcanary.watcher.plist` as the person
+and loads it (after writing the SkillCanary skill and taking the guest list's
+first look, so it holds neither); `--level scan` unloads and removes it.
+launchd keeps it running (`KeepAlive`; a probe on 2026-10-02 showed it
+restarted about ten seconds after being killed, and that a launch agent can
+show the person a dialog).
+
+It watches the person's Claude Code and Codex skills folders (each host's
+`install_root` and `CODEX_HOME/skills`) with kqueue, and looks again every
+two seconds for folders that appear later. When a new entry appears:
+
+1. It waits until the entry has not changed for two seconds (a move at first
+   sight broke 1 in 40 writes in the probe), or 30 seconds if it never stops
+   changing, and until it holds a `SKILL.md`. Every folder without one,
+   including those there at setup, stays watched: when one gains a
+   `SKILL.md`, it is a new skill.
+2. It leaves the entry alone when the guest list approves what it resolves to
+   with the same content (SkillCanary's own installs record their approval
+   before their files appear), when it is SkillCanary's own skill exactly as
+   setup writes it, or when it is a link into another watched folder (the
+   target is the one decided).
+3. Otherwise it moves the entry, folder or link, into
+   `quarantine/held/<id>/entry`, next to `hold.json` (its name and where it
+   came from), and records a `held` event in the ledger when it can; a hold
+   that fails is tried again at the next look. Then, on its own thread so
+   holding never waits, it checks the skill (both layers) and asks the
+   person in SkillCanary's dialog. Install puts it back only if it still
+   matches the checked copy, recording the approval first. Cancel, no
+   answer, no screen, a change since the check, or something new in its
+   place keeps it held. An unsafe verdict keeps it held with a notification
+   and no question.
+
+Nothing is deleted. What is held comes from the quarantine folder itself,
+not the ledger, and a hold whose origin is not directly in a watched folder
+is ignored. `canary list` shows what is held, where it came from, and
+`canary restore <id>`, which checks it again and asks the person again: an
+agent can run the command, but only the person's answer puts it back. The
+session-start notice counts held skills. What it never holds: what is there
+at setup, changes to skills already there, skills the person marks as theirs
+(`canary trust` asks the person too), and skills in repositories (the guest
+list reports those). The watcher saves what it has seen
+(`watcher-seen.json` in the support folder; an entry still settling is not
+saved), so a skill that arrives while it is stopped is held when it starts
+again; setup starts that memory afresh. One look that fails is logged and
+the next look tries again.
+
+At Guard the hook keeps agents from stopping it (owner decision 10): a shell
+command naming its label or launch-agent file is denied, and so is a file
+tool writing that file. `canary doctor` reports a gap when the launch agent
+is missing or not loaded.
+
 ## How people get Canary and use it
 
 Canary itself is the one install that happens without Canary, so it only
@@ -697,10 +753,11 @@ the Mac from changing files. Three layers, and what each covers:
    input sent with `write_stdin` to an already-approved process does not
    re-run the hook; hooks run concurrently; and a shell command can hide its
    target from any parser. Hooks are a guard, not proof.
-3. **Detection.** The guest list (above) reports skills that arrived without
-   the check or changed since approval, once per session. A watcher that
-   holds a new, unchecked skill for the person's decision is in progress in
-   the front-door program. Root-owned skill folders (Lockdown) were tried and
+3. **Detection.** The watcher (above) holds a new skill that arrived in a
+   user skills folder without the check, about two seconds after it stops
+   changing, until the person decides. The guest list reports, once per
+   session, skills that arrived without the check, changed since approval,
+   or are held. Root-owned skill folders (Lockdown) were tried and
    removed: they blocked ordinary work, and the hook is not proof either.
 
 Public claims follow the layers actually installed:

@@ -401,10 +401,13 @@ the command. Interface: `docs/architecture.md`, "canary install".
   real install, and the installed folder
   (`~/.claude/plugins/cache/claude-plugins-official/code-review/ab024cdcfa7c`)
   matched the checked bytes, so it stayed installed.
-- Not run for real: the rewrite inside a live Claude Code session, which
-  needs this branch's hook installed (after merge and `canary setup`); its
-  output shape and the permission flow are covered by the tests and the
-  2026-10-01 probe.
+- Live rewrite in a Claude Code session (2026-10-02, after merge and
+  `canary setup`): an agent asked to `npx skills add vercel-labs/agent-skills
+  -g -y -a claude-code -s web-design-guidelines` first added `; echo`, was
+  denied with the message naming `canary install`, reran the installer on
+  its own, and the rewritten command installed the skill after one dialog.
+  Claude Code loaded it mid-session (it appeared in another running
+  session's skill list without a restart).
 
 ## Slice B1 done-when audit (2026-10-01 local)
 
@@ -422,6 +425,58 @@ workflow over the final tree on Python 3.10 and 3.9 (190 tests); 29
 deliberate breaks red over the final code. Stated limit: the rewrite has not
 run inside a live Claude Code session; that needs this branch's hook,
 installed after merge.
+
+## Slice B2: the watcher (2026-10-02)
+
+`canary/watcher.py`, `canary watch` (the launch agent) and `canary restore`;
+setup installs and loads the launch agent at Guard and removes it at Scan;
+`canary doctor` reports when it is not running; the hook protects it
+(decision 10). `canary add` and `canary install` now record their approval
+before their files appear, so the watcher never holds them. Interface:
+`docs/architecture.md`, "The watcher".
+
+- Probe (owner's terminal, 2026-10-02,
+  `scripts/probe-launch-agent-dialog.sh`): a launch agent showed a dialog and
+  got the person's answer back, and launchd restarted it about ten seconds
+  after it was killed.
+- An accident on the way, now guarded: the first full test run used the real
+  `launchctl` before the setup tests had a stand-in, and loaded a real
+  watcher from a temporary test install. It watched the owner's real skills
+  folders for a few minutes; the ledger shows it held nothing. It was
+  unloaded at once. The setup tests now use a stand-in, and a test that
+  reaches the real `launchctl` fails.
+- Review: Muse Spark 1.3 Contributor refutation, read-only. (A first attempt
+  was stopped while the disk was full; its log shows it had run no commands,
+  so it did not cause that.) Its answer to "can a new skill stay in a watched
+  folder without the check?" was yes, five ways. Fixed, each with a test:
+  - an agent could run `canary trust` on its own skill; trust now asks the
+    person in SkillCanary's dialog;
+  - a folder there at start, or let go without a `SKILL.md`, was never
+    looked at again when it gained one; such folders now stay watched;
+  - a hold that failed was dropped; it is retried;
+  - put-back moved the held entry without comparing it with what was
+    checked; it must match;
+  - holds were read from the ledger, which a shell can forge or break; they
+    are read from the quarantine, with each origin confined to a watched
+    folder, and survive a broken ledger;
+  - one failed look ended the loop, and a restart took arrivals as given;
+    the loop survives, and the watcher saves what it has seen (found by the
+    author before the review too);
+  - an entry that never stops changing is held after 30 seconds;
+    `.canary-staging-*` names lost their exemption; doctor checks the launch
+    agent file's contents; a failed put-back is reported, not raised.
+  Recorded as limits in `SECURITY.md`: an approval is sampled once, when the
+  entry settles; agents can trigger `restore` and `trust` dialogs
+  repeatedly.
+- Tests: `tests/test_watcher.py` (25), one setup test, five corpus cases.
+  The code came before its tests, so the red evidence is the deliberate
+  breaks: 30 after the review fold, each turning a named test red. The
+  first run found one gap:
+  the link test used an absolute target, which resolves the same from the
+  quarantine; it now uses a relative one, as installers write them. The
+  fold's run found another: the forged-hold test used an id the id check
+  already refuses, so it never reached the origin check; it now uses a
+  well-formed id.
 
 ## Unverified; probed before building on them
 
@@ -466,6 +521,17 @@ installed after merge.
    <name>@<marketplace>`: SkillCanary has to know the marketplace to stage
    the plugin. A bare `claude plugin install <name>` stays denied, with a
    message naming both routes.
+9. (2026-10-02, before slice B2) The watcher holds the person's own new
+   skills too: a skill folder they create, or a `git pull` that adds skills,
+   is moved to the quarantine once it settles, with one dialog per skill to
+   put it back. Any exception for "the person's own" would be open to an
+   agent as well. Skills already present, and changes to them, are never
+   held.
+10. (2026-10-02, before slice B2) The watcher is protected the way the
+   installers are: the hook denies a shell command naming the watcher's
+   label or launch-agent file (as decision 5, a command that only mentions
+   them is denied too), file tools may not rewrite that file, and `canary
+   doctor` reports a gap when the watcher is not running.
 
 ## Plan
 
