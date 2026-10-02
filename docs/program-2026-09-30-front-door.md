@@ -468,9 +468,18 @@ before their files appear, so the watcher never holds them. Interface:
   Recorded as limits in `SECURITY.md`: an approval is sampled once, when the
   entry settles; agents can trigger `restore` and `trust` dialogs
   repeatedly.
-- Tests: `tests/test_watcher.py` (25), one setup test, five corpus cases.
+- Done-when audit, first pass (Sonnet): bullet 6 blocked, because the real
+  launch agent has not run the watcher code (the evidence is tests with
+  stand-ins plus the dialog probe). It also found that launchd's minimal
+  `PATH` would hide `claude`, so a held skill would get only the first
+  layer's check; the launch agent now runs with a `PATH` that has the
+  folder holding `claude`, found when setup runs (one test, one break).
+  The real run happens after merge: setup, then one throwaway skill held,
+  put back and held again.
+- Tests: `tests/test_watcher.py` (26), one setup test, five corpus cases.
   The code came before its tests, so the red evidence is the deliberate
-  breaks: 30 after the review fold, each turning a named test red. The
+  breaks: 31 after the review fold and the audit fix, each turning a named
+  test red. The
   first run found one gap:
   the link test used an absolute target, which resolves the same from the
   quarantine; it now uses a relative one, as installers write them. The

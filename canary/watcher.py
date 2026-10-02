@@ -427,11 +427,23 @@ def restore(held_id, home=None, support=None, ask=None, backend="auto", model=No
     return w.review(held_id)
 
 
-def launch_agent_plist(canary_bin, support):
+def agent_path(which=shutil.which):
+    """The PATH the launch agent runs with. launchd's own is minimal, so the
+    folder that holds `claude` (the classifier `canary check` uses) is put
+    first, as found when setup runs."""
+    dirs = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]
+    found = which("claude")
+    if found:
+        dirs.insert(0, os.path.dirname(found))
+    return ":".join(dict.fromkeys(dirs))
+
+
+def launch_agent_plist(canary_bin, support, path=None):
     """The launch agent setup installs, as the person."""
     args = "".join(f"<string>{_xml(a)}</string>" for a in
                    ("/usr/bin/python3", "-I", "-B", canary_bin, "watch"))
     log = _xml(os.path.join(support, "watcher.log"))
+    path = _xml(path or agent_path())
     return ('<?xml version="1.0" encoding="UTF-8"?>\n'
             '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" '
             '"http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
@@ -441,6 +453,7 @@ def launch_agent_plist(canary_bin, support):
             '  <key>RunAtLoad</key><true/>\n'
             '  <key>KeepAlive</key><true/>\n'
             '  <key>ProcessType</key><string>Interactive</string>\n'
+            f'  <key>EnvironmentVariables</key><dict><key>PATH</key><string>{path}</string></dict>\n'
             f'  <key>StandardErrorPath</key><string>{log}</string>\n'
             '</dict></plist>\n')
 
