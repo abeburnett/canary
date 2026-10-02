@@ -285,6 +285,9 @@ def _trust(args):
     except OSError as exc:
         print(f"canary: could not write the guest list ({exc.strerror or exc}).", file=sys.stderr)
         return 1
+    if not names:
+        print("Not marked: the person did not agree in SkillCanary's dialog.")
+        return 10
     print("Marked as yours: " + ", ".join(names))
     return 0
 
@@ -301,6 +304,9 @@ def _restore(args):
     except ValueError as exc:
         print(f"canary: {exc}", file=sys.stderr)
         return EXIT_USAGE
+    except OSError as exc:
+        print(f"canary: {exc.strerror or exc}; it stays held.", file=sys.stderr)
+        return 1
     print("Put back where it was." if back else "Still held; canary list shows where.")
     return 0 if back else 10
 

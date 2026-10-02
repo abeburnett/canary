@@ -110,7 +110,12 @@ class GuardInstallsBothHooks(unittest.TestCase):
     def test_guard_starts_the_watcher_and_scan_removes_it(self):
         from canary import watcher
         mac = Mac()
+        seen = os.path.join(mac.home, "Library", "Application Support", "Canary", watcher.SEEN)
+        os.makedirs(os.path.dirname(seen))
+        with open(seen, "w") as fh:
+            fh.write("{}")  # left from an earlier watcher
         mac.setup("guard")
+        self.assertFalse(os.path.exists(seen))  # setup is a fresh first look
         plist = watcher.plist_path(mac.home)
         with open(plist) as fh:
             text = fh.read()
@@ -118,6 +123,10 @@ class GuardInstallsBothHooks(unittest.TestCase):
         self.assertIn(f"<string>{mac.at(setup.LIB)}/bin/canary</string>", text)
         self.assertEqual(mac.launches[-1], ["bootstrap", f"gui/{os.getuid()}", plist])
         self.assertEqual(mac.doctor()[1], [])
+        with open(plist, "w") as fh:
+            fh.write(text.replace("<string>watch</string>", "<string>list</string>"))
+        self.assertTrue(any("watcher" in g and "changed" in g for g in mac.doctor()[1]))
+        mac.setup("guard")
         mac.loaded = False  # stopped behind SkillCanary's back
         self.assertTrue(any("watcher is not running" in g for g in mac.doctor()[1]))
         mac.setup("scan")

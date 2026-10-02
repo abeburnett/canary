@@ -311,7 +311,8 @@ def scan(home=None, support=None, cwd=None, first_look=False):
                            "changed_since_approval": changed, "since": s.get("since")})
     from canary import watcher
     held = [{"id": h["id"], "name": h["name"], "origin": h["origin"], "since": h["at"],
-             "restore": f"canary restore {h['id']}"} for h in watcher.held(support)]
+             "restore": f"canary restore {h['id']}"}
+            for h in watcher.held(support, user_roots(home))]
     return {"schema": "canary.list/1", "skills": skills,
             "unchecked": [s for s in skills if s["status"] == UNCHECKED],
             "changed": [s for s in skills if s["changed_since_approval"]],
@@ -343,8 +344,11 @@ def record_decision(home, name, verdict, outcome, support=None):
                           {"at": _now(), "event": outcome, "name": name}])
 
 
-def trust(folder, home=None, support=None):
-    """Mark a skill folder, or every skill in a skills folder, as the person's."""
+def trust(folder, home=None, support=None, ask=None):
+    """Mark a skill folder, or every skill in a skills folder, as the
+    person's, once the person agrees in SkillCanary's dialog: an agent can
+    run `canary trust`, but only the person's answer marks anything. Returns
+    the names marked, or [] when the person did not agree."""
     home = home or os.path.expanduser("~")
     support = _support(support) if support else os.path.join(home, SUPPORT[2:])
     real = os.path.realpath(folder)
@@ -352,6 +356,15 @@ def trust(folder, home=None, support=None):
                else {p: names[0] for p, names in _skills([real]).items()})
     if not targets:
         raise ValueError("That is neither a skill folder nor a folder of skills.")
+    if ask is None:
+        from canary import add
+        ask = lambda text, verdict: add.ask(text, verdict, yes="Mark as mine")
+    names = sorted(targets.values())
+    shown = ", ".join(names[:8]) + (f" and {len(names) - 8} more" if len(names) > 8 else "")
+    if ask(f"Mark {len(names)} skill(s) in {real} as yours?\n\n{shown}\n\nSkillCanary will "
+           "not report changes to them, and its watcher will leave them in place. Agents can "
+           "ask for this; only you can agree.", "NEEDS_REVIEW") is not True:
+        return []
     at = _now()
     with _Lock(support):
         _append(support, [{"at": at, "event": "trusted", "skill": p, "name": n, "digest": digest(p)}

@@ -379,6 +379,12 @@ def _watcher(level, home, prefix, launcher):
         return
     os.makedirs(os.path.dirname(path), exist_ok=True)
     support = os.path.join(home, "Library", "Application Support", "Canary")
+    # Setup is the person's own first look: the watcher starts from what is
+    # here now, not from what it saw before.
+    try:
+        os.unlink(os.path.join(support, watcher.SEEN))
+    except OSError:
+        pass
     tmp = path + f".{os.getpid()}"
     with open(tmp, "w", encoding="utf-8") as fh:
         fh.write(watcher.launch_agent_plist(_at(prefix, LIB + "/bin/canary"), support))
@@ -465,11 +471,22 @@ def doctor(home=None, prefix="/", expected_uid=0, root_uid=0, launcher=None):
             gaps.append(f"{name} is not running Canary's hook ({policy} lacks it).")
     from canary import watcher
     launcher = launcher or launchctl
-    if level == "guard" and (not os.path.isfile(watcher.plist_path(home)) or launcher(
-            ["print", f"gui/{os.getuid()}/{watcher.LABEL}"]) != 0):
-        gaps.append("SkillCanary's watcher is not running, so a skill that arrives outside "
-                    "an agent is reported at the next session start but not held. Run "
-                    "canary setup --level guard.")
+    if level == "guard":
+        want = watcher.launch_agent_plist(
+            _at(prefix, LIB + "/bin/canary"),
+            os.path.join(home, "Library", "Application Support", "Canary"))
+        try:
+            with open(watcher.plist_path(home), encoding="utf-8") as fh:
+                ours = fh.read() == want
+        except OSError:
+            ours = None
+        if ours is False:
+            gaps.append("SkillCanary's watcher file was changed, so it may not run SkillCanary. "
+                        "Run canary setup --level guard.")
+        elif ours is None or launcher(["print", f"gui/{os.getuid()}/{watcher.LABEL}"]) != 0:
+            gaps.append("SkillCanary's watcher is not running, so a skill that arrives outside "
+                        "an agent is reported at the next session start but not held. Run "
+                        "canary setup --level guard.")
     if level == "lockdown":
         gaps.append("This Mac is still at Lockdown, which SkillCanary no longer has. Run "
                     "canary setup --level guard to return your skill folders to you.")

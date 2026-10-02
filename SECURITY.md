@@ -43,6 +43,13 @@ These are documented, not bugs; the site and `docs/architecture.md` state them.
   not held. The hook keeps agents from naming the watcher in a command, but
   a command assembled from pieces, or other software running as you, can
   still stop it; `canary doctor` reports when it is not running.
+- **What was approved is sampled once.** The watcher compares a new entry
+  with its approval when the entry settles; a change after that is a change
+  to an approved skill, which the guest list reports at the next session
+  start (for skills SkillCanary checked) and does not hold.
+- **Agents can ask, repeatedly.** An agent can run `canary restore` or
+  `canary trust`, and each shows you a dialog. Only your answer changes
+  anything, but an agent can ask again and again.
 - **The watcher holds your own new skills too.** A skill folder you create,
   or a `git pull` that adds skills, is held with one question each; it
   cannot tell you from software running as you.

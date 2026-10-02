@@ -666,28 +666,39 @@ It watches the person's Claude Code and Codex skills folders (each host's
 two seconds for folders that appear later. When a new entry appears:
 
 1. It waits until the entry has not changed for two seconds (a move at first
-   sight broke 1 in 40 writes in the probe), and until it holds a `SKILL.md`
-   (a folder without one is watched for ten minutes, then let go).
+   sight broke 1 in 40 writes in the probe), or 30 seconds if it never stops
+   changing, and until it holds a `SKILL.md`. Every folder without one,
+   including those there at setup, stays watched: when one gains a
+   `SKILL.md`, it is a new skill.
 2. It leaves the entry alone when the guest list approves what it resolves to
    with the same content (SkillCanary's own installs record their approval
    before their files appear), when it is SkillCanary's own skill exactly as
    setup writes it, or when it is a link into another watched folder (the
    target is the one decided).
 3. Otherwise it moves the entry, folder or link, into
-   `quarantine/held/<id>/` and records a `held` event. Then, on its own
-   thread so holding never waits, it checks the skill (both layers) and asks
-   the person in SkillCanary's dialog. Install puts it back where it was,
-   recording the approval first. Cancel, no answer, or no screen keeps it
-   held. An unsafe verdict keeps it held with a notification and no
-   question.
+   `quarantine/held/<id>/entry`, next to `hold.json` (its name and where it
+   came from), and records a `held` event in the ledger when it can; a hold
+   that fails is tried again at the next look. Then, on its own thread so
+   holding never waits, it checks the skill (both layers) and asks the
+   person in SkillCanary's dialog. Install puts it back only if it still
+   matches the checked copy, recording the approval first. Cancel, no
+   answer, no screen, a change since the check, or something new in its
+   place keeps it held. An unsafe verdict keeps it held with a notification
+   and no question.
 
-Nothing is deleted. `canary list` shows what is held, where it came from, and
+Nothing is deleted. What is held comes from the quarantine folder itself,
+not the ledger, and a hold whose origin is not directly in a watched folder
+is ignored. `canary list` shows what is held, where it came from, and
 `canary restore <id>`, which checks it again and asks the person again: an
 agent can run the command, but only the person's answer puts it back. The
 session-start notice counts held skills. What it never holds: what is there
-when it starts, changes to skills already there, and skills in repositories
-(the guest list reports those). Anything that arrives while it is not
-running is reported at the next session start, not held.
+at setup, changes to skills already there, skills the person marks as theirs
+(`canary trust` asks the person too), and skills in repositories (the guest
+list reports those). The watcher saves what it has seen
+(`watcher-seen.json` in the support folder; an entry still settling is not
+saved), so a skill that arrives while it is stopped is held when it starts
+again; setup starts that memory afresh. One look that fails is logged and
+the next look tries again.
 
 At Guard the hook keeps agents from stopping it (owner decision 10): a shell
 command naming its label or launch-agent file is denied, and so is a file

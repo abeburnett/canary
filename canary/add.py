@@ -395,10 +395,11 @@ def dialog_text(summary):
 
 DIALOG_SCRIPT = """on run argv
   set theText to item 1 of argv
+  set yesLabel to item 4 of argv
   if item 2 of argv is "review" then
-    set r to display dialog theText with title "SkillCanary" buttons {"Install anyway", "Cancel"} default button "Cancel" cancel button "Cancel" with icon caution giving up after (item 3 of argv as integer)
+    set r to display dialog theText with title "SkillCanary" buttons {yesLabel, "Cancel"} default button "Cancel" cancel button "Cancel" with icon caution giving up after (item 3 of argv as integer)
   else
-    set r to display dialog theText with title "SkillCanary" buttons {"Cancel", "Install"} default button "Install" cancel button "Cancel" giving up after (item 3 of argv as integer)
+    set r to display dialog theText with title "SkillCanary" buttons {"Cancel", yesLabel} default button yesLabel cancel button "Cancel" giving up after (item 3 of argv as integer)
   end if
   if gave up of r then return "timeout"
   return button returned of r
@@ -411,21 +412,23 @@ def macos_dialog(summary):
     return ask(dialog_text(summary), summary["verdict"])
 
 
-def ask(text, verdict):
-    """Show `text` in SkillCanary's dialog: True to install, False when the
-    person cancels, None when no dialog could be shown or nobody answered."""
+def ask(text, verdict, yes=None):
+    """Show `text` in SkillCanary's dialog: True when the person picks the yes
+    button, False when they cancel, None when no dialog could be shown or
+    nobody answered."""
     if sys.platform != "darwin" or not shutil.which("osascript"):
         return None
     kind = "review" if verdict != "LIKELY_SAFE" else "safe"
+    yes = yes or ("Install anyway" if kind == "review" else "Install")
     try:
         proc = subprocess.run(["osascript", "-e", DIALOG_SCRIPT, "--", text,
-                               kind, str(DIALOG_SECONDS)],
+                               kind, str(DIALOG_SECONDS), yes],
                               capture_output=True, text=True, timeout=DIALOG_SECONDS + 30)
     except (OSError, subprocess.TimeoutExpired):
         return None
     if proc.returncode != 0:
         return False if "-128" in proc.stderr else None
-    return {"Install": True, "Install anyway": True}.get(proc.stdout.strip())
+    return True if proc.stdout.strip() == yes else None
 
 
 # ---- the flow ------------------------------------------------------------
