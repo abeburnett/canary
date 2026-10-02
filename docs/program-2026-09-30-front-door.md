@@ -334,6 +334,56 @@ was saved as a log (20 breaks, all red). The re-audit passed every bullet.
 Gate evidence: step 1 of the CI workflow over the final tree on Python 3.10
 and 3.9 (168 tests); the composite Action steps run only in CI, on the PR.
 
+## Slice B1: installs through `canary install` (2026-10-01)
+
+`canary install -- <installer command>` (`canary/install.py`) stages, checks,
+asks once and copies skills into place; plugins follow decision 7. The
+Claude Code hook rewrites a plain installer command into it; Codex is told
+the command. Interface: `docs/architecture.md`, "canary install".
+
+- Confirmed in Claude Code's hook documentation before building: hooks do
+  not run again on a rewritten command; deny rules still apply to it; when
+  several hooks rewrite one call the last to finish wins (now a limit in
+  `SECURITY.md`).
+- Tests: `tests/test_install.py` (19, with fake installers on `PATH`),
+  three gate tests, and ten corpus cases moved from deny to rewrite.
+- The code came before its tests in this slice, so the red evidence is the
+  deliberate breaks: 29 after the review fold, each turning a named test
+  red (saved log over the final commit). The failed-installer test could not fail at first
+  (the fake wrote nothing on failure); it now writes a skill and exits 1.
+- Permission probe (live, `claude -p`, 2026-10-01): a rewrite with no
+  `permissionDecision` is checked against the person's permission rules as
+  the replaced command (a rule for the new command let it run; a rule for
+  only the old one did not); with `allow` it ran with no rule at all. The
+  first version returned `allow`, which skipped the person's prompt for the
+  installer; the rewrite now returns no decision. The first probe could not
+  fail (Claude Code auto-allows `echo`), so its controls were redone with a
+  script command that needs approval.
+- Review: Muse Spark 1.3 Contributor refutation, read-only, one round. Its
+  answer to "can a new skill reach a skills folder without the check?" was
+  yes. Fixed, each with a test that failed first:
+  - `@someone/skills` was accepted, so any npm package could run as the
+    person and write a skill straight into a real folder; only the real
+    `skills` package is accepted now, with its known options only (an option
+    like `--dir` or `--metadata` was accepted before), and a skill that
+    appears in a real skills folder during the staged run stops the install;
+  - the installer's log, which can quote package text, sat where agents can
+    read; it is in the quarantine now;
+  - a failed real plugin update uninstalled the plugin that was there; and
+    installing an already-installed plugin could uninstall it on a mismatch;
+  - `marketplace add` ran with no question; the person agrees first now;
+  - folder names from the package reached the agent's result; they must be
+    usable skill names, and errors no longer quote them; the dialog now says
+    where skills go; the rewrite carries only the command, timeout and
+    description.
+  Recorded, not changed: the real plugin install also changes Claude Code's
+  records and marketplace copy, which are not compared (documented); an
+  agent can pass `--backend none` itself, which caps the verdict at "needs
+  your judgment" and still asks the person.
+- Not verified here: a real `npx skills add` or `claude plugin install`
+  through `canary install` on the owner's Mac; the hook blocks agents from
+  running installers, so the owner runs that check.
+
 ## Unverified; probed before building on them
 
 - Whether Codex hooks can rewrite a command.
@@ -364,6 +414,19 @@ and 3.9 (168 tests); the composite Action steps run only in CI, on the PR.
    `canary trust <repo>/.claude/skills` (or removes them), because a cloned
    repository full of skills is the main case the guest list exists to
    catch.
+7. (2026-10-01, before slice B) Plugins: `canary install` stages and checks
+   a plugin, asks once, then runs the person's real `claude plugin install`
+   and confirms the installed folder matches what was checked, uninstalling
+   it on a mismatch. Copying a plugin into place would mean writing Claude
+   Code's private, versioned registry (`installed_plugins.json`, absolute
+   install paths, `enabledPlugins` in settings), which any release can
+   change. Plugins load at session start, so nothing unchecked is used in
+   between. Skills are copied from staging, as section 2 says.
+8. (2026-10-02, after the slice B1 done-when audit) A plugin install goes
+   through `canary install` only as `claude plugin install
+   <name>@<marketplace>`: SkillCanary has to know the marketplace to stage
+   the plugin. A bare `claude plugin install <name>` stays denied, with a
+   message naming both routes.
 
 ## Plan
 
@@ -398,7 +461,11 @@ classifier before probing, and Spark completed its review.
    SessionStart line. It comes before interception because interception and
    the watcher both write to the ledger.
 4. **Slice B: intercept installs** (coordinator; the installer staging is
-   the riskiest code in the program).
+   the riskiest code in the program). Split in two pull requests, same
+   bullets: **B1** is `canary install`, the Claude Code rewrite and the
+   Codex deny-and-redirect (bullets 4 and 5); **B2** is the watcher (bullet
+   6). B2 also moves `canary add`'s guest-list record ahead of the rename,
+   so the watcher never sees a checked install as unchecked.
    - `canary install -- <command>`: run the installer against a staging
      home, check, ask, copy, record.
    - The Claude Code hook rewrites installer commands with `updatedInput`;

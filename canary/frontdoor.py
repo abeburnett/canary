@@ -35,10 +35,19 @@ the outcome in one or two sentences:
   installed.
 - Exit 2: the link or download did not work; repeat the message.
 
+When they give an installer command instead of a link, such as
+`npx skills add <owner/repo>` or `claude plugin install <name>@<marketplace>`,
+run it as a command of its own through SkillCanary:
+`canary install -- <the same command>`. It runs the same installer into a
+private staging folder, checks what it adds, asks the person once, and puts
+only the checked files in place. In Claude Code the hook does this for you;
+Codex tells you the exact command. The outcomes and exit codes are the same
+as `canary add`.
+
 Do not open, read, summarize or paste the skill's files, before or after.
-Do not use `npx skills`, `git clone`, plugin install commands or file writes
-to put a new skill in a skills folder; at Guard those are blocked and sent to
-`canary add`.
+Do not use `git clone` or file writes to put a new skill in a skills folder,
+and do not run an installer inside a longer command; at Guard those are
+blocked and sent to `canary add` or `canary install`.
 
 ## When the person wants to change an installed skill
 
@@ -48,7 +57,8 @@ when they arrive, not every change afterwards.
 ## When SkillCanary blocks something
 
 The block message says what to do instead; follow it. SkillCanary has only
-the commands `canary --help` lists (add, check, setup, doctor). Never
+the commands `canary --help` lists (add, install, check, list, trust, setup,
+doctor). Never
 tell the person to "allow" a file in SkillCanary, or suggest a setting or
 command it does not have. When there is no route, give the person the exact
 command to paste into their own terminal, in its own code block, and say in

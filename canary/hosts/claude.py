@@ -38,6 +38,26 @@ def deny(reason: str) -> tuple[str, int]:
         return _FALLBACK
 
 
+# A rewritten install runs the installer, the checks and the person's dialog,
+# so it gets Claude Code's longest Bash timeout (ten minutes).
+REWRITE_TIMEOUT_MS = 600000
+CAN_REWRITE = True
+
+
+def rewrite(tool_input: dict, command: str) -> tuple[str, int]:
+    """Replace the call's command and leave the decision to the person's own
+    permission settings. Verified live (2026-10-01, `claude -p`): with no
+    permissionDecision, Claude Code checks the replaced command against the
+    person's rules and runs it only if they allow it; with "allow" it would
+    skip that check. Hooks do not run again on the replaced command."""
+    updated = {"command": command, "timeout": REWRITE_TIMEOUT_MS}
+    if isinstance(tool_input.get("description"), str):
+        updated["description"] = tool_input["description"]
+    return json.dumps({"hookSpecificOutput": {
+        "hookEventName": "PreToolUse",
+        "updatedInput": updated}}, ensure_ascii=True), 0
+
+
 def parse_pre_tool_use(payload: dict):
     """File tools and simple shell commands map exactly; anything else
     raises ValueError and the gate screens it as text."""

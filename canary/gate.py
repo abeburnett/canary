@@ -27,7 +27,12 @@ SHELL_TOOLS = {"Bash"}
 # still waiting for its check.
 QUARANTINE_TEXT = re.compile(r"application\\?\s*support/canary/quarantine", re.I)
 REDIRECT = ("This installs skills or plugins without SkillCanary checking them first. "
-            "Use `canary add <link>` instead; it checks the package and asks the person.")
+            "Run the installer as a command of its own through `canary install -- <command>` "
+            "(for example `canary install -- npx skills add <owner/repo>`), or use "
+            "`canary add <link>`; both check what it adds and ask the person.")
+INSTALL_INSTEAD = ("SkillCanary checks skills and plugins before they are installed. Run "
+                   "this instead; it runs the same installer, checks what it adds and asks "
+                   "the person: canary install -- {command}")
 NEW_SKILL = ("This creates a new skill without SkillCanary checking it first. To install a "
              "skill, use `canary add <link or folder>`; it checks it and asks the person. "
              "Editing a skill that is already installed is allowed.")
@@ -37,6 +42,12 @@ QUARANTINED = ("That file is a quarantined package SkillCanary has not approved.
                "Agents may not read it; use `canary check` for a verdict.")
 UNREADABLE = ("SkillCanary could not check this tool call, so it is blocked. "
               "If it is harmless, ask the person to run it in their own terminal.")
+
+
+@dataclass(frozen=True)
+class Rewrite:
+    """Allow the call, with its command replaced (Claude Code's updatedInput)."""
+    command: str
 
 
 @dataclass
@@ -125,8 +136,9 @@ def _is_canary(command, canary_bin):
     return st.st_uid == 0 and not st.st_mode & 0o022
 
 
-def decide(call, home, roots, canary_bin=None):
-    """A deny reason, or None to allow. Any internal error denies."""
+def decide(call, home, roots, canary_bin=None, can_rewrite=False):
+    """A deny reason, None to allow, or a Rewrite (only when the host can
+    rewrite a command). Any internal error denies."""
     try:
         if call.tool_name in SHELL_TOOLS and isinstance(call.command, str):
             if _is_canary(call.command, canary_bin):
@@ -134,7 +146,14 @@ def decide(call, home, roots, canary_bin=None):
             in_skills = lambda p: any(_skill_folder(c, roots) for c in
                                       {os.path.abspath(p), os.path.realpath(p)})
             if installers.installs(call.command, call.cwd, in_skills):
-                return REDIRECT
+                parsed = installers.supported(call.command)
+                if parsed is None:
+                    return REDIRECT
+                words = shlex.join(parsed[1])
+                if can_rewrite and canary_bin:
+                    return Rewrite(f"/usr/bin/python3 -I -B {shlex.quote(canary_bin)} "
+                                   f"install -- {words}")
+                return INSTALL_INSTEAD.format(command=words)
             if QUARANTINE_TEXT.search(call.command):
                 return QUARANTINED
         if call.tool_name == "apply_patch" and not call.paths_written:

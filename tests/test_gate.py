@@ -55,13 +55,31 @@ class Home:
 
 
 class InstallsGoThroughTheDoor(unittest.TestCase):
-    def test_each_host_blocks_an_installer_the_way_it_understands(self):
+    def test_claude_code_runs_a_plain_installer_through_canary_install(self):
+        h = Home()
+        proc = h.hook("claude", "Bash", {"command": "npx skills add someone/repo -g",
+                                         "description": "Install", "run_in_background": True})
+        out = json.loads(proc.stdout)["hookSpecificOutput"]
+        self.assertEqual(proc.returncode, 0)
+        self.assertNotIn("permissionDecision", out)  # the person's own settings decide
+        self.assertEqual(out["updatedInput"], {
+            "command": "/usr/bin/python3 -I -B '/Library/Application Support/SkillCanary/bin/"
+                       "canary' install -- npx skills add someone/repo -g",
+            "description": "Install", "timeout": 600000})
+
+    def test_codex_is_told_the_canary_install_command(self):
+        h = Home()
+        proc = h.hook("codex", "Bash", {"command": "npx skills add someone/repo"})
+        self.assertTrue(h.denied("codex", "Bash", {"command": "npx skills add someone/repo"}))
+        self.assertIn("canary install -- npx skills add someone/repo", proc.stdout)
+
+    def test_an_installer_inside_a_longer_command_is_still_denied(self):
         h = Home()
         for host in ("claude", "codex"):
             with self.subTest(host=host):
-                proc = h.hook(host, "Bash", {"command": "npx skills add someone/repo"})
-                self.assertTrue(h.denied(host, "Bash", {"command": "npx skills add someone/repo"}))
-                self.assertIn("canary add", proc.stdout + proc.stderr)
+                command = {"command": "cd /tmp && npx skills add someone/repo"}
+                self.assertTrue(h.denied(host, "Bash", command))
+                self.assertIn("canary install --", h.hook(host, "Bash", command).stdout)
 
     def test_a_new_skill_from_a_file_tool_is_sent_to_canary_add(self):
         h = Home()

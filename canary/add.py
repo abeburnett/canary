@@ -408,11 +408,17 @@ end run"""
 def macos_dialog(summary):
     """True to install, False when the person cancels, None when no dialog
     could be shown or nobody answered."""
+    return ask(dialog_text(summary), summary["verdict"])
+
+
+def ask(text, verdict):
+    """Show `text` in SkillCanary's dialog: True to install, False when the
+    person cancels, None when no dialog could be shown or nobody answered."""
     if sys.platform != "darwin" or not shutil.which("osascript"):
         return None
-    kind = "review" if summary["verdict"] != "LIKELY_SAFE" else "safe"
+    kind = "review" if verdict != "LIKELY_SAFE" else "safe"
     try:
-        proc = subprocess.run(["osascript", "-e", DIALOG_SCRIPT, "--", dialog_text(summary),
+        proc = subprocess.run(["osascript", "-e", DIALOG_SCRIPT, "--", text,
                                kind, str(DIALOG_SECONDS)],
                               capture_output=True, text=True, timeout=DIALOG_SECONDS + 30)
     except (OSError, subprocess.TimeoutExpired):

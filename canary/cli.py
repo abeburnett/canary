@@ -18,6 +18,8 @@ USAGE = ("usage: canary scan <skill-file-or-directory> [--json | --text] [--exce
          " [--timeout <seconds>]\n"
          "       canary add <github-link-or-folder> [--host claude|codex]... [--json | --text]"
          " [--backend <name>] [--model <id>] [--timeout <seconds>]\n"
+         "       canary install [--json | --text] [--backend <name>] [--model <id>]"
+         " [--timeout <seconds>] -- <installer command>\n"
          "       canary list [--json]\n"
          "       canary trust <skill-folder-or-skills-folder>\n"
          "       canary setup [--level scan|guard]\n"
@@ -133,6 +135,46 @@ def _add(args):
     return add.EXIT_FOR_OUTCOME[out["outcome"]]
 
 
+def _install(args):
+    """`canary install [options] -- <installer command>`."""
+    if "--" not in args:
+        print(USAGE, file=sys.stderr)
+        return EXIT_USAGE
+    cut = args.index("--")
+    options, command = args[:cut], args[cut + 1:]
+    values, flags, i = {}, set(), 0
+    while i < len(options):
+        if options[i] in VALUE_FLAGS and i + 1 < len(options) and options[i] not in values:
+            values[options[i]] = options[i + 1]
+            i += 2
+            continue
+        flags.add(options[i])
+        i += 1
+    backend = values.get("--backend", "auto")
+    try:
+        timeout = float(values.get("--timeout", classify.DEFAULT_TIMEOUT_S))
+    except ValueError:
+        timeout = -1
+    # No flag approves an install: only the person, in the dialog.
+    if (not command or flags - {"--json", "--text"} or not math.isfinite(timeout)
+            or timeout <= 0
+            or backend not in ("auto", "claude", "anthropic_api", "openai_api", "none")):
+        print(USAGE, file=sys.stderr)
+        return EXIT_USAGE
+    from canary import install
+    try:
+        out = install.install(command, backend=backend, model=values.get("--model"),
+                              timeout_s=timeout)
+    except install.InstallError as exc:
+        print(f"canary: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    except add.LockError as exc:
+        print(f"canary: {exc}", file=sys.stderr)
+        return EXIT_INTERNAL
+    print(install.render_text(out) if "--text" in flags else json.dumps(out, indent=2))
+    return install.EXIT_FOR_OUTCOME[out["outcome"]]
+
+
 CANARY_BIN = "/Library/Application Support/SkillCanary/bin/canary"
 
 
@@ -161,7 +203,12 @@ def _hook(args):
         except ValueError:
             call = gate.unmapped(payload)
         roots = gate.user_skill_roots(home, adapters.values())
-        reason = gate.decide(call, home, roots, CANARY_BIN)
+        can_rewrite = getattr(adapter, "CAN_REWRITE", False)
+        reason = gate.decide(call, home, roots, CANARY_BIN, can_rewrite=can_rewrite)
+        if isinstance(reason, gate.Rewrite):
+            out, code = adapter.rewrite(payload["tool_input"], reason.command)
+            sys.stdout.write(out)
+            return code
     except BaseException:
         reason = gate.UNREADABLE
     if reason is None:
@@ -293,6 +340,8 @@ def main(argv):
             return _check(rest)
         if command == "add":
             return _add(rest)
+        if command == "install":
+            return _install(rest)
         if command == "setup":
             return _setup(rest)
         if command == "doctor":
