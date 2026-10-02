@@ -496,6 +496,20 @@ before their files appear, so the watcher never holds them. Interface:
   already refuses, so it never reached the origin check; it now uses a
   well-formed id.
 
+## Slice B2 done-when audit (2026-10-02)
+
+Auditor: Sonnet, read-only (the author was Opus 5.5). First pass: bullet 6
+blocked, because the real launch agent had not run the watcher; the audit
+also found launchd's minimal `PATH` hid `claude` from the watcher. The
+`PATH` fix shipped in PR 13, and the owner's real run followed (recorded in
+"Slice B2"). The auditor checked the run against the machine: the ledger
+events, the restored folder, the installed launch agent's `PATH` and the
+installed `watcher.py`. Gate evidence: step 1 of the CI workflow over the
+final tree on Python 3.10 and 3.9 (217 tests); 31 deliberate breaks red.
+The re-audit passed bullet 6 and every-slice. Stated limits: `canary
+restore` and the held view in `canary list` have not run for real (tests
+cover them).
+
 ## Unverified; probed before building on them
 
 - Whether Codex hooks can rewrite a command.
