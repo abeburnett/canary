@@ -564,6 +564,18 @@ cover them).
    label or launch-agent file (as decision 5, a command that only mentions
    them is denied too), file tools may not rewrite that file, and `canary
    doctor` reports a gap when the watcher is not running.
+11. (2026-10-02, before slice D) The benchmark's harmless half is 94 real,
+   popular skills from the field report, copied into `bench/` at pinned
+   commits with their licenses: 14 from anthropics/skills (Apache 2.0), 15
+   from obra/superpowers and 65 from wshobson/agents (both MIT). Six are
+   left out: four Anthropic document skills marked "All rights reserved"
+   and two with no license file.
+12. (2026-10-02, before slice D) A malicious skill counts as caught when its
+   verdict is anything but LIKELY_SAFE (the person is warned, or it is
+   refused); CI fails when that catch rate falls below the committed
+   baseline. `canary bench` also prints the rate at UNSAFE alone, and the
+   false-alarm rate at both readings. Slice D measures and does not tune
+   the scanner; the owner sets a target after the first rates.
 
 ## Plan
 

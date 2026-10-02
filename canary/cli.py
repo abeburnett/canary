@@ -22,6 +22,8 @@ USAGE = ("usage: canary scan <skill-file-or-directory> [--json | --text] [--exce
          " [--backend <name>] [--model <id>] [--timeout <seconds>]\n"
          "       canary install [--json | --text] [--backend <name>] [--model <id>]"
          " [--timeout <seconds>] -- <installer command>\n"
+         "       canary bench [--json] [--layer 1|2] [--backend <name>] [--model <id>]"
+         " [--corpus <folder>]\n"
          "       canary list [--json]\n"
          "       canary restore <held-id>\n"
          "       canary trust <skill-folder-or-skills-folder>\n"
@@ -363,6 +365,32 @@ def _trust(args):
     return 0
 
 
+def _bench(args):
+    """Rates over the benchmark corpus; layer 1 unless --layer 2."""
+    values, flags, i = {}, set(), 0
+    while i < len(args):
+        if args[i] in VALUE_FLAGS | {"--layer", "--corpus"} and i + 1 < len(args):
+            values[args[i]] = args[i + 1]
+            i += 2
+            continue
+        flags.add(args[i])
+        i += 1
+    if flags - {"--json"} or values.get("--layer", "1") not in ("1", "2"):
+        print(USAGE, file=sys.stderr)
+        return EXIT_USAGE
+    from canary import bench
+    root = values.get("--corpus") or os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bench")
+    try:
+        result = bench.run(root, layer=int(values.get("--layer", "1")),
+                           backend=values.get("--backend", "auto"), model=values.get("--model"))
+    except bench.BenchError as exc:
+        print(f"canary: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    print(json.dumps(result, indent=2) if "--json" in flags else bench.render_text(result))
+    return 0
+
+
 def _restore(args):
     """Check a held skill again and ask the person; only their approval puts
     it back."""
@@ -458,6 +486,8 @@ def main(argv):
             return _trust(rest)
         if command == "restore":
             return _restore(rest)
+        if command == "bench":
+            return _bench(rest)
         if command == "watch":
             return _watch(rest)
         if command == "digest":
