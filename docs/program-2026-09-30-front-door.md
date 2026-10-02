@@ -156,6 +156,8 @@ Slice C, the guest list:
    and removals. The SessionStart line appears only when something is
    unchecked or changed.
 8. Changes to the person's own skills are recorded and never reported.
+   Their own skills are those in a user skills folder at setup's first look
+   and those they mark with `canary trust` (owner decision 6).
 
 Slice D, a measurable door:
 
@@ -291,7 +293,7 @@ installs the SessionStart hook in both hosts; the hook denies file-tool
 writes to the ledger and the lockfile. Interface: `docs/architecture.md`,
 "The guest list".
 
-- Tests: `tests/test_guestlist.py` (17), two in `tests/test_setup.py`, and
+- Tests: `tests/test_guestlist.py` (18), two in `tests/test_setup.py`, and
   four hook cases in the corpus (three record writes denied, a read
   allowed).
 - Review: Muse Spark 1.3 Contributor, read-only, one round, 10 findings.
@@ -310,9 +312,10 @@ writes to the ledger and the lockfile. Interface: `docs/architecture.md`,
   Recorded, not changed: a tool the hook does not read (an MCP server's file
   tool) can write the ledger, as with every hook rule (documented); an
   unknown `--host` prints nothing, which only a hand-edited hook command
-  can cause. Owner decision pending: repository skills are not in setup's
-  first look, so the first session in each repository reports them once.
-- Deliberate breaks: 19, each turning a named test red. The first run found
+  can cause. Repository skills are not in setup's first look, so they are
+  reported until trusted; the audit called that a re-scope of bullet 8, and
+  the owner accepted it (decision 6).
+- Deliberate breaks: 20, each turning a named test red. The first run found
   one gap: the "never fails the session" test fed a damaged ledger, which is
   skipped without an error, so it could not fail; it now makes the scan
   itself raise.
@@ -344,6 +347,12 @@ writes to the ledger and the lockfile. Interface: `docs/architecture.md`,
    tricks; reads, writes and shell commands touching the quarantine, as
    before; and every installer command until slice B routes them through
    `canary install`.
+6. (2026-10-01, after the slice C done-when audit) Skills in a repository's
+   skills folders are not part of setup's first look. They are reported as
+   unchecked in every session in that repository until the person runs
+   `canary trust <repo>/.claude/skills` (or removes them), because a cloned
+   repository full of skills is the main case the guest list exists to
+   catch.
 
 ## Plan
 

@@ -541,8 +541,9 @@ The folders scanned are the user skills folders (each host's `install_root`
 and `CODEX_HOME/skills`) and the `.claude/skills`, `.agents/skills` and
 `.codex/skills` folders of the repository around the current folder (the
 session's `cwd` for `session-start`). Setup's first look does not cover
-repositories, so the first session in a repository reports its skills once;
-`canary trust <repo>/.claude/skills` marks them all as the person's. A cloned
+repositories, so a repository's skills are reported in every session there
+until the person runs `canary trust <repo>/.claude/skills`, which marks them
+all as theirs (owner decision 6 of the front-door program). A cloned
 repository's skills are what this report is for.
 
 - `canary list` prints each skill, its status and path; `--json` prints

@@ -133,6 +133,21 @@ class SkillsThatSkippedTheCheckAreReported(unittest.TestCase):
         self.assertEqual(mac.status(report, "evil")["names"], ["evil", "notes"])
 
 
+    def test_a_repositorys_skills_are_reported_until_trusted(self):
+        mac = Mac()
+        mac.scan(first_look=True)
+        repo = os.path.join(mac.home, "work", "cloned")
+        os.makedirs(os.path.join(repo, ".git"))
+        skills = os.path.join(repo, ".claude", "skills")
+        mac.skill(skills, "helper")
+        for _ in range(2):
+            report = guestlist.scan(mac.home, support=mac.support, cwd=repo)
+            self.assertEqual([s["name"] for s in report["unchecked"]], ["helper"])
+        guestlist.trust(skills, mac.home, support=mac.support)
+        report = guestlist.scan(mac.home, support=mac.support, cwd=repo)
+        self.assertEqual((mac.status(report, "helper")["status"], report["unchecked"]), ("yours", []))
+
+
 class SkillsInstalledThroughTheDoor(unittest.TestCase):
     def install(self, mac):
         archive = tarball([("notes2/SKILL.md", tarfile.REGTYPE, SKILL.replace("notes", "notes2"))])
