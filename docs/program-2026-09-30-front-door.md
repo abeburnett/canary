@@ -364,6 +364,14 @@ and 3.9 (168 tests); the composite Action steps run only in CI, on the PR.
    `canary trust <repo>/.claude/skills` (or removes them), because a cloned
    repository full of skills is the main case the guest list exists to
    catch.
+7. (2026-10-01, before slice B) Plugins: `canary install` stages and checks
+   a plugin, asks once, then runs the person's real `claude plugin install`
+   and confirms the installed folder matches what was checked, uninstalling
+   it on a mismatch. Copying a plugin into place would mean writing Claude
+   Code's private, versioned registry (`installed_plugins.json`, absolute
+   install paths, `enabledPlugins` in settings), which any release can
+   change. Plugins load at session start, so nothing unchecked is used in
+   between. Skills are copied from staging, as section 2 says.
 
 ## Plan
 
@@ -398,7 +406,11 @@ classifier before probing, and Spark completed its review.
    SessionStart line. It comes before interception because interception and
    the watcher both write to the ledger.
 4. **Slice B: intercept installs** (coordinator; the installer staging is
-   the riskiest code in the program).
+   the riskiest code in the program). Split in two pull requests, same
+   bullets: **B1** is `canary install`, the Claude Code rewrite and the
+   Codex deny-and-redirect (bullets 4 and 5); **B2** is the watcher (bullet
+   6). B2 also moves `canary add`'s guest-list record ahead of the rename,
+   so the watcher never sees a checked install as unchecked.
    - `canary install -- <command>`: run the installer against a staging
      home, check, ask, copy, record.
    - The Claude Code hook rewrites installer commands with `updatedInput`;
