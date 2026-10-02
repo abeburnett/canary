@@ -45,9 +45,10 @@ These are documented, not bugs; the site and `docs/architecture.md` state them.
   `canary install` with the original installer. The guest list reports what
   lands that way.
 - **`canary install` runs your installer as you.** It points the installer
-  at a staging folder, but an installer that writes to a fixed path
-  elsewhere is not contained; the guest list reports skills that arrive that
-  way.
+  at a staging folder and accepts only the real `skills` command with its
+  known options, or `claude plugin`. If something appears in a skills folder
+  while the installer runs, it installs nothing. Writes anywhere else are not
+  contained.
 - **The approval dialog can be clicked by an agent that controls the screen.**
 - **A missing Python fails open.** Claude Code and Codex let a call through
   when a hook cannot run. The hook runs on macOS's `/usr/bin/python3`, which

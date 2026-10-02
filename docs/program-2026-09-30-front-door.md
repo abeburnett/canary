@@ -345,12 +345,41 @@ the command. Interface: `docs/architecture.md`, "canary install".
   not run again on a rewritten command; deny rules still apply to it; when
   several hooks rewrite one call the last to finish wins (now a limit in
   `SECURITY.md`).
-- Tests: `tests/test_install.py` (11, with fake installers on `PATH`),
+- Tests: `tests/test_install.py` (19, with fake installers on `PATH`),
   three gate tests, and ten corpus cases moved from deny to rewrite.
 - The code came before its tests in this slice, so the red evidence is the
   deliberate breaks: 18, each turning a named test red (log in the slice
   record's evidence). The failed-installer test could not fail at first
   (the fake wrote nothing on failure); it now writes a skill and exits 1.
+- Permission probe (live, `claude -p`, 2026-10-01): a rewrite with no
+  `permissionDecision` is checked against the person's permission rules as
+  the replaced command (a rule for the new command let it run; a rule for
+  only the old one did not); with `allow` it ran with no rule at all. The
+  first version returned `allow`, which skipped the person's prompt for the
+  installer; the rewrite now returns no decision. The first probe could not
+  fail (Claude Code auto-allows `echo`), so its controls were redone with a
+  script command that needs approval.
+- Review: Muse Spark 1.3 Contributor refutation, read-only, one round. Its
+  answer to "can a new skill reach a skills folder without the check?" was
+  yes. Fixed, each with a test that failed first:
+  - `@someone/skills` was accepted, so any npm package could run as the
+    person and write a skill straight into a real folder; only the real
+    `skills` package is accepted now, with its known options only (an option
+    like `--dir` or `--metadata` was accepted before), and a skill that
+    appears in a real skills folder during the staged run stops the install;
+  - the installer's log, which can quote package text, sat where agents can
+    read; it is in the quarantine now;
+  - a failed real plugin update uninstalled the plugin that was there; and
+    installing an already-installed plugin could uninstall it on a mismatch;
+  - `marketplace add` ran with no question; the person agrees first now;
+  - folder names from the package reached the agent's result; they must be
+    usable skill names, and errors no longer quote them; the dialog now says
+    where skills go; the rewrite carries only the command, timeout and
+    description.
+  Recorded, not changed: the real plugin install also changes Claude Code's
+  records and marketplace copy, which are not compared (documented); an
+  agent can pass `--backend none` itself, which caps the verdict at "needs
+  your judgment" and still asks the person.
 - Not verified here: a real `npx skills add` or `claude plugin install`
   through `canary install` on the owner's Mac; the hook blocks agents from
   running installers, so the owner runs that check.

@@ -62,7 +62,14 @@ def installs(command, cwd, in_skills):
 # ---- commands `canary install` runs (front door, slice B1) -----------------
 
 LAUNCHERS = {("npx",): 1, ("bunx",): 1, ("pnpm", "dlx"): 2, ("yarn", "dlx"): 2}
-SKILLS_PACKAGE = re.compile(r"(?:@[\w.-]+/)?skills(?:@[\w.^~<>=-]+)?")
+# Only the skills command itself: a scoped lookalike (`@someone/skills`) is
+# someone else's program, chosen by whoever wrote the command.
+SKILLS_PACKAGE = re.compile(r"skills(?:@[\w.^~<>=-]+)?")
+# `skills add` options from its help (2026-10-01). Anything else, such as
+# --metadata, --subagent or an option this list does not know, is refused.
+SKILLS_FLAGS = {"-g", "--global", "-y", "--yes", "--copy", "--all", "--full-depth", "--json"}
+SKILLS_VALUES = {"-a", "--agent", "-s", "--skill"}
+SKILLS_VALUE = re.compile(r"[\w.*-]+")
 LAUNCHER_FLAGS = {"-y", "--yes", "--quiet", "-q"}
 SCOPES = {"user", "project", "local"}
 PLUGIN_ID = re.compile(r"[\w.-]+@[\w.-]+")
@@ -112,6 +119,21 @@ def kind(argv):
             return None
         i = 0
     if argv[i + 1:i + 2] not in (["add"], ["a"], ["install"], ["i"]):
+        return None
+    rest = argv[i + 2:]
+    if not rest or rest[0].startswith("-"):
+        return None  # the source comes first
+    j, values_ok = 1, False
+    while j < len(rest):
+        a = rest[j]
+        if a in SKILLS_VALUES:
+            values_ok = True
+        elif a in SKILLS_FLAGS:
+            values_ok = False
+        elif not (values_ok and SKILLS_VALUE.fullmatch(a) and not a.startswith("-")):
+            return None
+        j += 1
+    if rest[-1] in SKILLS_VALUES:
         return None
     return ("skills", argv)
 

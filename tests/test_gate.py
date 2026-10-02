@@ -60,7 +60,8 @@ class InstallsGoThroughTheDoor(unittest.TestCase):
         proc = h.hook("claude", "Bash", {"command": "npx skills add someone/repo -g",
                                          "description": "Install", "run_in_background": True})
         out = json.loads(proc.stdout)["hookSpecificOutput"]
-        self.assertEqual((proc.returncode, out["permissionDecision"]), (0, "allow"))
+        self.assertEqual(proc.returncode, 0)
+        self.assertNotIn("permissionDecision", out)  # the person's own settings decide
         self.assertEqual(out["updatedInput"], {
             "command": "/usr/bin/python3 -I -B '/Library/Application Support/SkillCanary/bin/"
                        "canary' install -- npx skills add someone/repo -g",

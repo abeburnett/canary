@@ -133,6 +133,11 @@ WORST = {"LIKELY_SAFE": 0, "NEEDS_REVIEW": 1, "UNSAFE": 2}
 def dialog_text(command, items, verdict):
     """One dialog for everything the command installs. Names come from the
     packages; the command comes from the agent."""
+    if not items:
+        return ("Add this plugin marketplace? It is a catalogue of plugins. Nothing from "
+                "it is installed until a plugin is, and SkillCanary checks each plugin "
+                f"then.\n\nCommand: {' '.join(command)[:300]}\n\nThe command comes from "
+                "the agent, not from SkillCanary.")
     word = {"LIKELY_SAFE": "no problems found",
             "NEEDS_REVIEW": "needs your judgment"}.get(verdict, verdict)
     lines = [f"SkillCanary checked what this install would add: {word}.", ""]
@@ -141,6 +146,10 @@ def dialog_text(command, items, verdict):
         lines.append(f"- {it['name']}{mark}")
         can = sorted({add.PLAIN[k] for k in it["capabilities"] if k in add.PLAIN})
         lines += [f"    It {c}." for c in can]
+    places = sorted({_short(os.path.dirname(it["destination"]), os.path.expanduser("~"))
+                     for it in items if it.get("destination")})
+    if places:
+        lines += ["", "Into: " + ", ".join(places)]
     lines += ["", f"Command: {' '.join(command)[:300]}", "",
               "Names come from the packages, and the command from the agent, "
               "not from SkillCanary."]
@@ -165,10 +174,18 @@ def install(argv, *, home=None, cwd=None, support_dir=None, approve=None, backen
     cwd = os.path.realpath(cwd or os.getcwd())
     support_dir = support_dir or add.SUPPORT_DIR
     run_id = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime()) + "-" + secrets.token_hex(4)
-    log_path = os.path.join(support_dir, "logs", f"install-{run_id}.log")
+    # In the quarantine, which the hook keeps agents from reading: installer
+    # output can quote package text.
+    log_path = os.path.join(support_dir, "quarantine", "logs", f"install-{run_id}.log")
     out = _result(parsed[0], argv)
     if parsed[0] == "marketplace":
-        # Adds a catalogue; nothing in it loads until a plugin is installed.
+        # Adds a catalogue of plugins; each plugin is checked when installed.
+        # The person agrees to the catalogue first.
+        answer = _ask(approve, list(argv), [], "LIKELY_SAFE")
+        if answer is not True:
+            out["outcome"] = "declined" if answer is False else "not_installed"
+            out["reasons"].append("The person did not add the marketplace.")
+            return out
         code = _run(list(argv), cwd, _real_env(home), log_path)
         out["outcome"] = "done" if code == 0 else "not_installed"
         out["reasons"].append("Added the marketplace; nothing from it is installed yet."
@@ -213,7 +230,9 @@ def _snapshot_and_check(folders, run_dir, out, backend, model, timeout_s, suppor
             label = name or add._name(snap, os.path.basename(folder).lower())
             items.append({"name": label, "snapshot": snap, "digest": add.tree_digest(snap)})
         except (add.SourceError, OSError) as exc:
-            _not(out, f"{os.path.basename(folder)}: {exc if isinstance(exc, add.SourceError) else 'could not be read'} Nothing was installed.")
+            _not(out, "A skill could not be copied safely: "
+                      f"{exc if isinstance(exc, add.SourceError) else 'it could not be read.'} "
+                      "Nothing was installed.")
             return None
     results = _check_all([it["snapshot"] for it in items], backend, model, timeout_s,
                          os.path.join(support_dir, "logs"))
@@ -232,7 +251,13 @@ def _snapshot_and_check(folders, run_dir, out, backend, model, timeout_s, suppor
 def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approve, backend,
             model, timeout_s):
     stage_home, stage_project = _stage(run_dir, home)
+    before = _real_listing(home, cwd)
     code = _run(list(argv), stage_project, _env(stage_home, home), log_path)
+    appeared = _appeared(before, _real_listing(home, cwd))
+    if appeared:
+        return _not(out, f"While the installer ran, something new appeared in "
+                         f"{_short(appeared[0], home)}, outside SkillCanary's staging folder. "
+                         "SkillCanary installed nothing. Run canary list to see it.")
     if code != 0:
         return _not(out, f"The installer failed ({'exit ' + str(code) if code is not None else 'did not finish'}); "
                          f"nothing was installed. Its output is in {log_path}.")
@@ -242,6 +267,9 @@ def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approv
         folders, found_links = _landed(stage_root)
         plan += [(f, os.path.join(real_root, os.path.relpath(f, stage_root))) for f in folders]
         links += [(l, real_root, stage_root) for l in found_links]
+    if any(not add.NAME.fullmatch(os.path.basename(f)) for f, _ in plan):
+        return _not(out, "A skill folder's name is not one SkillCanary can use (lowercase "
+                         "letters, digits and dashes); nothing was installed.")
     if not plan:
         return _not(out, "The installer added no skills to its staging home, so there was "
                          f"nothing to check or install. Its output is in {log_path}.")
@@ -328,6 +356,24 @@ def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approv
     return out
 
 
+def _real_listing(home, cwd):
+    """{skills folder: its entries} for the person's real skills folders and
+    the current project's, so an installer that writes past staging shows."""
+    from canary import gate
+    folders = guestlist.user_roots(home) + [os.path.join(cwd, r) for r in gate.SKILL_ROOTS]
+    listing = {}
+    for folder in dict.fromkeys(folders):
+        try:
+            listing[folder] = set(os.listdir(folder))
+        except OSError:
+            listing[folder] = set()
+    return listing
+
+
+def _appeared(before, after):
+    return sorted(f for f in after if after[f] - before.get(f, set()))
+
+
 def _record_all(items, home, support_dir, outcome):
     for name in dict.fromkeys(it["name"] for it in items):
         verdict = max((it["verdict"] for it in items if it["name"] == name), key=WORST.get)
@@ -391,6 +437,9 @@ def _plugin(parsed, home, cwd, support_dir, run_dir, run_id, log_path, out, appr
     stage_home, stage_project = _stage(run_dir, home)
     stage_config = os.path.join(stage_home, ".claude")
     env = _env(stage_home, home, {"CLAUDE_CONFIG_DIR": stage_config})
+    if argv[2] in ("install", "i") and _install_path(real_config, plugin_id, scope):
+        return _not(out, f"{plugin_id} is already installed. To update it: canary install "
+                         f"-- claude plugin update {plugin_id}")
     source = _marketplace_source(real_config, marketplace)
     if source is None:
         return _not(out, f"SkillCanary could not find the marketplace {marketplace}. Add it "
@@ -426,13 +475,16 @@ def _plugin(parsed, home, cwd, support_dir, run_dir, run_id, log_path, out, appr
         code = _run(list(argv), cwd, _real_env(home), log_path)
         real = _install_path(real_config, plugin_id, scope)
         got = _digest_of(real, os.path.join(run_dir, "installed")) if real else None
-        if code != 0 or got != items[0]["digest"]:
-            if code == 0 or real:
-                _run([argv[0], "plugin", "uninstall", plugin_id, "--scope", scope], cwd,
-                     _real_env(home), log_path)
-            return _not(out, ("The plugin changed between the check and the install, so "
-                              "SkillCanary uninstalled it." if code == 0 else
-                              f"The installer failed; see {log_path}."))
+        if code != 0:
+            # Nothing of ours to undo: a failed update keeps what was there.
+            return _not(out, f"The installer failed; its output is in {log_path}.")
+        if got != items[0]["digest"]:
+            removed = _run([argv[0], "plugin", "uninstall", plugin_id, "--scope", scope], cwd,
+                           _real_env(home), log_path)
+            return _not(out, "The plugin changed between the check and the install, so "
+                             + ("SkillCanary uninstalled it." if removed == 0 else
+                                "SkillCanary tried to uninstall it and could not. Remove it "
+                                f"yourself: claude plugin uninstall {plugin_id}"))
         lock = add._read_lock(home)
         lock.setdefault("plugins", {})[plugin_id] = {
             "command": list(argv), "scope": scope, "package_digest": items[0]["package_digest"],
