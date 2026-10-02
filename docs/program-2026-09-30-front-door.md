@@ -178,7 +178,10 @@ done-when audit by a model other than the author.
   page says a PreToolUse hook rewrites a call with `permissionDecision:
   "allow"` plus `updatedInput`, and does not support `ask`. A live run waits
   until the Codex usage limit resets (2026-10-03). Until then the plan
-  assumes deny-and-redirect for Codex.
+  assumes deny-and-redirect for Codex. **Run live 2026-10-02** (Codex ran
+  again before that date): Codex applies a rewrite only with `allow`, and
+  ignores one with no decision, so Codex keeps deny-and-redirect
+  (`docs/codex-facts.md`, "Rewriting an installer command").
 - **SessionStart runs after the session lists its skills: verified live.** A
   skill created by a SessionStart hook was missing from the session's init
   event and the model said it was unavailable; a positive control (the skill
