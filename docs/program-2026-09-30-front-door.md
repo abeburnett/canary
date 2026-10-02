@@ -383,9 +383,26 @@ the command. Interface: `docs/architecture.md`, "canary install".
   records and marketplace copy, which are not compared (documented); an
   agent can pass `--backend none` itself, which caps the verdict at "needs
   your judgment" and still asks the person.
-- Not verified here: a real `npx skills add` or `claude plugin install`
-  through `canary install` on the owner's Mac; the hook blocks agents from
-  running installers, so the owner runs that check.
+- Real skills install, owner's terminal, 2026-10-02: `canary install --
+  npx skills add vercel-labs/agent-skills -g -y -s writing-guidelines`
+  installed after one dialog (verdict NEEDS_REVIEW). The first attempt named
+  a skill the repository does not have; the installer failed in staging and
+  nothing was installed, as designed. Without `-a`, the skills installer
+  installs into every agent it supports, so the skill landed as one copy in
+  `~/.agents/skills` plus 46 links, most in agent folders created for it;
+  the dialog listed all 47 places. The owner chose to leave them. Possible
+  follow-up: the dialog warns when an install creates folders for agents
+  the person does not have.
+- Real plugin install, owner's terminal, 2026-10-02: `canary install --
+  claude plugin install code-review@claude-plugins-official` staged and
+  checked the plugin (NEEDS_REVIEW: it grants tools), asked once, ran the
+  real install, and the installed folder
+  (`~/.claude/plugins/cache/claude-plugins-official/code-review/ab024cdcfa7c`)
+  matched the checked bytes, so it stayed installed.
+- Not run for real: the rewrite inside a live Claude Code session, which
+  needs this branch's hook installed (after merge and `canary setup`); its
+  output shape and the permission flow are covered by the tests and the
+  2026-10-01 probe.
 
 ## Unverified; probed before building on them
 
