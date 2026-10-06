@@ -141,9 +141,15 @@ class TheSkillsOwnTextIsForThePerson(unittest.TestCase):
 
     def test_other_canary_commands_and_other_spellings_pass(self):
         for command in ("canary check ./notes --json", "canary scan ./notes", "canary doctor",
-                        "canary Explain ./x", "canary check ./x --EXCERPTS", "explain canary"):
+                        "canary Explain ./x", "canary check ./x --EXCERPTS", "explain canary",
+                        "canary list", "canary doctor --prune", "canary check ./notes --text"):
             with self.subTest(command):
                 self.assertIsNone(self.decide(command))
+        h = Home()
+        for host in ("claude", "codex"):
+            for command in ("canary list", "canary doctor --prune", "canary check ./notes --text"):
+                with self.subTest(host=host, command=command):
+                    self.assertFalse(h.denied(host, "Bash", {"command": command}))
 
     def test_both_hosts_deny_it(self):
         h = Home()

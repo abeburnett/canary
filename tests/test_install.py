@@ -281,6 +281,15 @@ class RecordsKnowWhereTheyAre(unittest.TestCase):
                       "installed. To replace it, remove those folders and run this again.",
                       out["reasons"])
 
+    def test_the_checked_name_decides_not_the_staged_folder_name(self):
+        mac = Mac()
+        other = os.path.join(mac.home, ".agents", "skills", "other")
+        os.makedirs(other)
+        mac.write_lock({"repo": {"installed": [other], "installed_at": "2026-10-05T10:00:00Z"}})
+        out = mac.install(ADD, spec={"skills": [{"name": "helper", "folder": "repo"}]})
+        self.assertEqual((out["outcome"], out["reasons"]), ("installed", []))
+        self.assertEqual(sorted(mac.lock()["skills"]), ["helper", "repo"])
+
     def test_a_folder_with_no_record_is_named(self):
         mac = Mac()
         os.makedirs(os.path.join(mac.home, ".agents", "skills", "helper"))

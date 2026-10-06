@@ -437,6 +437,18 @@ class RecordsKnowWhereTheyAre(unittest.TestCase):
                       "Nothing was installed. To replace it, remove that folder and run this "
                       "again.", result["reasons"])
 
+    def test_a_record_whose_paths_vanish_during_the_check_is_no_blocker(self):
+        env = Env()
+        gone = os.path.join(env.home, ".claude", "skills", "notes")
+        lock = {"schema": "canary.lock/1", "skills": {"notes": {"installed": [gone]}}}
+        places = places_of(env.home, ".claude/skills")
+        with unittest.mock.patch.object(add, "is_live", return_value=True):
+            try:
+                reason = add.conflict_reason(lock, ["notes"], places, [], env.home)
+            except IndexError:
+                self.fail("a record whose paths vanished raised instead of passing")
+        self.assertIsNone(reason)
+
     def test_the_same_name_in_other_places_is_recorded_under_a_second_key(self):
         env = Env()
         project = os.path.realpath(tempfile.mkdtemp(prefix="canary-project-"))

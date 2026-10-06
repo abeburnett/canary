@@ -552,24 +552,28 @@ def _plural(n, one, many):
 
 def _first_path(rec, home):
     from canary import add
-    return add._short(rec["installed"][0], home) if rec["installed"] else "(no path recorded)"
+    from canary import scan
+    return (scan.terminal_safe(add._short(rec["installed"][0], home)) if rec["installed"]
+            else "(no path recorded)")
 
 
 def render_old_records(records, home):
     n = len(records)
     lines = [f"Old install records: {n} "
              f"({_plural(n, 'its folder is gone', 'their folders are gone')})"]
-    lines += [f"  {r['name']}  {_first_path(r, home)}" for r in records]
+    from canary import scan
+    lines += [f"  {scan.terminal_safe(r['name'])}  {_first_path(r, home)}" for r in records]
     lines.append("Run canary doctor --prune to remove them. It asks you first.")
     return "\n".join(lines)
 
 
 def prune_dialog_text(records, home):
+    from canary import scan
     n = len(records)
     lines = [f"SkillCanary has {n} install {_plural(n, 'record for a skill or plugin whose folders are gone', 'records for skills or plugins whose folders are gone')}:"]
     for r in records[:MAX_LISTED]:
         path = _first_path(r, home)
-        lines.append(f"- {r['name']} " + (path if path.startswith("(") else f"({path})"))
+        lines.append(f"- {scan.terminal_safe(r['name'])} " + (path if path.startswith("(") else f"({path})"))
     if n > MAX_LISTED:
         lines.append(f"- and {n - MAX_LISTED} more")
     lines += ["Removing them lets you install these names again. It does not change any",

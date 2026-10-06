@@ -293,9 +293,9 @@ def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approv
         link_plan.append((dest, os.path.relpath(target, os.path.dirname(dest))))
     taken = [d for _, d in plan] + [d for d, _ in link_plan]
     places = add.places_of(taken)
-    reason = add.conflict_reason(add._read_lock(home),
-                                 list(dict.fromkeys(os.path.basename(f) for f, _ in plan)),
-                                 places, taken, home)
+    # Names are not known yet (the checked name can differ from the folder's),
+    # so this first look is only at destinations that already exist.
+    reason = add.conflict_reason(add._read_lock(home), [], places, taken, home)
     if reason:
         return _not(out, reason)
     items = _snapshot_and_check([f for f, _ in plan], run_dir, out, backend, model, timeout_s,
@@ -331,7 +331,9 @@ def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approv
             return _not(out, reason)
         # Chosen now: once the files exist, a dead record of the same name
         # would look live.
-        keys = {name: add.plan_key(lock, name, places)[0] for name in names}
+        keys = {name: add.choose_key(lock, name, places) for name in names}
+        if None in keys.values():
+            return _not(out, "Another install got there first; nothing was installed.")
         # Recorded before the files appear, so the watcher leaves them alone;
         # the links resolve to these folders.
         for name in names:

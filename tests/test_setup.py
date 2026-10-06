@@ -699,6 +699,15 @@ class OldInstallRecords(unittest.TestCase):
             {"kind": "plugin", "key": "tidy@mkt", "name": "tidy@mkt",
              "installed": [self.gone("tidy")]}])
 
+    def test_names_and_paths_from_the_lockfile_print_as_visible_escapes(self):
+        hostile = "\x1b[2J"
+        self.write({hostile: {"installed": [self.gone(hostile)]}})
+        records = setup.old_records(self.home)
+        for text in (setup.render_old_records(records, self.home),
+                     setup.prune_dialog_text(records, self.home)):
+            self.assertNotIn("\x1b", text)
+            self.assertIn("\\x1b[2J", text)
+
     def test_no_lockfile_has_no_records_and_a_broken_one_is_an_error(self):
         self.assertEqual(setup.old_records(self.home), [])
         self.write({}, raw="{not json")

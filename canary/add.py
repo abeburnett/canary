@@ -344,7 +344,9 @@ def _short(path, home):
 def _join(items):
     """a, a and b, a, b and c."""
     items = list(items)
-    return items[0] if len(items) <= 1 else ", ".join(items[:-1]) + " and " + items[-1]
+    if not items:
+        return ""
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
 
 
 def record_paths(rec):
@@ -396,20 +398,41 @@ def plan_key(lock, name, places):
     return None, other
 
 
+def _blocked_sentence(name, rec, home):
+    """The refusal for a live record, or None when its folders have vanished."""
+    paths = [_short(p, home) for p in record_paths(rec) if os.path.exists(p)]
+    if not paths:
+        return None
+    stamp = rec.get("installed_at")
+    date = f" (recorded {stamp[:10]})" if isinstance(stamp, str) and DATE.match(stamp) else ""
+    them = "that folder" if len(paths) == 1 else "those folders"
+    return (f"A skill named {name} is already installed at {_join(paths)}{date}. "
+            f"Nothing was installed. To replace it, remove {them} and run this again.")
+
+
+def choose_key(lock, name, places):
+    """The key for a new record once conflict_reason found nothing in the way.
+    A record that was live a moment ago and has since vanished is read again;
+    None only when something still blocks."""
+    return plan_key(lock, name, places)[0] or plan_key(lock, name, places)[0]
+
+
 def conflict_reason(lock, names, places, destinations, home):
     """The sentence for what is in the way of installing `names` into `places`
-    (a live record first, then a destination that exists), or None."""
+    (a live record first, then a destination that exists), or None. A
+    destination that a live record holds is reported as that record."""
     for name in names:
         blocker = plan_key(lock, name, places)[1]
-        if blocker is not None:
-            paths = [_short(p, home) for p in record_paths(blocker) if os.path.exists(p)]
-            stamp = blocker.get("installed_at")
-            date = f" (recorded {stamp[:10]})" if isinstance(stamp, str) and DATE.match(stamp) else ""
-            them = "that folder" if len(paths) == 1 else "those folders"
-            return (f"A skill named {name} is already installed at {_join(paths)}{date}. "
-                    f"Nothing was installed. To replace it, remove {them} and run this again.")
+        sentence = _blocked_sentence(name, blocker, home) if blocker is not None else None
+        if sentence:
+            return sentence
     existing = [d for d in destinations if os.path.lexists(d)]
     if existing:
+        for key, rec in lock["skills"].items():
+            if existing[0] in record_paths(rec):
+                sentence = _blocked_sentence(record_name(key, rec), rec, home)
+                if sentence:
+                    return sentence
         return (f"{_short(existing[0], home)} already exists. Nothing was installed. "
                 "To replace it, remove it and run this again.")
     return None
@@ -643,7 +666,11 @@ def add(source, *, home=None, support_dir=None, approve=None, fetch=None,
                 return out
             # Chosen now: once the files exist, a dead record of the same
             # name would look live.
-            key = plan_key(lock, name, places)[0]
+            key = choose_key(lock, name, places)
+            if key is None:
+                out["outcome"] = "not_installed"
+                out["reasons"].append("Another install got there first; nothing was installed.")
+                return out
             # Recorded before the files appear, so the watcher leaves them alone.
             _record(guestlist.record_install, home, destinations, name, verdict,
                     support=support_dir, source=snapshot)

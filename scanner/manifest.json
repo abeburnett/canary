@@ -3,7 +3,7 @@
   "files": {
     "bin/canary": "6be3492d4a1c5373bf1040f4a612737548593853448d95f436d5828e9545ffa9",
     "canary/__init__.py": "ae739b3e3b817044ada923b44ba82c752fe8b7c2133908d58fff8fd4b5146298",
-    "canary/add.py": "d8eaa5a9f04da9371177f95ee19814cc9daf04ed3f78a095f66890d5cbe5c8ba",
+    "canary/add.py": "0ee5165d5d32e6f63ac68cd36351b7f5435938781c16f4b56110bf334d752a33",
     "canary/catalog.py": "abc8c72e727153f0ec035774ac4b0b34fa2d020195a599d1da919840df282372",
     "canary/classifiers/anthropic_api.py": "a38794d24641ab62a3acfa889e6f264ee2f83fe68e42c028d8fe211d01b6f833",
     "canary/classifiers/claude_cli.py": "2120c73e4fe0376ac15fdff06cb256ab526d8b70b2b7705bef7525f22ec33892",
@@ -17,10 +17,10 @@
     "canary/guestlist.py": "6514e6f1a2cc565eabd2dc0c82036c24b0974ed147186b2beb1c29eda56bc7fd",
     "canary/hosts/claude.py": "4a317a3236c23a1bf006231c0545389d670b0c0dede26a7d2b7314ac6e2c38c3",
     "canary/hosts/codex.py": "e951d4cf3d072c2e55e1a99b6b6396e1128eaca49e639683deb4729b07d11d15",
-    "canary/install.py": "21f365f96020bab78485a53d306122d469bc503741c429775b8e693721f25ddb",
+    "canary/install.py": "cf5a1233ab3c6e43782b1b3e0980524851f1ae1bae85f39a3a1a81a2ddbd7743",
     "canary/installers.py": "53d310ec6acfe87e837fcd7d94e8a7c464657743317e88c4c74bfe16eb135a50",
     "canary/scan.py": "68279bfdafdf3258e3ae69354fd126498284393312db4912ed26c749b70126f0",
-    "canary/setup.py": "b3fb8648ec5d5fc1d6f8ebd7a8940cda2e84e89a6fd125c54bf553794a68c307",
+    "canary/setup.py": "eca8c24b921de8d34658333be6bd2b5650deb0b407f0730e148e88f4a9db52bd",
     "canary/shellparse.py": "ed1a73a3121d4e35cf6491ed83951bbdf45de3516ebbca438b47898369c7436e",
     "canary/watcher.py": "89584edd5e14ed5c3c5727950393b44e379097a1a20a24f713446b931ea74bc2"
   }
