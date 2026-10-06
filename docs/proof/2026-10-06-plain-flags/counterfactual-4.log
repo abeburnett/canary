@@ -1,0 +1,141 @@
+===== bullet 4, break 1: canary/setup.py =====
+diff --git a/canary/setup.py b/canary/setup.py
+index bbf25e2..5e80616 100644
+--- a/canary/setup.py
++++ b/canary/setup.py
+@@ -604,8 +604,7 @@ def prune_records(home=None, approve=None):
+             removed = 0
+             for kind, records_ in (("skill", lock["skills"]),
+                                    ("plugin", plugins if isinstance(plugins, dict) else {})):
+-                for key in [k for k in records_ if (kind, k) in shown
+-                            and not add.is_live(records_[k])]:
++                for key in [k for k in records_ if (kind, k) in shown]:
+                     del records_[key]
+                     removed += 1
+             add._write_lock(home, lock)
+
+--- run with the break: exit 1 ---
+test_an_unreadable_lockfile_is_reported_and_doctor_carries_on (tests.test_setup.OldInstallRecords) ... ok
+test_doctor_json_carries_old_records_and_says_one_in_the_singular (tests.test_setup.OldInstallRecords) ... ok
+test_doctor_lists_old_records_without_changing_its_exit_code (tests.test_setup.OldInstallRecords) ... ok
+test_doctor_takes_only_nothing_json_or_prune (tests.test_setup.OldInstallRecords) ... ok
+test_names_and_paths_from_the_lockfile_print_as_visible_escapes (tests.test_setup.OldInstallRecords) ... ok
+test_no_lockfile_has_no_records_and_a_broken_one_is_an_error (tests.test_setup.OldInstallRecords) ... ok
+test_prune_asks_then_removes_only_what_is_still_dead (tests.test_setup.OldInstallRecords) ... FAIL
+test_prune_removes_nothing_unless_the_person_agrees (tests.test_setup.OldInstallRecords) ... ok
+test_prune_with_nothing_to_remove_shows_no_dialog_and_a_broken_lock_exits_3 (tests.test_setup.OldInstallRecords) ... ok
+test_the_dead_records_are_listed_skills_first_and_malformed_ones_are_dead (tests.test_setup.OldInstallRecords) ... ok
+test_the_prune_dialog_text (tests.test_setup.OldInstallRecords) ... ok
+
+======================================================================
+FAIL: test_prune_asks_then_removes_only_what_is_still_dead (tests.test_setup.OldInstallRecords)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_setup.py", line 773, in test_prune_asks_then_removes_only_what_is_still_dead
+    self.assertEqual((code, out), (0, "Removed 6 old install records.\n"))
+AssertionError: Tuples differ: (0, 'Removed 7 old install records.\n') != (0, 'Removed 6 old install records.\n')
+
+First differing element 1:
+'Removed 7 old install records.\n'
+'Removed 6 old install records.\n'
+
+- (0, 'Removed 7 old install records.\n')
+?              ^
+
++ (0, 'Removed 6 old install records.\n')
+?              ^
+
+
+----------------------------------------------------------------------
+Ran 11 tests in 0.017s
+
+FAILED (failures=1)
+
+--- after reverting (git checkout -- canary/setup.py): exit 0 ---
+----------------------------------------------------------------------
+Ran 11 tests in 0.017s
+
+OK
+
+===== bullet 4, break 2: canary/setup.py =====
+diff --git a/canary/setup.py b/canary/setup.py
+index bbf25e2..c9841bf 100644
+--- a/canary/setup.py
++++ b/canary/setup.py
+@@ -594,7 +594,7 @@ def prune_records(home=None, approve=None):
+         if not records:
+             print("No old install records.")
+             return 0
+-        if approve(prune_dialog_text(records, home)) is not True:
++        if approve(prune_dialog_text(records, home)) is None:
+             print("Nothing removed: the person did not agree in SkillCanary's dialog.")
+             return 10
+         shown = {(r["kind"], r["key"]) for r in records}
+
+--- run with the break: exit 1 ---
+test_an_unreadable_lockfile_is_reported_and_doctor_carries_on (tests.test_setup.OldInstallRecords) ... ok
+test_doctor_json_carries_old_records_and_says_one_in_the_singular (tests.test_setup.OldInstallRecords) ... ok
+test_doctor_lists_old_records_without_changing_its_exit_code (tests.test_setup.OldInstallRecords) ... ok
+test_doctor_takes_only_nothing_json_or_prune (tests.test_setup.OldInstallRecords) ... ok
+test_names_and_paths_from_the_lockfile_print_as_visible_escapes (tests.test_setup.OldInstallRecords) ... ok
+test_no_lockfile_has_no_records_and_a_broken_one_is_an_error (tests.test_setup.OldInstallRecords) ... ok
+test_prune_asks_then_removes_only_what_is_still_dead (tests.test_setup.OldInstallRecords) ... ok
+test_prune_removes_nothing_unless_the_person_agrees (tests.test_setup.OldInstallRecords) ... test_prune_with_nothing_to_remove_shows_no_dialog_and_a_broken_lock_exits_3 (tests.test_setup.OldInstallRecords) ... ok
+test_the_dead_records_are_listed_skills_first_and_malformed_ones_are_dead (tests.test_setup.OldInstallRecords) ... ok
+test_the_prune_dialog_text (tests.test_setup.OldInstallRecords) ... ok
+
+======================================================================
+FAIL: test_prune_removes_nothing_unless_the_person_agrees (tests.test_setup.OldInstallRecords) (answer=False)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_setup.py", line 807, in test_prune_removes_nothing_unless_the_person_agrees
+    self.assertEqual((code, out), (10, "Nothing removed: the person did not agree "
+AssertionError: Tuples differ: (0, 'Removed 7 old install records.\n') != (10, "Nothing removed: the person did not agree in SkillCanary's dialog.\n")
+
+First differing element 0:
+0
+10
+
+- (0, 'Removed 7 old install records.\n')
++ (10, "Nothing removed: the person did not agree in SkillCanary's dialog.\n")
+
+======================================================================
+FAIL: test_prune_removes_nothing_unless_the_person_agrees (tests.test_setup.OldInstallRecords) (answer=None)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_setup.py", line 807, in test_prune_removes_nothing_unless_the_person_agrees
+    self.assertEqual((code, out), (10, "Nothing removed: the person did not agree "
+AssertionError: Tuples differ: (0, 'No old install records.\n') != (10, "Nothing removed: the person did not agree in SkillCanary's dialog.\n")
+
+First differing element 0:
+0
+10
+
+- (0, 'No old install records.\n')
++ (10, "Nothing removed: the person did not agree in SkillCanary's dialog.\n")
+
+======================================================================
+FAIL: test_prune_removes_nothing_unless_the_person_agrees (tests.test_setup.OldInstallRecords) (answer='yes')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_setup.py", line 807, in test_prune_removes_nothing_unless_the_person_agrees
+    self.assertEqual((code, out), (10, "Nothing removed: the person did not agree "
+AssertionError: Tuples differ: (0, 'No old install records.\n') != (10, "Nothing removed: the person did not agree in SkillCanary's dialog.\n")
+
+First differing element 0:
+0
+10
+
+- (0, 'No old install records.\n')
++ (10, "Nothing removed: the person did not agree in SkillCanary's dialog.\n")
+
+----------------------------------------------------------------------
+Ran 11 tests in 0.016s
+
+FAILED (failures=3)
+
+--- after reverting (git checkout -- canary/setup.py): exit 0 ---
+----------------------------------------------------------------------
+Ran 11 tests in 0.027s
+
+OK

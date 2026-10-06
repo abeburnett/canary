@@ -24,7 +24,7 @@ import stat
 import subprocess
 import time
 
-from canary import add, classify, guestlist, installers
+from canary import add, classify, explain, guestlist, installers
 
 INSTALLER_SECONDS = 600
 CHECK_WORKERS = 4
@@ -38,7 +38,7 @@ class InstallError(Exception):
 
 def _result(kind_, argv):
     return {"schema": "canary.install/1", "outcome": None, "verdict": None, "kind": kind_,
-            "skills": [], "installed": [], "reasons": []}
+            "skills": [], "installed": [], "reasons": [], "next_steps": []}
 
 
 def _env(stage_home, real_home, extra=None):
@@ -120,9 +120,10 @@ def _landed(stage_root):
 
 
 def _check_all(snapshots, backend, model, timeout_s, log_dir):
-    """classify.check each snapshot, a few at a time (one model call each)."""
+    """classify._check each snapshot, a few at a time (one model call each):
+    a (result, confident) pair for each."""
     with concurrent.futures.ThreadPoolExecutor(max_workers=CHECK_WORKERS) as pool:
-        futures = [pool.submit(classify.check, s, backend=backend, model=model,
+        futures = [pool.submit(classify._check, s, backend=backend, model=model,
                                timeout_s=timeout_s, log_dir=log_dir) for s in snapshots]
         return [f.result() for f in futures]
 
@@ -146,6 +147,11 @@ def dialog_text(command, items, verdict):
         lines.append(f"- {it['name']}{mark}")
         can = sorted({add.PLAIN[k] for k in it["capabilities"] if k in add.PLAIN})
         lines += [f"    It {c}." for c in can]
+        if it["verdict"] != "LIKELY_SAFE" and it.get("headline"):
+            lines.append(f"    {it['headline']}")
+    steps = list(dict.fromkeys(s for it in items for s in it.get("steps", [])))
+    if steps:
+        lines += ["", "What you can do:"] + [f"- {s}" for s in steps]
     places = sorted({_short(os.path.dirname(it["destination"]), os.path.expanduser("~"))
                      for it in items if it.get("destination")})
     if places:
@@ -236,13 +242,17 @@ def _snapshot_and_check(folders, run_dir, out, backend, model, timeout_s, suppor
             return None
     results = _check_all([it["snapshot"] for it in items], backend, model, timeout_s,
                          os.path.join(support_dir, "logs"))
-    for it, result in zip(items, results):
+    for it, (result, confident) in zip(items, results):
         it["verdict"] = result["verdict"]
+        it["headline"] = result["headline"]
+        it["steps"] = explain.next_steps(result, confident, "install")
         it["reasons"] = result["reasons"]
         it["capabilities"] = sorted({c["kind"] for c in result["scan"]["capabilities"]})
         it["package_digest"] = result["package_digest"]
     out["verdict"] = max((it["verdict"] for it in items), key=WORST.get)
-    out["skills"] = [{"name": it["name"], "verdict": it["verdict"]} for it in items]
+    out["skills"] = [{"name": it["name"], "verdict": it["verdict"], "headline": it["headline"]}
+                     for it in items]
+    out["next_steps"] = list(dict.fromkeys(s for it in items for s in it["steps"]))
     for it in items:
         out["reasons"] += [f"{it['name']}: {r}" for r in it["reasons"]]
     return items
@@ -282,10 +292,12 @@ def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approv
         dest = os.path.join(real_root, os.path.relpath(link, stage_root))
         link_plan.append((dest, os.path.relpath(target, os.path.dirname(dest))))
     taken = [d for _, d in plan] + [d for d, _ in link_plan]
-    existing = [d for d in taken if os.path.lexists(d)]
-    if existing:
-        return _not(out, f"{_short(existing[0], home)} already exists; nothing was installed. "
-                         "Remove it first to replace it.")
+    places = add.places_of(taken)
+    # Names are not known yet (the checked name can differ from the folder's),
+    # so this first look is only at destinations that already exist.
+    reason = add.conflict_reason(add._read_lock(home), [], places, taken, home)
+    if reason:
+        return _not(out, reason)
     items = _snapshot_and_check([f for f, _ in plan], run_dir, out, backend, model, timeout_s,
                                 support_dir)
     if items is None:
@@ -301,6 +313,9 @@ def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approv
         out["reasons"].append("Not installed: SkillCanary judged part of it unsafe.")
         _record_all(items, home, support_dir, "refused")
         return out
+    reason = add.conflict_reason(add._read_lock(home), list(names), places, taken, home)
+    if reason:
+        return _not(out, reason)
     answer = _ask(approve, list(argv), items, out["verdict"])
     if answer is not True:
         out["outcome"] = "declined" if answer is False else "not_installed"
@@ -311,9 +326,14 @@ def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approv
         return out
     with add._Commit(home):
         lock = add._read_lock(home)
-        if any(os.path.lexists(d) for d in taken) or any(n in lock["skills"] for n in names):
-            return _not(out, "Something with the same name was installed meanwhile; nothing "
-                             "was installed.")
+        reason = add.conflict_reason(lock, list(names), places, taken, home)
+        if reason:
+            return _not(out, reason)
+        # Chosen now: once the files exist, a dead record of the same name
+        # would look live.
+        keys = {name: add.choose_key(lock, name, places) for name in names}
+        if None in keys.values():
+            return _not(out, "Another install got there first; nothing was installed.")
         # Recorded before the files appear, so the watcher leaves them alone;
         # the links resolve to these folders.
         for name in names:
@@ -336,13 +356,14 @@ def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approv
             stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
             for name in names:
                 mine = [it for it in items if it["name"] == name]
-                lock["skills"][name] = {
-                    "source": "installer", "command": list(argv),
+                installed = ([it["destination"] for it in mine]
+                             + [d for d, _ in link_plan if os.path.realpath(d) in
+                                {os.path.realpath(it["destination"]) for it in mine}])
+                lock["skills"][keys[name]] = {
+                    "source": "installer", "command": list(argv), "name": name,
+                    "places": add.places_of(installed),
                     "package_digest": mine[0]["package_digest"], "verdict": mine[0]["verdict"],
-                    "installed": [it["destination"] for it in mine]
-                    + [d for d, _ in link_plan if os.path.realpath(d) in
-                       {os.path.realpath(it["destination"]) for it in mine}],
-                    "installed_at": stamp}
+                    "installed": installed, "installed_at": stamp}
             add._write_lock(home, lock)
         except (OSError, add.SourceError):
             for path in reversed(done):
@@ -457,7 +478,8 @@ def _plugin(parsed, home, cwd, support_dir, run_dir, run_id, log_path, out, appr
                                 name=plugin_id)
     if items is None:
         return out
-    out["skills"] = [{"name": plugin_id, "verdict": items[0]["verdict"]}]
+    out["skills"] = [{"name": plugin_id, "verdict": items[0]["verdict"],
+                      "headline": items[0]["headline"]}]
     if out["verdict"] == "UNSAFE":
         out["outcome"] = "refused"
         out["reasons"].append("Not installed: SkillCanary judged it unsafe.")

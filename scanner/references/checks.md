@@ -112,3 +112,11 @@ two lines, which the paragraph pass now catches. The planted attack fixture scor
   The scanner flags the capability; it cannot see the future bytes.
 - **Multi-package attacks**: a clean skill that tells the agent to install a
   second one. The gate, not the scanner, has to stop that install.
+
+## Context labels
+
+Every finding carries `context`: `code_example` (inside a fenced code block),
+`forbidding` (on a line that warns against what it quotes) or `null`. It is a
+label for the reader only. It never changes a severity, score or verdict, and
+attack patterns are still never dampened. `canary explain` shows each rule's
+plain-language label, what it looks for and why it matters.

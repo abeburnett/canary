@@ -1,0 +1,295 @@
+===== bullet 9, break 1: canary/gate.py =====
+diff --git a/canary/gate.py b/canary/gate.py
+index 0634c0b..a324529 100644
+--- a/canary/gate.py
++++ b/canary/gate.py
+@@ -200,7 +200,7 @@ def decide(call, home, roots, canary_bin=None, can_rewrite=False):
+     rewrite a command). Any internal error denies."""
+     try:
+         if call.tool_name in SHELL_TOOLS and isinstance(call.command, str):
+-            own_text = _own_text(call.command)
++            own_text = None
+             if own_text:
+                 return own_text
+             if _is_canary(call.command, canary_bin):
+
+--- run with the break: exit 1 ---
+test_both_hosts_deny_it (tests.test_gate.TheSkillsOwnTextIsForThePerson) ... test_each_message_names_the_command_to_hand_the_person (tests.test_gate.TheSkillsOwnTextIsForThePerson) ... test_other_canary_commands_and_other_spellings_pass (tests.test_gate.TheSkillsOwnTextIsForThePerson) ... ok
+test_a_new_skill_from_a_file_tool_is_sent_to_canary_add (tests.test_gate.InstallsGoThroughTheDoor) ... ok
+test_an_installer_inside_a_longer_command_is_still_denied (tests.test_gate.InstallsGoThroughTheDoor) ... ok
+test_claude_code_runs_a_plain_installer_through_canary_install (tests.test_gate.InstallsGoThroughTheDoor) ... ok
+test_codex_is_told_the_canary_install_command (tests.test_gate.InstallsGoThroughTheDoor) ... ok
+test_the_block_message_says_how_to_write_a_file_that_only_mentions_an_installer (tests.test_gate.InstallsGoThroughTheDoor) ... ok
+
+======================================================================
+FAIL: test_both_hosts_deny_it (tests.test_gate.TheSkillsOwnTextIsForThePerson) (host='claude', command='canary explain ./notes')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_gate.py", line 153, in test_both_hosts_deny_it
+    self.assertTrue(h.denied(host, "Bash", {"command": command}))
+AssertionError: False is not true
+
+======================================================================
+FAIL: test_both_hosts_deny_it (tests.test_gate.TheSkillsOwnTextIsForThePerson) (host='claude', command='canary check ./notes --excerpts')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_gate.py", line 153, in test_both_hosts_deny_it
+    self.assertTrue(h.denied(host, "Bash", {"command": command}))
+AssertionError: False is not true
+
+======================================================================
+FAIL: test_both_hosts_deny_it (tests.test_gate.TheSkillsOwnTextIsForThePerson) (host='codex', command='canary explain ./notes')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_gate.py", line 153, in test_both_hosts_deny_it
+    self.assertTrue(h.denied(host, "Bash", {"command": command}))
+AssertionError: False is not true
+
+======================================================================
+FAIL: test_both_hosts_deny_it (tests.test_gate.TheSkillsOwnTextIsForThePerson) (host='codex', command='canary check ./notes --excerpts')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_gate.py", line 153, in test_both_hosts_deny_it
+    self.assertTrue(h.denied(host, "Bash", {"command": command}))
+AssertionError: False is not true
+
+======================================================================
+FAIL: test_each_message_names_the_command_to_hand_the_person (tests.test_gate.TheSkillsOwnTextIsForThePerson) [canary explain https://github.com/someone/skills]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_gate.py", line 140, in test_each_message_names_the_command_to_hand_the_person
+    self.assertEqual(self.decide(command), f"{head} {self.PREFIX}{arguments}")
+AssertionError: None != "canary explain shows the skill's own tex[145 chars]ills"
+
+======================================================================
+FAIL: test_each_message_names_the_command_to_hand_the_person (tests.test_gate.TheSkillsOwnTextIsForThePerson) [canary explain ./notes --backend none]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_gate.py", line 140, in test_each_message_names_the_command_to_hand_the_person
+    self.assertEqual(self.decide(command), f"{head} {self.PREFIX}{arguments}")
+AssertionError: None != "canary explain shows the skill's own tex[119 chars]otes"
+
+======================================================================
+FAIL: test_each_message_names_the_command_to_hand_the_person (tests.test_gate.TheSkillsOwnTextIsForThePerson) [/usr/local/bin/canary explain ./notes]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_gate.py", line 140, in test_each_message_names_the_command_to_hand_the_person
+    self.assertEqual(self.decide(command), f"{head} {self.PREFIX}{arguments}")
+AssertionError: None != "canary explain shows the skill's own tex[119 chars]otes"
+
+======================================================================
+FAIL: test_each_message_names_the_command_to_hand_the_person (tests.test_gate.TheSkillsOwnTextIsForThePerson) [canary explain 'two words']
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_gate.py", line 140, in test_each_message_names_the_command_to_hand_the_person
+    self.assertEqual(self.decide(command), f"{head} {self.PREFIX}{arguments}")
+AssertionError: None != "canary explain shows the skill's own tex[123 chars]rds'"
+
+======================================================================
+FAIL: test_each_message_names_the_command_to_hand_the_person (tests.test_gate.TheSkillsOwnTextIsForThePerson) [canary check ./notes --excerpts --text]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_gate.py", line 140, in test_each_message_names_the_command_to_hand_the_person
+    self.assertEqual(self.decide(command), f"{head} {self.PREFIX}{arguments}")
+AssertionError: None != "--excerpts shows the skill's own text, w[115 chars]otes"
+
+======================================================================
+FAIL: test_each_message_names_the_command_to_hand_the_person (tests.test_gate.TheSkillsOwnTextIsForThePerson) [canary scan ./notes --exclude sub --excerpts]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_gate.py", line 140, in test_each_message_names_the_command_to_hand_the_person
+    self.assertEqual(self.decide(command), f"{head} {self.PREFIX}{arguments}")
+AssertionError: None != "--excerpts shows the skill's own text, w[115 chars]otes"
+
+======================================================================
+FAIL: test_each_message_names_the_command_to_hand_the_person (tests.test_gate.TheSkillsOwnTextIsForThePerson) [canary explain ./a; ls]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_gate.py", line 140, in test_each_message_names_the_command_to_hand_the_person
+    self.assertEqual(self.decide(command), f"{head} {self.PREFIX}{arguments}")
+AssertionError: None != "canary explain shows the skill's own tex[128 chars]der>"
+
+======================================================================
+FAIL: test_each_message_names_the_command_to_hand_the_person (tests.test_gate.TheSkillsOwnTextIsForThePerson) [canary explain ./a ./b]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_gate.py", line 140, in test_each_message_names_the_command_to_hand_the_person
+    self.assertEqual(self.decide(command), f"{head} {self.PREFIX}{arguments}")
+AssertionError: None != "canary explain shows the skill's own tex[128 chars]der>"
+
+======================================================================
+FAIL: test_each_message_names_the_command_to_hand_the_person (tests.test_gate.TheSkillsOwnTextIsForThePerson) [canary explain --weird ./a]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_gate.py", line 140, in test_each_message_names_the_command_to_hand_the_person
+    self.assertEqual(self.decide(command), f"{head} {self.PREFIX}{arguments}")
+AssertionError: None != "canary explain shows the skill's own tex[128 chars]der>"
+
+======================================================================
+FAIL: test_each_message_names_the_command_to_hand_the_person (tests.test_gate.TheSkillsOwnTextIsForThePerson) [cd /tmp && canary check x --excerpts]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_gate.py", line 140, in test_each_message_names_the_command_to_hand_the_person
+    self.assertEqual(self.decide(command), f"{head} {self.PREFIX}{arguments}")
+AssertionError: None != "--excerpts shows the skill's own text, w[124 chars]der>"
+
+======================================================================
+FAIL: test_each_message_names_the_command_to_hand_the_person (tests.test_gate.TheSkillsOwnTextIsForThePerson) [echo canary --excerpts]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_gate.py", line 140, in test_each_message_names_the_command_to_hand_the_person
+    self.assertEqual(self.decide(command), f"{head} {self.PREFIX}{arguments}")
+AssertionError: None != "--excerpts shows the skill's own text, w[124 chars]der>"
+
+======================================================================
+FAIL: test_each_message_names_the_command_to_hand_the_person (tests.test_gate.TheSkillsOwnTextIsForThePerson) [git log --grep="canary explain"]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_gate.py", line 140, in test_each_message_names_the_command_to_hand_the_person
+    self.assertEqual(self.decide(command), f"{head} {self.PREFIX}{arguments}")
+AssertionError: None != "canary explain shows the skill's own tex[128 chars]der>"
+
+======================================================================
+FAIL: test_each_message_names_the_command_to_hand_the_person (tests.test_gate.TheSkillsOwnTextIsForThePerson) [canary explain ./x --excerpts]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_gate.py", line 140, in test_each_message_names_the_command_to_hand_the_person
+    self.assertEqual(self.decide(command), f"{head} {self.PREFIX}{arguments}")
+AssertionError: None != "canary explain shows the skill's own tex[115 chars] ./x"
+
+----------------------------------------------------------------------
+Ran 8 tests in 1.082s
+
+FAILED (failures=17)
+
+
+--- after reverting (git checkout -- canary/gate.py): exit 0 ---
+----------------------------------------------------------------------
+Ran 8 tests in 1.081s
+
+OK
+
+===== bullet 9, break 2: canary/cli.py =====
+diff --git a/canary/cli.py b/canary/cli.py
+index 13a49db..b50dad2 100644
+--- a/canary/cli.py
++++ b/canary/cli.py
+@@ -39,7 +39,7 @@ def _needs_terminal(command):
+     """True (after saying so) when `command` would show the skill's own text
+     but this output is not a person's terminal. An agent's shell is not one,
+     and nothing skips this check."""
+-    if _stdout_is_terminal():
++    if True:
+         return False
+     what = "canary explain" if command == "explain" else f"canary {command} --excerpts"
+     print(f"{what} shows the skill's own text, so it runs only in your own terminal.",
+
+--- run with the break: exit 1 ---
+test_a_folder_is_explained_in_place_for_a_terminal (tests.test_explain.OnlyYourOwnTerminalSeesTheSkillsText) ... ok
+test_help_lists_explain_and_the_doctor_options (tests.test_explain.OnlyYourOwnTerminalSeesTheSkillsText) ... ok
+test_scan_and_check_refuse_the_excerpts_flag_the_same_way (tests.test_explain.OnlyYourOwnTerminalSeesTheSkillsText) ... test_the_real_command_runs_on_a_pseudo_terminal_and_refuses_on_a_pipe (tests.test_explain.OnlyYourOwnTerminalSeesTheSkillsText) ... FAIL
+test_unknown_options_are_a_usage_error_after_the_terminal_check (tests.test_explain.OnlyYourOwnTerminalSeesTheSkillsText) ... ok
+test_without_a_terminal_nothing_is_fetched_or_scanned (tests.test_explain.OnlyYourOwnTerminalSeesTheSkillsText) ... 
+======================================================================
+FAIL: test_scan_and_check_refuse_the_excerpts_flag_the_same_way (tests.test_explain.OnlyYourOwnTerminalSeesTheSkillsText) [scan]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_explain.py", line 273, in test_scan_and_check_refuse_the_excerpts_flag_the_same_way
+    self.assertEqual((code, out, err), (
+AssertionError: Tuples differ: (10, '{\n  "schema": "canary.scan/1",\n  "[1023 chars], '') != (2, '', "canary scan --excerpts shows the [54 chars].\n")
+
+First differing element 0:
+10
+2
+
+Diff is 1427 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_scan_and_check_refuse_the_excerpts_flag_the_same_way (tests.test_explain.OnlyYourOwnTerminalSeesTheSkillsText) [check]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_explain.py", line 273, in test_scan_and_check_refuse_the_excerpts_flag_the_same_way
+    self.assertEqual((code, out, err), (
+AssertionError: Tuples differ: (10, '{\n  "schema": "canary.check/1",\n  [2914 chars], '') != (2, '', "canary check --excerpts shows the[55 chars].\n")
+
+First differing element 0:
+10
+2
+
+Diff is 3588 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_the_real_command_runs_on_a_pseudo_terminal_and_refuses_on_a_pipe (tests.test_explain.OnlyYourOwnTerminalSeesTheSkillsText)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_explain.py", line 309, in test_the_real_command_runs_on_a_pseudo_terminal_and_refuses_on_a_pipe
+    self.assertEqual((piped.returncode, piped.stdout, piped.stderr), (2, "", self.REFUSAL))
+AssertionError: Tuples differ: (10, 'Verdict: NEEDS_REVIEW\nThis skill ne[765 chars], '') != (2, '', "canary explain shows the skill's [46 chars].\n")
+
+First differing element 0:
+10
+2
+
+Diff is 1044 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_without_a_terminal_nothing_is_fetched_or_scanned (tests.test_explain.OnlyYourOwnTerminalSeesTheSkillsText) (args=['explain', '/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-explain-ll4z63z8'])
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_explain.py", line 266, in test_without_a_terminal_nothing_is_fetched_or_scanned
+    self.assertEqual(self.run_cli(args, False), (2, "", self.REFUSAL))
+AssertionError: Tuples differ: (3, '', 'canary: internal error (AssertionError)\n') != (2, '', "canary explain shows the skill's [46 chars].\n")
+
+First differing element 0:
+3
+2
+
+- (3, '', 'canary: internal error (AssertionError)\n')
++ (2,
++  '',
++  "canary explain shows the skill's own text, so it runs only in your own "
++  'terminal.\n')
+
+======================================================================
+FAIL: test_without_a_terminal_nothing_is_fetched_or_scanned (tests.test_explain.OnlyYourOwnTerminalSeesTheSkillsText) (args=['explain', 'https://github.com/someone/skills'])
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_explain.py", line 266, in test_without_a_terminal_nothing_is_fetched_or_scanned
+    self.assertEqual(self.run_cli(args, False), (2, "", self.REFUSAL))
+AssertionError: Tuples differ: (3, '', 'canary: internal error (AssertionError)\n') != (2, '', "canary explain shows the skill's [46 chars].\n")
+
+First differing element 0:
+3
+2
+
+- (3, '', 'canary: internal error (AssertionError)\n')
++ (2,
++  '',
++  "canary explain shows the skill's own text, so it runs only in your own "
++  'terminal.\n')
+
+======================================================================
+FAIL: test_without_a_terminal_nothing_is_fetched_or_scanned (tests.test_explain.OnlyYourOwnTerminalSeesTheSkillsText) (args=['explain', '/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-explain-ll4z63z8', '--json'])
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_explain.py", line 266, in test_without_a_terminal_nothing_is_fetched_or_scanned
+    self.assertEqual(self.run_cli(args, False), (2, "", self.REFUSAL))
+AssertionError: Tuples differ: (2, '', 'usage: canary scan <skill-file-or-direct[828 chars]>\n') != (2, '', "canary explain shows the skill's own tex[39 chars].\n")
+
+First differing element 2:
+'usage: canary scan <skill-file-or-direct[827 chars]r>\n'
+"canary explain shows the skill's own tex[38 chars]l.\n"
+
+Diff is 1082 characters long. Set self.maxDiff to None to see it.
+
+----------------------------------------------------------------------
+Ran 6 tests in 4.383s
+
+FAILED (failures=6)
+
+
+--- after reverting (git checkout -- canary/cli.py): exit 0 ---
+----------------------------------------------------------------------
+Ran 6 tests in 0.130s
+
+OK

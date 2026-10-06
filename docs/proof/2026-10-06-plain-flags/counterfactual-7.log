@@ -1,0 +1,88 @@
+===== bullet 7, break 1: canary/explain.py =====
+diff --git a/canary/explain.py b/canary/explain.py
+index af84f31..108f659 100644
+--- a/canary/explain.py
++++ b/canary/explain.py
+@@ -162,7 +162,7 @@ def headline(check, confident):
+     if verdict == "LIKELY_SAFE":
+         return "No problems found: the pattern scan and the AI review both passed it."
+     scan_part = check["scan"]
+-    if (c.get("status") == "ok" and c.get("verdict") == "SAFE" and confident
++    if (c.get("status") == "ok" and c.get("verdict") == "SAFE"
+             and scan_part["coverage"]["complete"]
+             and not any(k["kind"] in scan.REVIEW_CAPABILITIES for k in scan_part["capabilities"])
+             and scan_part["threat_verdict"] == "NEEDS_REVIEW"):
+
+--- run with the break: exit 1 ---
+test_each_rule_says_what_it_says (tests.test_explain.TheHeadlineLeadsWithTheCombinedJudgment) ... test_labels_are_joined_in_catalog_order_and_info_hits_are_not_named (tests.test_explain.TheHeadlineLeadsWithTheCombinedJudgment) ... ok
+test_each_family_gets_exactly_its_step_in_each_flow (tests.test_explain.EveryReasonToReviewHasANextStep) ... ok
+test_steps_follow_reason_order_without_repeats_and_only_for_a_review (tests.test_explain.EveryReasonToReviewHasANextStep) ... ok
+
+======================================================================
+FAIL: test_each_rule_says_what_it_says (tests.test_explain.TheHeadlineLeadsWithTheCombinedJudgment) [the AI review is not confident]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_explain.py", line 95, in test_each_rule_says_what_it_says
+    self.assertEqual(self.headline(files, backend)[0], expected)
+AssertionError: "The AI review judged this skill safe (0.[81 chars] at." != 'This skill needs your judgment.'
+- The AI review judged this skill safe (0.50). The pattern scan flagged overriding the agent's instructions for you to look at.
++ This skill needs your judgment.
+
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.747s
+
+FAILED (failures=1)
+
+--- after reverting (git checkout -- canary/explain.py): exit 0 ---
+----------------------------------------------------------------------
+Ran 4 tests in 0.612s
+
+OK
+
+===== bullet 7, break 2: canary/explain.py =====
+diff --git a/canary/explain.py b/canary/explain.py
+index af84f31..8b6bf6a 100644
+--- a/canary/explain.py
++++ b/canary/explain.py
+@@ -197,7 +197,7 @@ def next_steps(check, confident, flow):
+     elif status in ("failed", "invalid"):
+         families.append("failed")
+     elif status == "ok" and (c.get("verdict") == "NEEDS_REVIEW"
+-                             or (c.get("verdict") == "SAFE" and not confident)):
++                             or False):
+         families.append("review")
+     return list(dict.fromkeys(_STEPS[f][which] for f in families))
+ 
+
+--- run with the break: exit 1 ---
+test_each_rule_says_what_it_says (tests.test_explain.TheHeadlineLeadsWithTheCombinedJudgment) ... ok
+test_labels_are_joined_in_catalog_order_and_info_hits_are_not_named (tests.test_explain.TheHeadlineLeadsWithTheCombinedJudgment) ... ok
+test_each_family_gets_exactly_its_step_in_each_flow (tests.test_explain.EveryReasonToReviewHasANextStep) ... test_steps_follow_reason_order_without_repeats_and_only_for_a_review (tests.test_explain.EveryReasonToReviewHasANextStep) ... ok
+
+======================================================================
+FAIL: test_each_family_gets_exactly_its_step_in_each_flow (tests.test_explain.EveryReasonToReviewHasANextStep) [classifier not confident]
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_explain.py", line 175, in test_each_family_gets_exactly_its_step_in_each_flow
+    self.assertEqual(result.get("next_steps"), [check_step])
+AssertionError: Lists differ: [] != ['The AI review wants a person to look. Ru[87 chars]ed.']
+
+Second list contains 1 additional elements.
+First extra element 0:
+'The AI review wants a person to look. Run canary explain with the same link or folder in your own terminal to see what it noticed.'
+
+- []
++ ['The AI review wants a person to look. Run canary explain with the same link '
++  'or folder in your own terminal to see what it noticed.']
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.542s
+
+FAILED (failures=1)
+
+--- after reverting (git checkout -- canary/explain.py): exit 0 ---
+----------------------------------------------------------------------
+Ran 4 tests in 0.542s
+
+OK

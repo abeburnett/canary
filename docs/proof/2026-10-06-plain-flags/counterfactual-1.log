@@ -1,0 +1,64 @@
+===== canary/add.py =====
+diff --git a/canary/add.py b/canary/add.py
+index b352485..31ce464 100644
+--- a/canary/add.py
++++ b/canary/add.py
+@@ -359,7 +359,7 @@ def record_paths(rec):
+ 
+ def is_live(rec):
+     """True while at least one of the record's installed paths still exists."""
+-    return any(os.path.exists(p) for p in record_paths(rec))
++    return isinstance(rec, dict)
+ 
+ 
+ def places_of(paths):
+
+--- run with the break: exit 1 ---
+test_a_dead_record_never_blocks_and_is_replaced (tests.test_add.RecordsKnowWhereTheyAre) ... FAIL
+test_a_folder_with_no_record_is_named_and_the_date_is_dropped_when_missing (tests.test_add.RecordsKnowWhereTheyAre) ... ok
+test_a_live_record_blocks_with_a_refusal_that_names_what_is_in_the_way (tests.test_add.RecordsKnowWhereTheyAre) ... ok
+test_a_record_that_turns_up_during_the_dialog_is_refused_in_the_same_words (tests.test_add.RecordsKnowWhereTheyAre) ... ok
+test_a_record_whose_paths_vanish_during_the_check_is_no_blocker (tests.test_add.RecordsKnowWhereTheyAre) ... ok
+test_nothing_the_tool_says_points_to_a_command_it_does_not_have (tests.test_add.RecordsKnowWhereTheyAre) ... ok
+test_the_same_name_in_other_places_is_recorded_under_a_second_key (tests.test_add.RecordsKnowWhereTheyAre) ... ok
+test_a_dead_record_never_blocks_and_is_replaced (tests.test_install.RecordsKnowWhereTheyAre) ... FAIL
+test_a_folder_with_no_record_is_named (tests.test_install.RecordsKnowWhereTheyAre) ... ok
+test_a_live_record_blocks_with_a_refusal_that_names_what_is_in_the_way (tests.test_install.RecordsKnowWhereTheyAre) ... ok
+test_a_project_install_and_a_global_install_of_one_name_both_succeed_in_either_order (tests.test_install.RecordsKnowWhereTheyAre) ... ok
+test_a_record_that_turns_up_during_the_dialog_is_refused_in_the_same_words (tests.test_install.RecordsKnowWhereTheyAre) ... ok
+test_the_checked_name_decides_not_the_staged_folder_name (tests.test_install.RecordsKnowWhereTheyAre) ... ok
+
+======================================================================
+FAIL: test_a_dead_record_never_blocks_and_is_replaced (tests.test_add.RecordsKnowWhereTheyAre)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_add.py", line 402, in test_a_dead_record_never_blocks_and_is_replaced
+    self.assertEqual(result["outcome"], "installed")
+AssertionError: 'not_installed' != 'installed'
+- not_installed
+? ----
++ installed
+
+
+======================================================================
+FAIL: test_a_dead_record_never_blocks_and_is_replaced (tests.test_install.RecordsKnowWhereTheyAre)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_install.py", line 246, in test_a_dead_record_never_blocks_and_is_replaced
+    self.assertEqual(out["outcome"], "installed")
+AssertionError: 'not_installed' != 'installed'
+- not_installed
+? ----
++ installed
+
+
+----------------------------------------------------------------------
+Ran 13 tests in 1.148s
+
+FAILED (failures=2)
+
+--- after reverting (git checkout -- canary/add.py): exit 0 ---
+----------------------------------------------------------------------
+Ran 13 tests in 1.288s
+
+OK

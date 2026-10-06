@@ -15,7 +15,7 @@ import secrets
 import shutil
 import time
 
-from canary import scan
+from canary import explain, scan
 
 EXIT_FOR_VERDICT = {"LIKELY_SAFE": 0, "NEEDS_REVIEW": 10, "UNSAFE": 20}
 RANK = {"LIKELY_SAFE": 0, "NEEDS_REVIEW": 1, "UNSAFE": 2}
@@ -265,25 +265,35 @@ def _combine(scan_result, layer2):
     return verdict, reasons
 
 
-def check(path, backend="auto", model=None, timeout_s=DEFAULT_TIMEOUT_S,
-          log_dir=None, excerpts=False, exclude=()):
-    """Run both layers on `path` and return a canary.check/1 result."""
+def _check(path, backend="auto", model=None, timeout_s=DEFAULT_TIMEOUT_S,
+           log_dir=None, excerpts=False, exclude=()):
+    """(result, confident): `check`, plus the classifier's confidence decision
+    for callers that word their own next steps (it stays out of the output)."""
     files = []
     scan_result = scan.scan_package(path, excerpts=excerpts, exclude=exclude, texts=files)
     layer2 = _layer2(files, backend, model, timeout_s, log_dir or LOG_DIR, excerpts)
+    confident = layer2.get("confident", False)
     verdict, reasons = _combine(scan_result, layer2)
     result = {"schema": "canary.check/1", "target_id": scan_result["target_id"],
               "package_digest": scan_result["package_digest"], "verdict": verdict,
               "scan": scan_result, "classifier": layer2, "reasons": reasons}
+    result["headline"] = explain.headline(result, confident)
+    result["next_steps"] = explain.next_steps(result, confident, "check")
     if excerpts:
         result["target"] = scan_result["target"]
-    return result
+    return result, confident
+
+
+def check(path, backend="auto", model=None, timeout_s=DEFAULT_TIMEOUT_S,
+          log_dir=None, excerpts=False, exclude=()):
+    """Run both layers on `path` and return a canary.check/1 result."""
+    return _check(path, backend, model, timeout_s, log_dir, excerpts, exclude)[0]
 
 
 def render_text(result):
     c = result["classifier"]
     lines = [f"Canary check: {repr(result['target']) if 'target' in result else result['target_id']}",
-             f"Verdict: {result['verdict']}"]
+             f"Verdict: {result['verdict']}", result["headline"]]
     lines += [f"  - {r}" for r in result["reasons"]]
     layer2 = f"Classifier: {c['status']}"
     if c["backend"]:
@@ -293,9 +303,13 @@ def render_text(result):
     lines.append(layer2)
     for f in c["findings"]:
         lines.append(f"  [{f['severity'].upper():6}] {f['category']}"
-                     + (f"  {f['evidence']!r}: {f['reasoning']}" if "evidence" in f else ""))
+                     + (f"  {f['evidence']!r}: {scan.terminal_safe(f['reasoning'])}"
+                    if "evidence" in f else ""))
     if "summary" in c:
-        lines.append(f"  Summary: {c['summary']}")
+        lines.append(f"  Summary: {scan.terminal_safe(c['summary'])}")
+    if result["next_steps"]:
+        lines.append("What you can do:")
+        lines += [f"  - {step}" for step in result["next_steps"]]
     lines.append("")
     lines.append(scan.render_text(result["scan"]))
     return "\n".join(lines)

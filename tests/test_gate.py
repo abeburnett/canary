@@ -93,6 +93,72 @@ class InstallsGoThroughTheDoor(unittest.TestCase):
             "content": "edited"}))
 
 
+    def test_the_block_message_says_how_to_write_a_file_that_only_mentions_an_installer(self):
+        h = Home()
+        command = {"command": "cat > notes.md <<'EOF'\nnpx skills add someone/repo\nEOF"}
+        sentence = ("To write a file that only mentions an installer, use your file-editing "
+                    "tool (Write or Edit in Claude Code, apply_patch in Codex), not the shell.")
+        for host in ("claude", "codex"):
+            with self.subTest(host=host):
+                proc = h.hook(host, "Bash", command)
+                self.assertIn(sentence, proc.stderr + proc.stdout)
+        self.assertTrue(gate.REDIRECT.endswith(" " + sentence))
+
+
+class TheSkillsOwnTextIsForThePerson(unittest.TestCase):
+    """Program 2026-10-06: the hook denies `canary explain` and `--excerpts` by
+    name, before the allowance for `canary` commands."""
+
+    PREFIX = ("shows the skill's own text, which is for the person, not an agent. Give the "
+              "person this command to run in their own terminal: canary explain ")
+
+    def decide(self, command):
+        call = gate.ToolCall("Bash", command, [], [], "/work")
+        with unittest.mock.patch.object(gate, "_is_canary", return_value=True):
+            return gate.decide(call, "/h", [], "/Library/canary")
+
+    def test_each_message_names_the_command_to_hand_the_person(self):
+        cases = [
+            ("canary explain https://github.com/someone/skills", "explain",
+             "https://github.com/someone/skills"),
+            ("canary explain ./notes --backend none", "explain", "./notes"),
+            ("/usr/local/bin/canary explain ./notes", "explain", "./notes"),
+            ("canary explain 'two words'", "explain", "'two words'"),
+            ("canary check ./notes --excerpts --text", "excerpts", "./notes"),
+            ("canary scan ./notes --exclude sub --excerpts", "excerpts", "./notes"),
+            ("canary explain ./a; ls", "explain", "<link or folder>"),
+            ("canary explain ./a ./b", "explain", "<link or folder>"),
+            ("canary explain --weird ./a", "explain", "<link or folder>"),
+            ("cd /tmp && canary check x --excerpts", "excerpts", "<link or folder>"),
+            ("echo canary --excerpts", "excerpts", "<link or folder>"),
+            ('git log --grep="canary explain"', "explain", "<link or folder>"),
+            ("canary explain ./x --excerpts", "explain", "./x"),
+        ]
+        for command, which, arguments in cases:
+            with self.subTest(command):
+                head = "canary explain" if which == "explain" else "--excerpts"
+                self.assertEqual(self.decide(command), f"{head} {self.PREFIX}{arguments}")
+
+    def test_other_canary_commands_and_other_spellings_pass(self):
+        for command in ("canary check ./notes --json", "canary scan ./notes", "canary doctor",
+                        "canary Explain ./x", "canary check ./x --EXCERPTS", "explain canary",
+                        "canary list", "canary doctor --prune", "canary check ./notes --text"):
+            with self.subTest(command):
+                self.assertIsNone(self.decide(command))
+        h = Home()
+        for host in ("claude", "codex"):
+            for command in ("canary list", "canary doctor --prune", "canary check ./notes --text"):
+                with self.subTest(host=host, command=command):
+                    self.assertFalse(h.denied(host, "Bash", {"command": command}))
+
+    def test_both_hosts_deny_it(self):
+        h = Home()
+        for host in ("claude", "codex"):
+            for command in ("canary explain ./notes", "canary check ./notes --excerpts"):
+                with self.subTest(host=host, command=command):
+                    self.assertTrue(h.denied(host, "Bash", {"command": command}))
+
+
 class TheHookNeverFailsOpen(unittest.TestCase):
     def test_garbage_and_missing_fields_deny(self):
         h = Home()

@@ -61,7 +61,8 @@ Exit codes (every Canary command uses these):
   },
   "capabilities": [{"kind": "…", "path_id": "f:…", "line": 12}],
   "findings": [{"check_id": "…", "category": "…", "severity": "high|medium|low|info",
-                "path_id": "f:…", "line": 5, "excerpt_sha256": "…"}],
+                "path_id": "f:…", "line": 5, "excerpt_sha256": "…",
+                "context": "code_example | forbidding | null"}],
   "reasons": ["plain-language reason for the verdict"]
 }
 ```
@@ -82,10 +83,28 @@ Rules the verdict follows:
   parses (PNG chunk CRCs, JPEG segments, GIF blocks, WebP and WOFF lengths);
   anything that decodes as text is scanned as text, and PDFs and other
   binaries are incomplete coverage.
+- Every finding carries `context`, a fixed value Canary computes (so it is in
+  agent output too): `code_example` when the finding's line is inside a fenced
+  code block of the same file (decided on the raw lines: an opening fence is up
+  to three spaces then three or more backticks or tildes; the block closes at
+  the next line of up to three spaces, at least as many of the same character
+  and only whitespace; an unclosed block runs to the end; fence lines are
+  outside; a split-phrase finding uses its start line); else `forbidding` when
+  the line, after `scan.normalize` and lowercasing, has one of never, do not,
+  don't, must not, should not, refuse to, reject, watch for, look out for,
+  beware of; else `null`. **A context is a label only (owner decision,
+  2026-10-06): it never changes a severity, score or verdict, and the rule
+  from program 2026-09-26 stands: attack patterns are never dampened,
+  because an attacker could wrap a real payload in a code block or a "never
+  do this:" line.** `canary scan --text` ends such a finding line with
+  `[code example]` or `[warns against it]`.
 - Attacker-controlled text stays out of default output: no excerpts, and file
   names and the target path appear only as opaque `path_id` / `target_id`
   values. `--excerpts` adds `path`, `excerpt` and `target` fields and is for a
-  person's terminal, never an agent.
+  person's terminal, never an agent: the CLI refuses it (also on `canary
+  check`) when standard output is not a terminal, with exit 2 and `canary
+  <command> --excerpts shows the skill's own text, so it runs only in your own
+  terminal.`, before any scan; no flag or environment variable skips this.
 - `--exclude` names paths, relative to a directory target, that are scanned as
   separate packages (the Action uses it to scan files outside skill folders).
 
@@ -170,7 +189,10 @@ Decision rules (`canary/gate.py`, `decide`), in order:
    words>`, and the agent runs that under the person's Codex approvals:
    Codex applies a rewrite only with `allow` (live probe, 2026-10-02,
    `docs/codex-facts.md`), which SkillCanary does not use. Any other
-   installer command is denied, naming `canary install` and `canary add`. The installer's own
+   installer command is denied, naming `canary install` and `canary add`;
+   that message (`gate.REDIRECT`) ends with: "To write a file that only
+   mentions an installer, use your file-editing tool (Write or Edit in Claude
+   Code, apply_patch in Codex), not the shell." The installer's own
    words decide, wherever they sit: after removing quotes, `$'...'`, line
    continuations and backslashes, the command is searched for a `skills`
    package (`skills`, `@scope/skills`, `skills@1.2.3`) followed, after any
@@ -199,7 +221,21 @@ Decision rules (`canary/gate.py`, `decide`), in order:
    checks it as given and as resolved, so a link into a skills folder, or a
    link inside one that leads elsewhere, counts. Editing a skill that has a
    `SKILL.md` is allowed. A Codex patch the adapter cannot read is denied.
-5. SkillCanary's record: a file tool writing inside the support folder
+5. The skill's own text: a shell command whose tidied text matches `\bcanary\s+explain\b`,
+   or contains both `\bcanary\b` and `--excerpts\b` (case-sensitive), is denied
+   before rule 2's allowance, with `canary explain shows the skill's own
+   text, which is for the person, not an agent. Give the person this command
+   to run in their own terminal: canary explain <arguments>` (the `--excerpts`
+   form starts with `--excerpts`). `<arguments>` is the one link or folder
+   when the original command is a plain `canary explain|scan|check` with known
+   flags and no shell syntax, quoted with `shlex.quote`; else `<link or
+   folder>`. As with installers, a command that only mentions them
+   (`git log --grep="canary explain"`) is denied too. Accepted limit: an
+   agent that runs Canary's Python code directly, or assembles the command
+   from pieces, gets past both this rule and the terminal check; the terminal
+   check stops an agent's ordinary shell, and the hook stops the command by
+   name.
+5b. SkillCanary's record: a file tool writing inside the support folder
    (`~/Library/Application Support/Canary`, outside the quarantine) or to
    the lockfile (`~/.agents/.canary-lock.json`) is denied, "canary trust
    and canary add change it". Reading them is allowed.
@@ -338,9 +374,32 @@ a valid answer for any reason (`unavailable`, `too_large`, `failed`,
                   "evidence_sha256": "…"}],
     "log_id": "…"
   },
-  "reasons": ["plain-language reason for the verdict"]
+  "reasons": ["plain-language reason for the verdict"],
+  "headline": "one sentence leading with the combined judgment",
+  "next_steps": ["what the person can do, one step per reason for review"]
 }
 ```
+
+`headline` and `next_steps` (`canary/explain.py`, all Canary's own text, no
+package or model text) come from the structured result, never from parsing
+reason strings. The headline, first match wins: `UNSAFE` from the AI review
+(plus the pattern labels when there are scored findings); `UNSAFE` from the
+pattern scan; `No problems found: the pattern scan and the AI review both
+passed it.`; the AI review judged it safe with confidence of at least 0.7,
+coverage is complete, nothing runs code and only the patterns raised the
+verdict (`The AI review judged this skill safe (0.93). The pattern scan
+flagged <labels> for you to look at.`); otherwise `This skill needs your
+judgment.` Labels are the plain names of the checks with a scored finding.
+`next_steps` has one step for each reason that keeps the verdict at
+`NEEDS_REVIEW` (pattern hits, incomplete scan, nothing to scan, runs code,
+classifier unavailable, too large, failed or invalid, asked for review or not
+confident), in reason order and without repeats, and is empty for any other
+verdict. `canary install` words four of them differently for its dialog
+(`flow` "install": the person must choose Cancel before looking). The
+`confident` decision stays out of the output. `--text` prints the headline
+after `Verdict:` and the steps under `What you can do:` after the classifier
+lines. A test keeps `explain.RULES` in step with the catalog, so a new check
+cannot ship without its text.
 
 The model's `evidence`, `reasoning`, `summary` and own category wording are
 attacker-influenced, so they appear only with `--excerpts` (as `evidence`,
@@ -351,6 +410,22 @@ list (`instruction_override`, `approval_bypass`, `exfiltration`,
 `obfuscation`, `remote_code_execution`, `social_engineering`), and `other`
 for anything else. Validation rejects duplicate keys, `NaN` and `Infinity`,
 and compares confidence as an exact decimal.
+
+## `canary explain <github-link-or-folder> [--backend <name>] [--model <id>] [--timeout <seconds>]`
+
+What Canary found, in plain words, with the skill's own text, for the person
+(`canary/explain.py`; program 2026-10-06). Text only. It refuses unless
+standard output is a terminal (`canary explain shows the skill's own text, so
+it runs only in your own terminal.`, exit 2, before any fetch or scan); an
+unknown option, including `--json`, `--text` and `--excerpts`, is a usage
+error. A GitHub link is fetched and extracted by `canary add`'s own code into
+`quarantine/explain-<run id>` under the support folder (mode 0700, removed
+afterwards); a folder is checked in place. It runs `canary check` with
+excerpts and prints, each section omitted when empty: the verdict and
+headline; for each scored check its label, what it looks for, why it matters
+and each finding as `<path>:<line>  <excerpt>` with its context sentence;
+`What it can do:`; `Not read:`; `AI review:` with its status, verdict,
+findings and summary; `What you can do:`. Exit codes match `canary check`.
 
 ## `canary evidence <skill-folder>`
 
@@ -392,7 +467,8 @@ Steps:
    read-only, and the rest is deleted.
 2. `canary check` on that snapshot.
 3. `UNSAFE`: nothing is installed and nobody is asked. Otherwise the dialog
-   asks the person. It shows Canary's verdict and reasons, the source as
+   asks the person. It shows Canary's verdict, the headline, the capabilities
+   and reasons, `What you can do:` with the steps, the source as
    `owner/repo` at a short commit, and the installed name, with every
    package-supplied string labelled as such; never the package's description
    or excerpts, which an attacker writes. `NEEDS_REVIEW` defaults to Cancel.
@@ -416,8 +492,8 @@ scanned. Default hosts: those whose home folder exists (`~/.claude`,
 
 The installed name is the frontmatter `name` if it matches
 `^[a-z0-9][a-z0-9-]{0,63}$`, else the folder name if that matches, else the
-add is refused. An existing folder of that name is never overwritten
-(`canary update` replaces installs).
+add is refused. An existing folder of that name is never overwritten: to
+replace an installed skill, the person removes its folder and adds it again.
 
 There is no `--yes`, environment override or typed confirmation: an agent can
 type into a terminal. Approval comes only from the dialog (tests inject an
@@ -441,7 +517,9 @@ Output (schema `canary.add/1`, all the agent receives):
   "name": "sanitized-name",
   "source": {"owner": "…", "repo": "…", "commit": "40-hex"},
   "installed": ["~/.claude/skills/<name>"],
-  "reasons": ["Canary's own reasons, no package text"]
+  "reasons": ["Canary's own reasons, no package text"],
+  "headline": "…",
+  "next_steps": ["…"]
 }
 ```
 
@@ -453,10 +531,51 @@ renamed:
 
 ```json
 {"schema": "canary.lock/1",
- "skills": {"<name>": {"source": "<link as given>", "owner": "…", "repo": "…",
+ "skills": {"<key>": {"name": "<name>", "places": ["…"],
+   "source": "<link as given>", "owner": "…", "repo": "…",
    "ref": "…", "commit": "…", "path": "…", "package_digest": "sha256:…",
    "verdict": "…", "installed": ["…"], "installed_at": "2026-09-26T00:00:00Z"}}}
 ```
+
+**Where a record is.** A skill record's *places* are the skills folders its
+installs sit in: for each path in `installed`, the resolved path of the
+path's parent folder (the folder holding the link or folder itself, never a
+link's target). A new record stores `name` and `places` (sorted), both
+computed once when it is written. An older record has neither: its name is
+its key, and its places are computed from `installed` when it is read. The
+schema string stays `canary.lock/1`; the fields are additive. Code never
+parses a key to find a name or a place. Plugin records (`plugins`, written by
+`canary install`) keep their `scope` field and get no conflict check.
+
+**Live and dead.** An installed path is live when it exists (a link whose
+target is gone is not). A record is live when at least one of its `installed`
+paths is live, and dead otherwise, including when `installed` is empty,
+missing, not a list or holds anything but non-empty strings, and when the
+record is not an object at all. Nothing raises on a malformed record.
+
+**Conflicts and keys.** A new install conflicts with a record only when the
+record is live, has the same name, and shares at least one place with the
+new install; a dead record never blocks. The destination check (`lexists`
+on every destination) is separate and unchanged. A project install and a
+user install of one name therefore never conflict. The new install's places
+are computed as a record's are: for `canary add`, from each host
+destination; for `canary install`, from every path it will create, folders
+and links. The key is chosen before any file is written, in this order: a
+conflict refuses; else the bare name when that key is free or holds a dead
+record (which it replaces); else `name@<first 12 hex characters of the
+SHA-256 of the sorted places joined by newlines>`, replacing a dead record
+there too, and a live record there is a conflict. Dead records under other
+keys are left for `canary doctor`.
+
+**Refusals** name what is in the way, and are the same before the dialog and
+again inside the commit lock: `A skill named <name> is already installed at
+<paths> (recorded <date>). Nothing was installed. To replace it, remove
+<that folder|those folders> and run this again.` (the live paths, shortened
+with `~`; the date is dropped, keeping the full stop, when `installed_at` is
+missing), or, for a destination that exists with no live record, `<path>
+already exists. Nothing was installed. To replace it, remove it and run this
+again.` `canary install` checks first with each staged folder's name, then
+again with the checked names, before it asks.
 
 ## `canary setup [--level scan|guard]` and `canary doctor`
 
@@ -507,6 +626,26 @@ it does not know is reported as such, never as Scan. It prints the level, every 
 public-claims row that applies. Exit 0 when the machine matches its level, 10
 when there is a gap.
 
+**Old install records.** After the gaps, `doctor` lists lockfile records whose
+folders are gone (`setup.old_records(home)`: dead skill records, then dead
+plugin records, each sorted by key, as `{"kind", "key", "name", "installed"}`)
+under `Old install records: <n> (their folders are gone)` with each name and
+its first installed path, and tells the person to run `canary doctor --prune`.
+`canary doctor --json` carries them as `old_records` (an empty list when
+there are none). They never count as gaps, never change the exit code, and
+`setup.doctor` keeps its signature and return. An unreadable lockfile prints
+`canary: <message>` on stderr and doctor otherwise runs as before.
+
+`canary doctor --prune` (`setup.prune_records`) shows SkillCanary's dialog
+(Cancel is the default button; the dialog lists at most 20 records, then `- and
+<k> more`), and only on the person's yes takes the commit lock, re-reads the
+lockfile and removes the records that were shown and are still dead. It
+prints `Removed <n> old install records.` (exit 0), `No old install records.`
+(exit 0, no dialog) or `Nothing removed: the person did not agree in
+SkillCanary's dialog.` (exit 10 for a no, a timeout or no dialog); an
+unreadable lockfile exits 3. It changes no skill or plugin, only the
+lockfile. `doctor` accepts exactly nothing, `--json` or `--prune`.
+
 At every level, setup also installs the SkillCanary skill
 (`canary/frontdoor.py`, the same text as `skills/canary/SKILL.md`) as
 `canary/SKILL.md` in `~/.claude/skills` and `~/.agents/skills`, so an agent
@@ -555,7 +694,9 @@ installs nothing and says where (the guest list then reports it). Every folder h
 root is copied without links into a snapshot (a link or special file
 refuses the whole install), named, and checked with `canary check`'s two
 layers, four at a time; each skill costs one classifier call. The person
-sees one dialog for everything the command adds. On approval, under `canary
+sees one dialog for everything the command adds: under each skill that is not
+`LIKELY_SAFE` its headline, then `What you can do:` with the union of the
+steps; still no reasons, excerpts, file names or model text. On approval, under `canary
 add`'s commit lock, each snapshot is copied to the same place under the real
 home or the real working folder and confirmed byte for byte, the links the
 installer made between those skills (for example `.claude/skills/<name>` to
@@ -581,8 +722,9 @@ marketplace add runs as given: it installs nothing an agent loads.
 
 Result: `{"schema": "canary.install/1", "outcome": "installed" | "declined" |
 "not_installed" | "refused" | "done", "verdict", "kind": "skills" | "plugin"
-| "marketplace", "skills": [{"name", "verdict"}], "installed": [...],
-"reasons": [...]}`, with `canary add`'s exit codes (`done` is 0).
+| "marketplace", "skills": [{"name", "verdict", "headline"}], "installed":
+[...], "reasons": [...], "next_steps": [...]}` (`next_steps` is the union of
+the skills' install-flow steps, in order), with `canary add`'s exit codes (`done` is 0).
 
 Limits: the installer runs as the person; staging changes where it writes
 by default, not where it can write. A write into a skills folder during the
@@ -726,8 +868,9 @@ page to install it.
 4. **Redirects:** at Guard and above, `npx skills add`, plugin installs and
    file-tool creation of a new skill are denied with the message "use `canary
    add <source>`", so the insecure path points to the secure one.
-5. **Updates:** `canary update` fetches, shows what changed in plain words
-   (for example "now adds a shell script"), and installs only after approval.
+5. **Replacing:** to replace an installed skill, the person removes its
+   folder and installs it again; the new copy is checked and approved like
+   any other.
 
 The Claude Code and Codex marketplace plugins are front doors: a descriptive
 skill that teaches the agent to use `canary add` and, when `canary` is

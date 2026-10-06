@@ -185,6 +185,31 @@ class OversizePackagesSkipLayerTwo(unittest.TestCase):
         self.assertEqual(result["verdict"], "NEEDS_REVIEW")
 
 
+class TheTextLeadsWithThePlainJudgment(unittest.TestCase):
+    """Program 2026-10-06, section 2: headline, reasons, classifier, steps, then
+    the scan block."""
+
+    def test_order_of_the_text_output(self):
+        result = check(make_package({"SKILL.md": SKILL}), "none")
+        lines = classify.render_text(result).splitlines()
+        self.assertEqual(lines[:7], [
+            f"Canary check: {result['target_id']}", "Verdict: NEEDS_REVIEW",
+            "This skill needs your judgment.",
+            "  - The isolated classifier did not run (it needs Claude Code, ANTHROPIC_API_KEY or "
+            "OPENAI_API_KEY), so only the pattern scan ran.",
+            "Classifier: unavailable", "What you can do:",
+            "  - To add the AI review, sign in to Claude Code or set ANTHROPIC_API_KEY or "
+            "OPENAI_API_KEY, then check it again."])
+        self.assertEqual(lines[7], "")
+        self.assertTrue(lines[8].startswith("Canary scan: "))
+
+    def test_a_clean_skill_has_a_headline_and_no_steps(self):
+        text = classify.render_text(check(make_package({"SKILL.md": SKILL}), Recorder(answer())))
+        self.assertIn("Verdict: LIKELY_SAFE\nNo problems found: the pattern scan and the AI "
+                      "review both passed it.\n", text)
+        self.assertNotIn("What you can do:", text)
+
+
 class ClaudeBackendRunsIsolated(unittest.TestCase):
     def run_backend(self, completed):
         seen = {}
