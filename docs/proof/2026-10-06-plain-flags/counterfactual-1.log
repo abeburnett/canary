@@ -1,0 +1,73 @@
+===== bullet 1, break 1: canary/add.py =====
+diff --git a/canary/add.py b/canary/add.py
+index 21a8675..971bb1e 100644
+--- a/canary/add.py
++++ b/canary/add.py
+@@ -357,7 +357,7 @@ def record_paths(rec):
+ 
+ def is_live(rec):
+     """True while at least one of the record's installed paths still exists."""
+-    return any(os.path.exists(p) for p in record_paths(rec))
++    return isinstance(rec, dict)
+ 
+ 
+ def places_of(paths):
+
+--- run with the break: exit 1 ---
+test_a_dead_record_never_blocks_and_is_replaced (tests.test_add.RecordsKnowWhereTheyAre) ... ERROR
+test_a_folder_with_no_record_is_named_and_the_date_is_dropped_when_missing (tests.test_add.RecordsKnowWhereTheyAre) ... ok
+test_a_live_record_blocks_with_a_refusal_that_names_what_is_in_the_way (tests.test_add.RecordsKnowWhereTheyAre) ... ok
+test_a_record_that_turns_up_during_the_dialog_is_refused_in_the_same_words (tests.test_add.RecordsKnowWhereTheyAre) ... ok
+test_nothing_the_tool_says_points_to_a_command_it_does_not_have (tests.test_add.RecordsKnowWhereTheyAre) ... ok
+test_the_same_name_in_other_places_is_recorded_under_a_second_key (tests.test_add.RecordsKnowWhereTheyAre) ... ok
+test_a_dead_record_never_blocks_and_is_replaced (tests.test_install.RecordsKnowWhereTheyAre) ... ERROR
+test_a_folder_with_no_record_is_named (tests.test_install.RecordsKnowWhereTheyAre) ... ok
+test_a_live_record_blocks_with_a_refusal_that_names_what_is_in_the_way (tests.test_install.RecordsKnowWhereTheyAre) ... ok
+test_a_project_install_and_a_global_install_of_one_name_both_succeed_in_either_order (tests.test_install.RecordsKnowWhereTheyAre) ... ok
+test_a_record_that_turns_up_during_the_dialog_is_refused_in_the_same_words (tests.test_install.RecordsKnowWhereTheyAre) ... ok
+
+======================================================================
+ERROR: test_a_dead_record_never_blocks_and_is_replaced (tests.test_add.RecordsKnowWhereTheyAre)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_add.py", line 401, in test_a_dead_record_never_blocks_and_is_replaced
+    result = env.add(URL, Approver(True), fetch=FakeGitHub(self.archive()))
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_add.py", line 80, in add
+    return add.add(source, home=self.home, support_dir=self.support, approve=approve,
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/canary/add.py", line 601, in add
+    reason = conflict_reason(lock, [name], places, destinations, home)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/canary/add.py", line 409, in conflict_reason
+    return (f"A skill named {name} is already installed at {_join(paths)}{date}. "
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/canary/add.py", line 347, in _join
+    return items[0] if len(items) <= 1 else ", ".join(items[:-1]) + " and " + items[-1]
+IndexError: list index out of range
+
+======================================================================
+ERROR: test_a_dead_record_never_blocks_and_is_replaced (tests.test_install.RecordsKnowWhereTheyAre)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_install.py", line 245, in test_a_dead_record_never_blocks_and_is_replaced
+    out = mac.install(ADD, spec=ONE)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_install.py", line 134, in install
+    return install.install(argv, home=self.home, cwd=self.project,
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/canary/install.py", line 204, in install
+    return _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out,
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/canary/install.py", line 296, in _skills
+    reason = add.conflict_reason(add._read_lock(home),
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/canary/add.py", line 409, in conflict_reason
+    return (f"A skill named {name} is already installed at {_join(paths)}{date}. "
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/canary/add.py", line 347, in _join
+    return items[0] if len(items) <= 1 else ", ".join(items[:-1]) + " and " + items[-1]
+IndexError: list index out of range
+
+----------------------------------------------------------------------
+Ran 11 tests in 1.158s
+
+FAILED (errors=2)
+
+
+--- after reverting (git checkout -- canary/add.py): exit 0 ---
+----------------------------------------------------------------------
+Ran 11 tests in 0.980s
+
+OK
