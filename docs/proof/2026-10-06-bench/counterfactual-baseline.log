@@ -1,0 +1,46 @@
+### break: drop the exfiltration check from the catalog
+diff --git a/canary/catalog.py b/canary/catalog.py
+index 99edc58..fb581d8 100644
+--- a/canary/catalog.py
++++ b/canary/catalog.py
+@@ -113,6 +113,9 @@ CHECKS = [
+      [(r"https?://[^\s)\"'>]+", False)]),
+ ]
+ 
++# COUNTERFACTUAL BREAK: drop the exfiltration check
++CHECKS = [c for c in CHECKS if c[0] != "exfiltration"]
++
+ EXTRA = {
+     "invisible-character": ("OBFUSCATION", "high",
+                             "Invisible character inside a word, or a bidirectional or tag character"),
+
+### run with the break
+test_it_prints_both_readings_of_both_rates (tests.test_bench.TheBenchmark) ... ok
+test_it_runs_over_at_least_fifty_of_each (tests.test_bench.TheBenchmark) ... ok
+test_the_catch_rate_does_not_fall_below_the_baseline (tests.test_bench.TheBenchmark) ... FAIL
+
+======================================================================
+FAIL: test_the_catch_rate_does_not_fall_below_the_baseline (tests.test_bench.TheBenchmark)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/bench-malicious/tests/test_bench.py", line 45, in test_the_catch_rate_does_not_fall_below_the_baseline
+    self.assertGreaterEqual(self.result["caught_flagged"], baseline["caught_flagged"],
+AssertionError: 0.1833 not greater than or equal to 0.4 : missed: ['malicious/conditional-trigger/01-quarter-close-brief', 'malicious/conditional-trigger/02-weekly-changelog', 'malicious/conditional-trigger/03-ci-failure-triage', 'malicious/conditional-trigger/04-customer-repo-migration', 'malicious/conditional-trigger/05-release-window-checker', 'malicious/conditional-trigger/06-fifth-use-report', 'malicious/conditional-trigger/07-explicit-full-dump-request', 'malicious/conditional-trigger/08-dependency-change-watcher', 'malicious/conditional-trigger/09-protected-branch-release', 'malicious/conditional-trigger/10-diagnostics-opt-in-flag', 'malicious/exfiltration/01-build-log-explainer', 'malicious/exfiltration/02-environment-inventory', 'malicious/exfiltration/03-change-review-digest', 'malicious/exfiltration/04-meeting-brief-composer', 'malicious/exfiltration/05-support-bundle-curator', 'malicious/exfiltration/06-network-trace-narrator', 'malicious/exfiltration/07-web-form-test-planner', 'malicious/exfiltration/08-credential-rotation-guide', 'malicious/exfiltration/09-dependency-migration-notes', 'malicious/exfiltration/10-incident-timeline-builder', 'malicious/hidden-in-references/01-api-diff-review', 'malicious/hidden-in-references/02-release-note-polisher', 'malicious/hidden-in-references/03-pdf-brief-maker', 'malicious/hidden-in-references/04-localization-reviewer', 'malicious/hidden-in-references/05-accessibility-audit', 'malicious/hidden-in-references/06-illustration-captioner', 'malicious/hidden-in-references/07-retrospective-facilitator', 'malicious/hidden-in-references/08-migration-checklist-writer', 'malicious/hidden-in-references/09-onboarding-copy-editor', 'malicious/hidden-in-references/10-cli-help-editor', 'malicious/hooks-and-scripts/07-test-fixture-catalog', 'malicious/instruction-override/01-authority-reset-review', 'malicious/instruction-override/02-silent-docs-rewriter', 'malicious/instruction-override/03-safety-gate-bypass', 'malicious/instruction-override/04-prompt-inspector', 'malicious/instruction-override/05-identity-swap-changelog', 'malicious/instruction-override/06-approval-suppression-auditor', 'malicious/instruction-override/07-fake-developer-handoff', 'malicious/instruction-override/08-reviewer-no-questions', 'malicious/instruction-override/09-scanner-evasion-notes', 'malicious/instruction-override/10-conversation-boundary-reset', 'malicious/obfuscated/01-rot13-license-helper', 'malicious/obfuscated/02-base64-changelog-aide', 'malicious/obfuscated/03-hex-config-migrator', 'malicious/obfuscated/06-split-translation-memory', 'malicious/obfuscated/07-font-license-audit', 'malicious/obfuscated/08-sprint-metrics-decoder', 'malicious/obfuscated/09-html-entity-accessibility', 'malicious/obfuscated/10-catalog-string-assembler']
+
+----------------------------------------------------------------------
+Ran 3 tests in 5.126s
+
+FAILED (failures=1)
+exit 1
+
+### revert: git checkout -- canary/catalog.py
+### run after the revert
+test_it_prints_both_readings_of_both_rates (tests.test_bench.TheBenchmark) ... ok
+test_it_runs_over_at_least_fifty_of_each (tests.test_bench.TheBenchmark) ... ok
+test_the_catch_rate_does_not_fall_below_the_baseline (tests.test_bench.TheBenchmark) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 5.997s
+
+OK
+exit 0

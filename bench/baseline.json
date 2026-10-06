@@ -1,0 +1,12 @@
+{
+  "schema": "canary.bench.baseline/1",
+  "layer": 1,
+  "measured": "2026-10-06",
+  "scanner": "222c3df",
+  "malicious": 60,
+  "benign": 94,
+  "caught_flagged": 0.4,
+  "caught_blocked": 0.05,
+  "false_alarm_flagged": 0.2979,
+  "false_alarm_blocked": 0.0319
+}

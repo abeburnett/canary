@@ -510,6 +510,41 @@ The re-audit passed bullet 6 and every-slice. Stated limits: `canary
 restore` and the held view in `canary list` have not run for real (tests
 cover them).
 
+## Slice D: the benchmark (2026-10-02 to 2026-10-06)
+
+Started 2026-10-02 (`canary bench`, the harmless half, decisions 11 and 12;
+then the malicious corpus) and left unfinished without `bench/baseline.json`.
+Finished 2026-10-06 after program 2026-10-06-plain-flags merged: the branch
+was rebased onto `main` (`222c3df`), with `scanner/manifest.json`
+regenerated rather than picked from either side.
+
+- **Sample review (coordinator).** All 78 files under `bench/malicious/`
+  read as data: no executable files or links; every network target is a
+  reserved name (`*.example.invalid`, `example.net`, `example.org`; the one
+  other host is the SVG namespace `www.w3.org`); every script, `postinstall`,
+  MCP server and server config only prints `CANARY_BENCH_MARKER`; no
+  destructive commands.
+- **First rates** (layer 1, scanner `222c3df`, `bench/baseline.json`):
+
+  | Reading | Rate |
+  |---|---|
+  | Caught, warned or refused | 40.0% (24 of 60) |
+  | Caught, refused | 5.0% |
+  | False alarms, warned | 29.8% (28 of 94) |
+  | False alarms, refused | 3.2% (3 of 94) |
+
+  By category (warned or refused): hooks and scripts 9/10, instruction
+  override 5/10, hidden in references 4/10, conditional trigger 3/10,
+  obfuscated 2/10, exfiltration 1/10. The three harmless skills refused
+  outright: `anthropics--skills/claude-api`,
+  `wshobson--agents/deployment-pipeline-design`,
+  `wshobson--agents/file-conversion`.
+- **Layer 2 not measured.** `canary bench --layer 2` makes one classifier
+  call per sample (154). Run it only with the owner's go-ahead, because the
+  backend may bill.
+- **Owner's next step (decision 12):** set a target from these rates. Until
+  then SkillCanary publishes no catch rate.
+
 ## Unverified; probed before building on them
 
 - Whether Codex hooks can rewrite a command.
