@@ -502,3 +502,54 @@ design text above wherever they differ.
 4. Full suite on the program head, then the done-when audit (an Opus subagent
    with fresh context).
 5. The owner decides on push, pull request and merge.
+
+## Build, review and audit (2026-10-06)
+
+Built by a Sonnet 5.5 worker on `build/2026-10-06-plain-flags`:
+
+| Commit | What |
+|---|---|
+| `b345c71` | Slice L: lock records, refusals, `doctor` old records and `--prune`, REDIRECT sentence |
+| `94e2948` | Slice P: context labels, `canary/explain.py`, headline and steps, dialogs, `canary explain`, terminal rule for `explain` and `--excerpts`, hook rule, skill text, docs, manifest |
+| `ef08508` | Counterfactual logs |
+| `3babd00` | Package and model text escaped before it reaches the terminal (`scan.terminal_safe`) |
+| `701a98c` | Fold of the diff review's six minors |
+| `aee6dd1` | Counterfactual logs recaptured at the final head |
+
+- **Security finding during the build.** A background security review of
+  `94e2948` found that `canary explain` printed package file names and the
+  AI review's reasoning and summary raw, so a package could send terminal
+  escape sequences to the person's screen. `check --excerpts --text` had the
+  same gap before this program. `3babd00` escapes them everywhere they are
+  printed, with a test that feeds real escape sequences.
+- **Diff review** (Spark 1.3 Contributor, `max`, read-only) of
+  `84e55c8..3babd00`: no blocking findings, six minors, all folded in
+  `701a98c`.
+- **Gate** at `701a98c`: `python3 -m unittest discover -s tests`, 275 tests,
+  OK, exit 0 (coordinator run; the auditor re-ran it independently with the
+  same result). Baseline was 217.
+- **Done-when audit** (Opus 5.5, fresh context, read-only) at `701a98c`:
+  PASS, bullets 1-12 met. It re-ran the four counterfactuals that predated
+  the last fixes on the final head; `aee6dd1` recaptures them.
+
+### Deviations recorded
+
+1. **Race-only refusal.** Inside the commit lock, when a record was live at
+   the conflict check but its folders vanish before the key is chosen and
+   then reappear (`add.choose_key` returns `None`), `canary add` and `canary
+   install` refuse with `Another install got there first; nothing was
+   installed.` instead of ruling 1's "A skill named … is already installed
+   at …" sentence. It fails closed (nothing installed, nothing recorded), the
+   string already existed in `add.py` for a commit-time race, and no test
+   reaches this branch.
+2. **Extra pre-dialog check in `canary install`.** After the checked names
+   are known and before the dialog, `install.py` runs the same conflict rule
+   with the same strings, so the person is never asked to approve an install
+   that will then be refused. The earliest check looks only at destinations
+   that already exist (staged folder names can differ from checked names).
+
+### Not reached by tests
+
+The real macOS dialog (`add.ask`), a real GitHub fetch in `canary explain`,
+the `choose_key` → `None` branch, and the real `_is_canary` allowance (the
+hook's ordering is proven in-process with it patched to allow).
