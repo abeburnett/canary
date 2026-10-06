@@ -29,7 +29,9 @@ QUARANTINE_TEXT = re.compile(r"application\\?\s*support/canary/quarantine", re.I
 REDIRECT = ("This installs skills or plugins without SkillCanary checking them first. "
             "Run the installer as a command of its own through `canary install -- <command>` "
             "(for example `canary install -- npx skills add <owner/repo>`), or use "
-            "`canary add <link>`; both check what it adds and ask the person.")
+            "`canary add <link>`; both check what it adds and ask the person. "
+            "To write a file that only mentions an installer, use your file-editing tool "
+            "(Write or Edit in Claude Code, apply_patch in Codex), not the shell.")
 INSTALL_INSTEAD = ("SkillCanary checks skills and plugins before they are installed. Run "
                    "this instead; it runs the same installer, checks what it adds and asks "
                    "the person: canary install -- {command}")

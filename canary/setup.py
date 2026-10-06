@@ -518,3 +518,95 @@ def doctor(home=None, prefix="/", expected_uid=0, root_uid=0, launcher=None):
             f"{level.capitalize()} is set up but not fully in force until the gaps "
             "below are fixed.")
     return level, gaps, claim
+
+
+# ---- old install records (program 2026-10-06) --------------------------------
+
+MAX_LISTED = 20
+
+
+def old_records(home=None):
+    """The lockfile's records whose folders are gone, skills first, each group
+    sorted by key: [{"kind", "key", "name", "installed"}]. A record that is not
+    well formed is dead and lists `installed` as []. A missing lockfile has no
+    records; an unreadable one raises add.LockError."""
+    from canary import add
+    home = home or os.path.expanduser("~")
+    lock = add._read_lock(home)
+    plugins = lock.get("plugins")
+    out = []
+    for kind, records in (("skill", lock["skills"]),
+                          ("plugin", plugins if isinstance(plugins, dict) else {})):
+        for key in sorted(records):
+            rec = records[key]
+            if not add.is_live(rec):
+                name = add.record_name(key, rec) if kind == "skill" else key
+                out.append({"kind": kind, "key": key, "name": name,
+                            "installed": add.record_paths(rec)})
+    return out
+
+
+def _plural(n, one, many):
+    return one if n == 1 else many
+
+
+def _first_path(rec, home):
+    from canary import add
+    return add._short(rec["installed"][0], home) if rec["installed"] else "(no path recorded)"
+
+
+def render_old_records(records, home):
+    n = len(records)
+    lines = [f"Old install records: {n} "
+             f"({_plural(n, 'its folder is gone', 'their folders are gone')})"]
+    lines += [f"  {r['name']}  {_first_path(r, home)}" for r in records]
+    lines.append("Run canary doctor --prune to remove them. It asks you first.")
+    return "\n".join(lines)
+
+
+def prune_dialog_text(records, home):
+    n = len(records)
+    lines = [f"SkillCanary has {n} install {_plural(n, 'record for a skill or plugin whose folders are gone', 'records for skills or plugins whose folders are gone')}:"]
+    for r in records[:MAX_LISTED]:
+        path = _first_path(r, home)
+        lines.append(f"- {r['name']} " + (path if path.startswith("(") else f"({path})"))
+    if n > MAX_LISTED:
+        lines.append(f"- and {n - MAX_LISTED} more")
+    lines += ["Removing them lets you install these names again. It does not change any",
+              "skill or plugin on this Mac.", "",
+              "The names come from the packages, not from SkillCanary."]
+    return "\n".join(lines)
+
+
+def prune_records(home=None, approve=None):
+    """`canary doctor --prune`: ask the person, then remove the records that
+    are still dead. Prints the outcome and returns the exit code."""
+    from canary import add
+    home = home or os.path.expanduser("~")
+    if approve is None:
+        approve = lambda text: add.ask(text, "NEEDS_REVIEW", yes="Remove records")
+    try:
+        records = old_records(home)
+        if not records:
+            print("No old install records.")
+            return 0
+        if approve(prune_dialog_text(records, home)) is not True:
+            print("Nothing removed: the person did not agree in SkillCanary's dialog.")
+            return 10
+        shown = {(r["kind"], r["key"]) for r in records}
+        with add._Commit(home):
+            lock = add._read_lock(home)
+            plugins = lock.get("plugins")
+            removed = 0
+            for kind, records_ in (("skill", lock["skills"]),
+                                   ("plugin", plugins if isinstance(plugins, dict) else {})):
+                for key in [k for k in records_ if (kind, k) in shown
+                            and not add.is_live(records_[k])]:
+                    del records_[key]
+                    removed += 1
+            add._write_lock(home, lock)
+    except add.LockError as exc:
+        print(f"canary: {exc}", file=sys.stderr)
+        return 3
+    print(f"Removed {removed} old install {_plural(removed, 'record', 'records')}.")
+    return 0

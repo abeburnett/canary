@@ -170,7 +170,10 @@ Decision rules (`canary/gate.py`, `decide`), in order:
    words>`, and the agent runs that under the person's Codex approvals:
    Codex applies a rewrite only with `allow` (live probe, 2026-10-02,
    `docs/codex-facts.md`), which SkillCanary does not use. Any other
-   installer command is denied, naming `canary install` and `canary add`. The installer's own
+   installer command is denied, naming `canary install` and `canary add`;
+   that message (`gate.REDIRECT`) ends with: "To write a file that only
+   mentions an installer, use your file-editing tool (Write or Edit in Claude
+   Code, apply_patch in Codex), not the shell." The installer's own
    words decide, wherever they sit: after removing quotes, `$'...'`, line
    continuations and backslashes, the command is searched for a `skills`
    package (`skills`, `@scope/skills`, `skills@1.2.3`) followed, after any
@@ -416,8 +419,8 @@ scanned. Default hosts: those whose home folder exists (`~/.claude`,
 
 The installed name is the frontmatter `name` if it matches
 `^[a-z0-9][a-z0-9-]{0,63}$`, else the folder name if that matches, else the
-add is refused. An existing folder of that name is never overwritten
-(`canary update` replaces installs).
+add is refused. An existing folder of that name is never overwritten: to
+replace an installed skill, the person removes its folder and adds it again.
 
 There is no `--yes`, environment override or typed confirmation: an agent can
 type into a terminal. Approval comes only from the dialog (tests inject an
@@ -453,10 +456,51 @@ renamed:
 
 ```json
 {"schema": "canary.lock/1",
- "skills": {"<name>": {"source": "<link as given>", "owner": "…", "repo": "…",
+ "skills": {"<key>": {"name": "<name>", "places": ["…"],
+   "source": "<link as given>", "owner": "…", "repo": "…",
    "ref": "…", "commit": "…", "path": "…", "package_digest": "sha256:…",
    "verdict": "…", "installed": ["…"], "installed_at": "2026-09-26T00:00:00Z"}}}
 ```
+
+**Where a record is.** A skill record's *places* are the skills folders its
+installs sit in: for each path in `installed`, the resolved path of the
+path's parent folder (the folder holding the link or folder itself, never a
+link's target). A new record stores `name` and `places` (sorted), both
+computed once when it is written. An older record has neither: its name is
+its key, and its places are computed from `installed` when it is read. The
+schema string stays `canary.lock/1`; the fields are additive. Code never
+parses a key to find a name or a place. Plugin records (`plugins`, written by
+`canary install`) keep their `scope` field and get no conflict check.
+
+**Live and dead.** An installed path is live when it exists (a link whose
+target is gone is not). A record is live when at least one of its `installed`
+paths is live, and dead otherwise, including when `installed` is empty,
+missing, not a list or holds anything but non-empty strings, and when the
+record is not an object at all. Nothing raises on a malformed record.
+
+**Conflicts and keys.** A new install conflicts with a record only when the
+record is live, has the same name, and shares at least one place with the
+new install; a dead record never blocks. The destination check (`lexists`
+on every destination) is separate and unchanged. A project install and a
+user install of one name therefore never conflict. The new install's places
+are computed as a record's are: for `canary add`, from each host
+destination; for `canary install`, from every path it will create, folders
+and links. The key is chosen before any file is written, in this order: a
+conflict refuses; else the bare name when that key is free or holds a dead
+record (which it replaces); else `name@<first 12 hex characters of the
+SHA-256 of the sorted places joined by newlines>`, replacing a dead record
+there too, and a live record there is a conflict. Dead records under other
+keys are left for `canary doctor`.
+
+**Refusals** name what is in the way, and are the same before the dialog and
+again inside the commit lock: `A skill named <name> is already installed at
+<paths> (recorded <date>). Nothing was installed. To replace it, remove
+<that folder|those folders> and run this again.` (the live paths, shortened
+with `~`; the date is dropped, keeping the full stop, when `installed_at` is
+missing), or, for a destination that exists with no live record, `<path>
+already exists. Nothing was installed. To replace it, remove it and run this
+again.` `canary install` checks first with each staged folder's name, then
+again with the checked names, before it asks.
 
 ## `canary setup [--level scan|guard]` and `canary doctor`
 
@@ -506,6 +550,26 @@ it; it reports a user skills folder still owned by root; and a recorded level
 it does not know is reported as such, never as Scan. It prints the level, every gap in plain words, and the
 public-claims row that applies. Exit 0 when the machine matches its level, 10
 when there is a gap.
+
+**Old install records.** After the gaps, `doctor` lists lockfile records whose
+folders are gone (`setup.old_records(home)`: dead skill records, then dead
+plugin records, each sorted by key, as `{"kind", "key", "name", "installed"}`)
+under `Old install records: <n> (their folders are gone)` with each name and
+its first installed path, and tells the person to run `canary doctor --prune`.
+`canary doctor --json` carries them as `old_records` (an empty list when
+there are none). They never count as gaps, never change the exit code, and
+`setup.doctor` keeps its signature and return. An unreadable lockfile prints
+`canary: <message>` on stderr and doctor otherwise runs as before.
+
+`canary doctor --prune` (`setup.prune_records`) shows SkillCanary's dialog
+(Cancel is the default button; the dialog lists at most 20 records, then `- and
+<k> more`), and only on the person's yes takes the commit lock, re-reads the
+lockfile and removes the records that were shown and are still dead. It
+prints `Removed <n> old install records.` (exit 0), `No old install records.`
+(exit 0, no dialog) or `Nothing removed: the person did not agree in
+SkillCanary's dialog.` (exit 10 for a no, a timeout or no dialog); an
+unreadable lockfile exits 3. It changes no skill or plugin, only the
+lockfile. `doctor` accepts exactly nothing, `--json` or `--prune`.
 
 At every level, setup also installs the SkillCanary skill
 (`canary/frontdoor.py`, the same text as `skills/canary/SKILL.md`) as
@@ -726,8 +790,9 @@ page to install it.
 4. **Redirects:** at Guard and above, `npx skills add`, plugin installs and
    file-tool creation of a new skill are denied with the message "use `canary
    add <source>`", so the insecure path points to the secure one.
-5. **Updates:** `canary update` fetches, shows what changed in plain words
-   (for example "now adds a shell script"), and installs only after approval.
+5. **Replacing:** to replace an installed skill, the person removes its
+   folder and installs it again; the new copy is checked and approved like
+   any other.
 
 The Claude Code and Codex marketplace plugins are front doors: a descriptive
 skill that teaches the agent to use `canary add` and, when `canary` is

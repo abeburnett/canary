@@ -5,6 +5,7 @@ is checked and shown once, and only the checked files are put in place.
 The installers here are small fakes on PATH that write where the real ones do.
 """
 
+import hashlib
 import json
 import os
 import re
@@ -136,6 +137,14 @@ class Mac:
         finally:
             patch.stop()
 
+    def lock(self):
+        with open(os.path.join(self.home, ".agents", ".canary-lock.json")) as fh:
+            return json.load(fh)
+
+    def write_lock(self, skills):
+        with open(os.path.join(self.home, ".agents", ".canary-lock.json"), "w") as fh:
+            json.dump({"schema": "canary.lock/1", "skills": skills}, fh)
+
     def runs(self):
         with open(self.log) as fh:
             return [json.loads(line) for line in fh]
@@ -217,6 +226,86 @@ class SkillsComeFromStaging(unittest.TestCase):
         out = mac.install(ADD, spec=dict(ONE, fail=True))
         self.assertEqual((out["outcome"], mac.asked), ("not_installed", []))
         self.assertEqual(os.listdir(os.path.join(mac.home, ".agents", "skills")), [])
+
+
+PROJECT_ADD = ["npx", "skills", "add", "someone/repo", "-y"]
+
+
+class RecordsKnowWhereTheyAre(unittest.TestCase):
+    """Program 2026-10-06, section 1, for `canary install`."""
+
+    def places(self, mac, *folders):
+        return sorted(os.path.realpath(f) for f in folders)
+
+    def test_a_dead_record_never_blocks_and_is_replaced(self):
+        mac = Mac()
+        gone = os.path.join(mac.home, ".agents", "skills", "helper")
+        mac.write_lock({"helper": {"installed": [gone], "installed_at": "2026-10-05T10:00:00Z"}})
+        out = mac.install(ADD, spec=ONE)
+        self.assertEqual(out["outcome"], "installed")
+        skills = mac.lock()["skills"]
+        self.assertEqual(sorted(skills), ["helper"])
+        self.assertEqual(skills["helper"]["name"], "helper")
+        self.assertEqual(skills["helper"]["places"], self.places(
+            mac, os.path.join(mac.home, ".agents", "skills"),
+            os.path.join(mac.home, ".claude", "skills")))
+
+    def test_a_project_install_and_a_global_install_of_one_name_both_succeed_in_either_order(self):
+        for first, second in ((ADD, PROJECT_ADD), (PROJECT_ADD, ADD)):
+            with self.subTest(first="global" if first is ADD else "project"):
+                mac = Mac()
+                self.assertEqual(mac.install(first, spec=ONE)["outcome"], "installed")
+                out = mac.install(second, spec=ONE)
+                self.assertEqual((out["outcome"], out["reasons"]), ("installed", []))
+                records = mac.lock()["skills"]
+                self.assertEqual(len(records), 2)
+                self.assertEqual({r["name"] for r in records.values()}, {"helper"})
+                self.assertIn("helper", records)
+                other = next(k for k in records if k != "helper")
+                self.assertRegex(other, r"^helper@[0-9a-f]{12}$")
+                places = [r["places"] for r in records.values()]
+                self.assertNotEqual(places[0], places[1])
+                digest = hashlib.sha256("\n".join(records[other]["places"]).encode()).hexdigest()
+                self.assertEqual(other, "helper@" + digest[:12])
+
+    def test_a_live_record_blocks_with_a_refusal_that_names_what_is_in_the_way(self):
+        mac = Mac()
+        self.assertEqual(mac.install(ADD, spec=ONE)["outcome"], "installed")
+        stamp = mac.lock()["skills"]["helper"]["installed_at"]
+        mac.asked.clear()
+        out = mac.install(ADD, spec=ONE)
+        self.assertEqual((out["outcome"], mac.asked), ("not_installed", []))
+        self.assertIn(f"A skill named helper is already installed at ~/.agents/skills/helper "
+                      f"and ~/.claude/skills/helper (recorded {stamp[:10]}). Nothing was "
+                      "installed. To replace it, remove those folders and run this again.",
+                      out["reasons"])
+
+    def test_a_folder_with_no_record_is_named(self):
+        mac = Mac()
+        os.makedirs(os.path.join(mac.home, ".agents", "skills", "helper"))
+        out = mac.install(ADD, spec=ONE)
+        self.assertIn("~/.agents/skills/helper already exists. Nothing was installed. To "
+                      "replace it, remove it and run this again.", out["reasons"])
+
+    def test_a_record_that_turns_up_during_the_dialog_is_refused_in_the_same_words(self):
+        mac = Mac()
+        racer = os.path.join(mac.home, ".agents", "skills", "other")
+        os.makedirs(racer)
+
+        def approve(summary):
+            mac.write_lock({"helper": {"installed": [racer], "installed_at": "2026-10-06T08:00:00Z"}})
+            return True
+
+        patch = mac.environment(FAKE_SPEC=json.dumps(ONE))
+        try:
+            out = install.install(ADD, home=mac.home, cwd=mac.project, support_dir=mac.support,
+                                  approve=approve, backend=model("SAFE"), model="fake")
+        finally:
+            patch.stop()
+        self.assertEqual(out["outcome"], "not_installed")
+        self.assertIn("A skill named helper is already installed at ~/.agents/skills/other "
+                      "(recorded 2026-10-06). Nothing was installed. To replace it, remove "
+                      "that folder and run this again.", out["reasons"])
 
 
 class PluginsAreCheckedThenInstalled(unittest.TestCase):

@@ -7,6 +7,7 @@ and the agent-facing result carries no package text. Fetch, approval and the
 classifier are fakes; nothing touches the real home folder or the network.
 """
 
+import hashlib
 import io
 import json
 import os
@@ -90,6 +91,20 @@ class Env:
             return None
         with open(path) as fh:
             return json.load(fh)
+
+    def write_lock(self, skills, plugins=None):
+        lock = {"schema": "canary.lock/1", "skills": skills}
+        if plugins is not None:
+            lock["plugins"] = plugins
+        path = os.path.join(self.home, ".agents", ".canary-lock.json")
+        with open(path, "w") as fh:
+            json.dump(lock, fh)
+
+    def folder(self, *parts):
+        """A real folder, standing in for something already installed."""
+        path = os.path.join(*parts)
+        os.makedirs(path)
+        return path
 
     def quarantine_left(self):
         q = os.path.join(self.support, "quarantine")
@@ -366,3 +381,108 @@ class BlobLinksSelectTheSkillFolder(unittest.TestCase):
         self.assertEqual(fetch.calls, [("someone", "skills", "v1.2")])
         self.assertEqual((result["outcome"], result["name"]), ("installed", "notes"))
         self.assertEqual(env.lock()["skills"]["notes"]["path"], "skills/notes")
+
+
+def places_of(home, *roots):
+    return sorted(os.path.realpath(os.path.join(home, *r.split("/"))) for r in roots)
+
+
+class RecordsKnowWhereTheyAre(unittest.TestCase):
+    """Program 2026-10-06, section 1: a record whose folders are gone never
+    blocks an install; a live one blocks only in the places it sits in."""
+
+    def archive(self):
+        return tarball([("notes/SKILL.md", tarfile.REGTYPE, SKILL)])
+
+    def test_a_dead_record_never_blocks_and_is_replaced(self):
+        env = Env()
+        gone = os.path.join(env.home, ".claude", "skills", "notes")
+        env.write_lock({"notes": {"installed": [gone], "installed_at": "2026-10-05T10:00:00Z"}})
+        result = env.add(URL, Approver(True), fetch=FakeGitHub(self.archive()))
+        self.assertEqual(result["outcome"], "installed")
+        skills = env.lock()["skills"]
+        self.assertEqual(sorted(skills), ["notes"])
+        self.assertEqual(skills["notes"]["name"], "notes")
+        self.assertEqual(skills["notes"]["places"],
+                         places_of(env.home, ".claude/skills", ".agents/skills"))
+        self.assertEqual(skills["notes"]["commit"], SHA)
+
+    def test_a_live_record_blocks_with_a_refusal_that_names_what_is_in_the_way(self):
+        # An older record has no name or places; both come from the key and paths.
+        env, approve = Env(), Approver(True)
+        mine = env.folder(env.home, ".claude", "skills", "notes")
+        theirs = env.folder(env.home, ".agents", "skills", "notes")
+        env.write_lock({"notes": {"installed": [mine, theirs],
+                                  "installed_at": "2026-10-05T10:00:00Z"}})
+        before = env.lock()
+        result = env.add(URL, approve, fetch=FakeGitHub(self.archive()))
+        self.assertEqual(result["outcome"], "not_installed")
+        self.assertEqual(approve.seen, [])
+        self.assertIn("A skill named notes is already installed at ~/.claude/skills/notes and "
+                      "~/.agents/skills/notes (recorded 2026-10-05). Nothing was installed. "
+                      "To replace it, remove those folders and run this again.",
+                      result["reasons"])
+        self.assertEqual(env.lock(), before)
+
+    def test_a_folder_with_no_record_is_named_and_the_date_is_dropped_when_missing(self):
+        env = Env()
+        env.folder(env.home, ".claude", "skills", "notes")
+        result = env.add(URL, Approver(True), fetch=FakeGitHub(self.archive()))
+        self.assertIn("~/.claude/skills/notes already exists. Nothing was installed. "
+                      "To replace it, remove it and run this again.", result["reasons"])
+        lone = env.folder(env.home, ".agents", "skills", "lone")
+        env.write_lock({"notes": {"installed": [lone]}})
+        result = env.add(URL, Approver(True), fetch=FakeGitHub(self.archive()))
+        self.assertIn("A skill named notes is already installed at ~/.agents/skills/lone. "
+                      "Nothing was installed. To replace it, remove that folder and run this "
+                      "again.", result["reasons"])
+
+    def test_the_same_name_in_other_places_is_recorded_under_a_second_key(self):
+        env = Env()
+        project = os.path.realpath(tempfile.mkdtemp(prefix="canary-project-"))
+        elsewhere = env.folder(project, ".agents", "skills", "notes")
+        env.write_lock({"notes": {"installed": [elsewhere],
+                                  "installed_at": "2026-10-05T10:00:00Z"}})
+        result = env.add(URL, Approver(True), fetch=FakeGitHub(self.archive()))
+        self.assertEqual(result["outcome"], "installed")
+        places = places_of(env.home, ".claude/skills", ".agents/skills")
+        digest = hashlib.sha256("\n".join(places).encode("utf-8")).hexdigest()[:12]
+        skills = env.lock()["skills"]
+        self.assertEqual(sorted(skills), ["notes", f"notes@{digest}"])
+        self.assertEqual(skills["notes"]["installed"], [elsewhere])
+        self.assertEqual(skills[f"notes@{digest}"]["name"], "notes")
+        self.assertEqual(skills[f"notes@{digest}"]["places"], places)
+
+    def test_a_record_that_turns_up_during_the_dialog_is_refused_in_the_same_words(self):
+        env = Env()
+        racer = os.path.join(env.home, ".claude", "skills", "notes")
+
+        def approve(summary):
+            env.folder(racer)
+            env.write_lock({"notes": {"installed": [racer],
+                                      "installed_at": "2026-10-06T08:00:00Z"}})
+            return True
+
+        result = env.add(URL, approve, fetch=FakeGitHub(self.archive()))
+        self.assertEqual(result["outcome"], "not_installed")
+        self.assertIn("A skill named notes is already installed at ~/.claude/skills/notes "
+                      "(recorded 2026-10-06). Nothing was installed. To replace it, remove "
+                      "that folder and run this again.", result["reasons"])
+        self.assertEqual(env.installed(), [racer])
+
+    def test_nothing_the_tool_says_points_to_a_command_it_does_not_have(self):
+        text = []
+        for base in ("canary", "skills", "docs", "scanner", "plugins", "README.md"):
+            path = os.path.join(ROOT, base)
+            files = ([path] if os.path.isfile(path) else
+                     [os.path.join(d, f) for d, _, fs in os.walk(path) for f in fs])
+            for f in files:
+                if os.path.basename(f).startswith("program-"):
+                    continue  # the historical program records stay as they are
+                try:
+                    with open(f, encoding="utf-8") as fh:
+                        if "canary " + "update" in fh.read():
+                            text.append(os.path.relpath(f, ROOT))
+                except UnicodeDecodeError:
+                    pass
+        self.assertEqual(text, [])

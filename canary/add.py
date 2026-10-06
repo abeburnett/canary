@@ -332,6 +332,89 @@ def _write_lock(home, lock):
         raise
 
 
+# ---- lock records: where they are, and whether they still stand -----------
+
+DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def _short(path, home):
+    return "~" + path[len(home):] if path.startswith(home + os.sep) else path
+
+
+def _join(items):
+    """a, a and b, a, b and c."""
+    items = list(items)
+    return items[0] if len(items) <= 1 else ", ".join(items[:-1]) + " and " + items[-1]
+
+
+def record_paths(rec):
+    """A record's installed paths; [] for a record that is not well formed."""
+    installed = rec.get("installed") if isinstance(rec, dict) else None
+    if isinstance(installed, list) and all(isinstance(p, str) and p for p in installed):
+        return list(installed)
+    return []
+
+
+def is_live(rec):
+    """True while at least one of the record's installed paths still exists."""
+    return any(os.path.exists(p) for p in record_paths(rec))
+
+
+def places_of(paths):
+    """The skills folders a set of installs sit in: each path's parent folder,
+    resolved, never a link's target."""
+    return sorted({os.path.realpath(os.path.dirname(p)) for p in paths})
+
+
+def record_places(rec):
+    stored = rec.get("places") if isinstance(rec, dict) else None
+    if isinstance(stored, list) and stored and all(isinstance(p, str) and p for p in stored):
+        return stored
+    return places_of(record_paths(rec))
+
+
+def record_name(key, rec):
+    """The name a record is for. An older record has no `name`: its key is it."""
+    name = rec.get("name") if isinstance(rec, dict) else None
+    return name if isinstance(name, str) and name else key
+
+
+def plan_key(lock, name, places):
+    """(key, None) for the key a new record of `name` in `places` goes under, or
+    (None, record) for the live record in the way."""
+    skills = lock["skills"]
+    mine = set(places)
+    for key, rec in skills.items():
+        if record_name(key, rec) == name and is_live(rec) and mine & set(record_places(rec)):
+            return None, rec
+    if name not in skills or not is_live(skills[name]):
+        return name, None
+    hashed = name + "@" + hashlib.sha256("\n".join(sorted(places)).encode("utf-8")).hexdigest()[:12]
+    other = skills.get(hashed)
+    if other is None or not is_live(other):
+        return hashed, None
+    return None, other
+
+
+def conflict_reason(lock, names, places, destinations, home):
+    """The sentence for what is in the way of installing `names` into `places`
+    (a live record first, then a destination that exists), or None."""
+    for name in names:
+        blocker = plan_key(lock, name, places)[1]
+        if blocker is not None:
+            paths = [_short(p, home) for p in record_paths(blocker) if os.path.exists(p)]
+            stamp = blocker.get("installed_at")
+            date = f" (recorded {stamp[:10]})" if isinstance(stamp, str) and DATE.match(stamp) else ""
+            them = "that folder" if len(paths) == 1 else "those folders"
+            return (f"A skill named {name} is already installed at {_join(paths)}{date}. "
+                    f"Nothing was installed. To replace it, remove {them} and run this again.")
+    existing = [d for d in destinations if os.path.lexists(d)]
+    if existing:
+        return (f"{_short(existing[0], home)} already exists. Nothing was installed. "
+                "To replace it, remove it and run this again.")
+    return None
+
+
 class _Commit:
     """One install commits at a time: destinations and the lockfile are
     re-read and written under an exclusive lock, never while the person is
@@ -508,10 +591,11 @@ def add(source, *, home=None, support_dir=None, approve=None, fetch=None,
             return out
 
         destinations = [os.path.join(HOSTS[h][1].install_root(home), name) for h in hosts]
-        if name in lock["skills"] or any(os.path.lexists(d) for d in destinations):
+        places = places_of(destinations)
+        reason = conflict_reason(lock, [name], places, destinations, home)
+        if reason:
             out["outcome"] = "not_installed"
-            out["reasons"].append(f"A skill named {name} is already installed; "
-                                  "use canary update to replace it.")
+            out["reasons"].append(reason)
             _record(guestlist.record_decision, home, name, verdict, "not_installed",
                     support=support_dir)
             return out
@@ -545,11 +629,14 @@ def add(source, *, home=None, support_dir=None, approve=None, fetch=None,
                   "repo": repo, "ref": ref, "commit": commit, "path": path}
         with _Commit(home):
             lock = _read_lock(home)
-            if name in lock["skills"] or any(os.path.lexists(d) for d in destinations):
+            reason = conflict_reason(lock, [name], places, destinations, home)
+            if reason:
                 out["outcome"] = "not_installed"
-                out["reasons"].append(f"A skill named {name} was installed meanwhile; "
-                                      "use canary update to replace it.")
+                out["reasons"].append(reason)
                 return out
+            # Chosen now: once the files exist, a dead record of the same
+            # name would look live.
+            key = plan_key(lock, name, places)[0]
             # Recorded before the files appear, so the watcher leaves them alone.
             _record(guestlist.record_install, home, destinations, name, verdict,
                     support=support_dir, source=snapshot)
@@ -557,7 +644,7 @@ def add(source, *, home=None, support_dir=None, approve=None, fetch=None,
             if done is None:
                 return out
             try:
-                return _finish(out, lock, home, name, verdict, result, done, fields)
+                return _finish(out, lock, home, key, name, verdict, result, done, fields)
             except OSError:
                 for dest in done:
                     _remove(dest)
@@ -616,13 +703,14 @@ def _install(snapshot, destinations, digest, run_id, name, out):
     return done
 
 
-def _finish(out, lock, home, name, verdict, result, done, source_fields):
-    lock["skills"][name] = dict(source_fields, package_digest=result["package_digest"],
-                                verdict=verdict, installed=done,
-                                installed_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+def _finish(out, lock, home, key, name, verdict, result, done, source_fields):
+    lock["skills"][key] = dict(source_fields, name=name, places=places_of(done),
+                               package_digest=result["package_digest"],
+                               verdict=verdict, installed=done,
+                               installed_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
     _write_lock(home, lock)
     out["outcome"] = "installed"
-    out["installed"] = ["~" + d[len(home):] if d.startswith(home + os.sep) else d for d in done]
+    out["installed"] = [_short(d, home) for d in done]
     return out
 
 

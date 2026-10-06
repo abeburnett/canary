@@ -5,6 +5,8 @@ folder standing in for `/` and the current user standing in for root; nothing
 touches this Mac's real policy folders.
 """
 
+import contextlib
+import io
 import json
 import os
 import shlex
@@ -14,7 +16,7 @@ import tempfile
 import unittest
 import unittest.mock
 
-from canary import setup
+from canary import add, cli, setup
 
 MACOS = unittest.skipUnless(sys.platform == "darwin", "setup runs macOS tools (base64 -D, /Library)")
 ME = f"{os.getuid()}:{os.getgid()}"
@@ -635,6 +637,174 @@ class NeverTouchesWhatItCannotSeeOrOwn(unittest.TestCase):
         mac.at_old_lockdown()
         mac.setup("guard")
         self.assertEqual(os.stat(outside).st_mode & 0o777, 0o666)
+
+
+class OldInstallRecords(unittest.TestCase):
+    """Program 2026-10-06, section 1: `canary doctor` lists install records
+    whose folders are gone, and `--prune` removes them only when the person
+    agrees."""
+
+    def setUp(self):
+        self.home = os.path.realpath(tempfile.mkdtemp(prefix="canary-lock-"))
+        os.makedirs(os.path.join(self.home, ".agents"))
+        self.live = os.path.join(self.home, ".agents", "skills", "alive")
+        os.makedirs(self.live)
+
+    def write(self, skills, plugins=None, raw=None):
+        path = os.path.join(self.home, ".agents", ".canary-lock.json")
+        lock = {"schema": "canary.lock/1", "skills": skills}
+        if plugins is not None:
+            lock["plugins"] = plugins
+        with open(path, "w") as fh:
+            fh.write(raw if raw is not None else json.dumps(lock))
+
+    def lock(self):
+        with open(os.path.join(self.home, ".agents", ".canary-lock.json")) as fh:
+            return json.load(fh)
+
+    def gone(self, name):
+        return os.path.join(self.home, ".agents", "skills", name)
+
+    def mixed(self):
+        self.write({"zeta": {"installed": [self.gone("zeta")]},
+                    "alive": {"installed": [self.live]},
+                    "alpha@0123456789ab": {"name": "alpha", "installed": [self.gone("alpha")]},
+                    "broken": {"installed": "not a list"},
+                    "mixed": {"installed": [self.gone("mixed"), 7]},
+                    "empty": {"installed": []},
+                    "odd": "not a record"},
+                   {"tidy@mkt": {"installed": [self.gone("tidy")]},
+                    "kept@mkt": {"installed": [self.live]}})
+
+    def test_the_dead_records_are_listed_skills_first_and_malformed_ones_are_dead(self):
+        self.mixed()
+        self.assertEqual(setup.old_records(self.home), [
+            {"kind": "skill", "key": "alpha@0123456789ab", "name": "alpha",
+             "installed": [self.gone("alpha")]},
+            {"kind": "skill", "key": "broken", "name": "broken", "installed": []},
+            {"kind": "skill", "key": "empty", "name": "empty", "installed": []},
+            {"kind": "skill", "key": "mixed", "name": "mixed", "installed": []},
+            {"kind": "skill", "key": "odd", "name": "odd", "installed": []},
+            {"kind": "skill", "key": "zeta", "name": "zeta", "installed": [self.gone("zeta")]},
+            {"kind": "plugin", "key": "tidy@mkt", "name": "tidy@mkt",
+             "installed": [self.gone("tidy")]}])
+
+    def test_no_lockfile_has_no_records_and_a_broken_one_is_an_error(self):
+        self.assertEqual(setup.old_records(self.home), [])
+        self.write({}, raw="{not json")
+        with self.assertRaises(add.LockError):
+            setup.old_records(self.home)
+
+    def run_cli(self, args, ask=None, doctor=("scan", [], "Scans.")):
+        out, err = io.StringIO(), io.StringIO()
+        patches = [unittest.mock.patch.dict(os.environ, {"HOME": self.home}),
+                   unittest.mock.patch.object(setup, "doctor", return_value=doctor)]
+        if ask is not None:
+            patches.append(unittest.mock.patch.object(add, "ask", ask))
+        with contextlib.ExitStack() as stack:
+            for p in patches:
+                stack.enter_context(p)
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                code = cli.main(["doctor", *args])
+        return code, out.getvalue(), err.getvalue()
+
+    def test_doctor_lists_old_records_without_changing_its_exit_code(self):
+        self.mixed()
+        code, out, _ = self.run_cli([])
+        self.assertEqual(code, 0)
+        self.assertEqual(out, (
+            "Protection level: scan\nWhat SkillCanary can claim here: Scans.\n"
+            "Old install records: 7 (their folders are gone)\n"
+            "  alpha  ~/.agents/skills/alpha\n  broken  (no path recorded)\n"
+            "  empty  (no path recorded)\n  mixed  (no path recorded)\n"
+            "  odd  (no path recorded)\n  zeta  ~/.agents/skills/zeta\n"
+            "  tidy@mkt  ~/.agents/skills/tidy\n"
+            "Run canary doctor --prune to remove them. It asks you first.\n"))
+        code, _, _ = self.run_cli([], doctor=("guard", ["a gap"], "Guards."))
+        self.assertEqual(code, 10)
+
+    def test_doctor_json_carries_old_records_and_says_one_in_the_singular(self):
+        code, out, _ = self.run_cli(["--json"])
+        self.assertEqual(json.loads(out).get("old_records"), [])
+        self.write({"zeta": {"installed": [self.gone("zeta")]}})
+        _, out, _ = self.run_cli([])
+        self.assertIn("Old install records: 1 (its folder is gone)\n", out)
+        _, out, _ = self.run_cli(["--json"])
+        self.assertEqual(json.loads(out).get("old_records"), [
+            {"kind": "skill", "key": "zeta", "name": "zeta", "installed": [self.gone("zeta")]}])
+
+    def test_an_unreadable_lockfile_is_reported_and_doctor_carries_on(self):
+        self.write({}, raw="{not json")
+        code, out, err = self.run_cli([])
+        self.assertEqual(code, 0)
+        self.assertIn("Protection level: scan", out)
+        self.assertIn("is not a Canary lockfile", err)
+        self.assertTrue(err.startswith("canary: "))
+
+    def test_prune_asks_then_removes_only_what_is_still_dead(self):
+        self.mixed()
+        seen = []
+
+        def agree(text, verdict, yes=None):
+            seen.append((text, verdict, yes))
+            os.makedirs(self.gone("zeta"))  # comes back while the person decides
+            return True
+
+        code, out, _ = self.run_cli(["--prune"], ask=agree)
+        self.assertEqual((code, out), (0, "Removed 6 old install records.\n"))
+        self.assertEqual(seen[0][1:], ("NEEDS_REVIEW", "Remove records"))
+        self.assertEqual(sorted(self.lock()["skills"]), ["alive", "zeta"])
+        self.assertEqual(sorted(self.lock()["plugins"]), ["kept@mkt"])
+
+    def test_the_prune_dialog_text(self):
+        self.write({"a": {"installed": [self.gone("a")]}, "b": {}},
+                   {"p@m": {"installed": [self.gone("p")]}})
+        texts = []
+        self.run_cli(["--prune"], ask=lambda t, v, yes=None: texts.append(t) or False)
+        self.assertEqual(texts, [
+            "SkillCanary has 3 install records for skills or plugins whose folders are gone:\n"
+            "- a (~/.agents/skills/a)\n- b (no path recorded)\n- p@m (~/.agents/skills/p)\n"
+            "Removing them lets you install these names again. It does not change any\n"
+            "skill or plugin on this Mac.\n\n"
+            "The names come from the packages, not from SkillCanary."])
+        self.write({"a": {"installed": [self.gone("a")]}})
+        texts.clear()
+        self.run_cli(["--prune"], ask=lambda t, v, yes=None: texts.append(t) or False)
+        self.assertTrue(texts[0].startswith("SkillCanary has 1 install record for a skill or "
+                                            "plugin whose folders are gone:\n- a ("))
+        self.write({f"s{n:02}": {"installed": [self.gone("x")]} for n in range(23)})
+        texts.clear()
+        self.run_cli(["--prune"], ask=lambda t, v, yes=None: texts.append(t) or False)
+        lines = texts[0].splitlines()
+        self.assertEqual(len([l for l in lines if l.startswith("- ")]), 21)
+        self.assertEqual(lines[21], "- and 3 more")
+
+    def test_prune_removes_nothing_unless_the_person_agrees(self):
+        self.mixed()
+        before = self.lock()
+        for answer in (False, None, "yes"):
+            with self.subTest(answer=answer):
+                code, out, _ = self.run_cli(["--prune"], ask=lambda t, v, yes=None: answer)
+                self.assertEqual((code, out), (10, "Nothing removed: the person did not agree "
+                                                   "in SkillCanary's dialog.\n"))
+                self.assertEqual(self.lock(), before)
+
+    def test_prune_with_nothing_to_remove_shows_no_dialog_and_a_broken_lock_exits_3(self):
+        self.write({"alive": {"installed": [self.live]}})
+
+        def never(*a, **kw):
+            raise AssertionError("no dialog expected")
+
+        self.assertEqual(self.run_cli(["--prune"], ask=never)[:2], (0, "No old install records.\n"))
+        self.write({}, raw="{not json")
+        code, _, err = self.run_cli(["--prune"], ask=never)
+        self.assertEqual(code, 3)
+        self.assertTrue(err.startswith("canary: "))
+
+    def test_doctor_takes_only_nothing_json_or_prune(self):
+        for args in (["--prune", "--json"], ["--yes"], ["--json", "x"]):
+            with self.subTest(args=args):
+                self.assertEqual(self.run_cli(args)[0], 2)
 
 
 if __name__ == "__main__":

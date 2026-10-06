@@ -93,6 +93,18 @@ class InstallsGoThroughTheDoor(unittest.TestCase):
             "content": "edited"}))
 
 
+    def test_the_block_message_says_how_to_write_a_file_that_only_mentions_an_installer(self):
+        h = Home()
+        command = {"command": "cat > notes.md <<'EOF'\nnpx skills add someone/repo\nEOF"}
+        sentence = ("To write a file that only mentions an installer, use your file-editing "
+                    "tool (Write or Edit in Claude Code, apply_patch in Codex), not the shell.")
+        for host in ("claude", "codex"):
+            with self.subTest(host=host):
+                proc = h.hook(host, "Bash", command)
+                self.assertIn(sentence, proc.stderr + proc.stdout)
+        self.assertTrue(gate.REDIRECT.endswith(" " + sentence))
+
+
 class TheHookNeverFailsOpen(unittest.TestCase):
     def test_garbage_and_missing_fields_deny(self):
         h = Home()

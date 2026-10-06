@@ -282,10 +282,12 @@ def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approv
         dest = os.path.join(real_root, os.path.relpath(link, stage_root))
         link_plan.append((dest, os.path.relpath(target, os.path.dirname(dest))))
     taken = [d for _, d in plan] + [d for d, _ in link_plan]
-    existing = [d for d in taken if os.path.lexists(d)]
-    if existing:
-        return _not(out, f"{_short(existing[0], home)} already exists; nothing was installed. "
-                         "Remove it first to replace it.")
+    places = add.places_of(taken)
+    reason = add.conflict_reason(add._read_lock(home),
+                                 list(dict.fromkeys(os.path.basename(f) for f, _ in plan)),
+                                 places, taken, home)
+    if reason:
+        return _not(out, reason)
     items = _snapshot_and_check([f for f, _ in plan], run_dir, out, backend, model, timeout_s,
                                 support_dir)
     if items is None:
@@ -301,6 +303,9 @@ def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approv
         out["reasons"].append("Not installed: SkillCanary judged part of it unsafe.")
         _record_all(items, home, support_dir, "refused")
         return out
+    reason = add.conflict_reason(add._read_lock(home), list(names), places, taken, home)
+    if reason:
+        return _not(out, reason)
     answer = _ask(approve, list(argv), items, out["verdict"])
     if answer is not True:
         out["outcome"] = "declined" if answer is False else "not_installed"
@@ -311,9 +316,12 @@ def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approv
         return out
     with add._Commit(home):
         lock = add._read_lock(home)
-        if any(os.path.lexists(d) for d in taken) or any(n in lock["skills"] for n in names):
-            return _not(out, "Something with the same name was installed meanwhile; nothing "
-                             "was installed.")
+        reason = add.conflict_reason(lock, list(names), places, taken, home)
+        if reason:
+            return _not(out, reason)
+        # Chosen now: once the files exist, a dead record of the same name
+        # would look live.
+        keys = {name: add.plan_key(lock, name, places)[0] for name in names}
         # Recorded before the files appear, so the watcher leaves them alone;
         # the links resolve to these folders.
         for name in names:
@@ -336,13 +344,14 @@ def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approv
             stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
             for name in names:
                 mine = [it for it in items if it["name"] == name]
-                lock["skills"][name] = {
-                    "source": "installer", "command": list(argv),
+                installed = ([it["destination"] for it in mine]
+                             + [d for d, _ in link_plan if os.path.realpath(d) in
+                                {os.path.realpath(it["destination"]) for it in mine}])
+                lock["skills"][keys[name]] = {
+                    "source": "installer", "command": list(argv), "name": name,
+                    "places": add.places_of(installed),
                     "package_digest": mine[0]["package_digest"], "verdict": mine[0]["verdict"],
-                    "installed": [it["destination"] for it in mine]
-                    + [d for d, _ in link_plan if os.path.realpath(d) in
-                       {os.path.realpath(it["destination"]) for it in mine}],
-                    "installed_at": stamp}
+                    "installed": installed, "installed_at": stamp}
             add._write_lock(home, lock)
         except (OSError, add.SourceError):
             for path in reversed(done):

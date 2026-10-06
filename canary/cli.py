@@ -24,7 +24,7 @@ USAGE = ("usage: canary scan <skill-file-or-directory> [--json | --text] [--exce
          "       canary restore <held-id>\n"
          "       canary trust <skill-folder-or-skills-folder>\n"
          "       canary setup [--level scan|guard]\n"
-         "       canary doctor [--json]\n"
+         "       canary doctor [--json | --prune]\n"
          "       canary digest <folder>")
 VALUE_FLAGS = {"--backend", "--model", "--timeout"}
 
@@ -245,16 +245,27 @@ def _setup(args):
 
 
 def _doctor(args):
-    if args not in ([], ["--json"]):
+    if args not in ([], ["--json"], ["--prune"]):
         print(USAGE, file=sys.stderr)
         return EXIT_USAGE
+    if args == ["--prune"]:
+        return setup.prune_records()
     level, gaps, claim = setup.doctor()
+    home = os.path.expanduser("~")
+    try:
+        old = setup.old_records(home)
+    except add.LockError as exc:
+        print(f"canary: {exc}", file=sys.stderr)
+        old = []
     if args:
-        print(json.dumps({"level": level, "gaps": gaps, "claim": claim}, indent=2))
+        print(json.dumps({"level": level, "gaps": gaps, "claim": claim,
+                          "old_records": old}, indent=2))
     else:
         print(f"Protection level: {level}\nWhat SkillCanary can claim here: {claim}")
         for g in gaps:
             print(f"  Gap: {g}")
+        if old:
+            print(setup.render_old_records(old, home))
     return 10 if gaps else 0
 
 
