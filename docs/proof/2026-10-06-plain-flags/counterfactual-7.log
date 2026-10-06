@@ -1,6 +1,6 @@
 ===== bullet 7, break 1: canary/explain.py =====
 diff --git a/canary/explain.py b/canary/explain.py
-index 7cab1a9..b440b38 100644
+index af84f31..108f659 100644
 --- a/canary/explain.py
 +++ b/canary/explain.py
 @@ -162,7 +162,7 @@ def headline(check, confident):
@@ -30,20 +30,19 @@ AssertionError: "The AI review judged this skill safe (0.[81 chars] at." != 'Thi
 
 
 ----------------------------------------------------------------------
-Ran 4 tests in 0.817s
+Ran 4 tests in 0.747s
 
 FAILED (failures=1)
 
-
 --- after reverting (git checkout -- canary/explain.py): exit 0 ---
 ----------------------------------------------------------------------
-Ran 4 tests in 0.542s
+Ran 4 tests in 0.612s
 
 OK
 
 ===== bullet 7, break 2: canary/explain.py =====
 diff --git a/canary/explain.py b/canary/explain.py
-index 7cab1a9..fd8c6d1 100644
+index af84f31..8b6bf6a 100644
 --- a/canary/explain.py
 +++ b/canary/explain.py
 @@ -197,7 +197,7 @@ def next_steps(check, confident, flow):
@@ -57,9 +56,9 @@ index 7cab1a9..fd8c6d1 100644
  
 
 --- run with the break: exit 1 ---
-test_each_family_gets_exactly_its_step_in_each_flow (tests.test_explain.EveryReasonToReviewHasANextStep) ... test_steps_follow_reason_order_without_repeats_and_only_for_a_review (tests.test_explain.EveryReasonToReviewHasANextStep) ... ok
 test_each_rule_says_what_it_says (tests.test_explain.TheHeadlineLeadsWithTheCombinedJudgment) ... ok
 test_labels_are_joined_in_catalog_order_and_info_hits_are_not_named (tests.test_explain.TheHeadlineLeadsWithTheCombinedJudgment) ... ok
+test_each_family_gets_exactly_its_step_in_each_flow (tests.test_explain.EveryReasonToReviewHasANextStep) ... test_steps_follow_reason_order_without_repeats_and_only_for_a_review (tests.test_explain.EveryReasonToReviewHasANextStep) ... ok
 
 ======================================================================
 FAIL: test_each_family_gets_exactly_its_step_in_each_flow (tests.test_explain.EveryReasonToReviewHasANextStep) [classifier not confident]
@@ -78,13 +77,12 @@ First extra element 0:
 +  'or folder in your own terminal to see what it noticed.']
 
 ----------------------------------------------------------------------
-Ran 4 tests in 0.597s
+Ran 4 tests in 0.542s
 
 FAILED (failures=1)
 
-
 --- after reverting (git checkout -- canary/explain.py): exit 0 ---
 ----------------------------------------------------------------------
-Ran 4 tests in 0.603s
+Ran 4 tests in 0.542s
 
 OK

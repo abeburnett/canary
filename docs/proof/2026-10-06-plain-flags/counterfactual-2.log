@@ -1,9 +1,9 @@
 ===== bullet 2, break 1: canary/add.py =====
 diff --git a/canary/add.py b/canary/add.py
-index 21a8675..c063ae9 100644
+index b352485..76861f9 100644
 --- a/canary/add.py
 +++ b/canary/add.py
-@@ -385,7 +385,7 @@ def plan_key(lock, name, places):
+@@ -387,7 +387,7 @@ def plan_key(lock, name, places):
      skills = lock["skills"]
      mine = set(places)
      for key, rec in skills.items():
@@ -18,18 +18,20 @@ test_a_dead_record_never_blocks_and_is_replaced (tests.test_add.RecordsKnowWhere
 test_a_folder_with_no_record_is_named_and_the_date_is_dropped_when_missing (tests.test_add.RecordsKnowWhereTheyAre) ... ok
 test_a_live_record_blocks_with_a_refusal_that_names_what_is_in_the_way (tests.test_add.RecordsKnowWhereTheyAre) ... ok
 test_a_record_that_turns_up_during_the_dialog_is_refused_in_the_same_words (tests.test_add.RecordsKnowWhereTheyAre) ... ok
+test_a_record_whose_paths_vanish_during_the_check_is_no_blocker (tests.test_add.RecordsKnowWhereTheyAre) ... ok
 test_nothing_the_tool_says_points_to_a_command_it_does_not_have (tests.test_add.RecordsKnowWhereTheyAre) ... ok
 test_the_same_name_in_other_places_is_recorded_under_a_second_key (tests.test_add.RecordsKnowWhereTheyAre) ... FAIL
 test_a_dead_record_never_blocks_and_is_replaced (tests.test_install.RecordsKnowWhereTheyAre) ... ok
 test_a_folder_with_no_record_is_named (tests.test_install.RecordsKnowWhereTheyAre) ... ok
 test_a_live_record_blocks_with_a_refusal_that_names_what_is_in_the_way (tests.test_install.RecordsKnowWhereTheyAre) ... ok
 test_a_project_install_and_a_global_install_of_one_name_both_succeed_in_either_order (tests.test_install.RecordsKnowWhereTheyAre) ... test_a_record_that_turns_up_during_the_dialog_is_refused_in_the_same_words (tests.test_install.RecordsKnowWhereTheyAre) ... ok
+test_the_checked_name_decides_not_the_staged_folder_name (tests.test_install.RecordsKnowWhereTheyAre) ... ok
 
 ======================================================================
 FAIL: test_the_same_name_in_other_places_is_recorded_under_a_second_key (tests.test_add.RecordsKnowWhereTheyAre)
 ----------------------------------------------------------------------
 Traceback (most recent call last):
-  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_add.py", line 447, in test_the_same_name_in_other_places_is_recorded_under_a_second_key
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/plain-flags-build/tests/test_add.py", line 459, in test_the_same_name_in_other_places_is_recorded_under_a_second_key
     self.assertEqual(result["outcome"], "installed")
 AssertionError: 'not_installed' != 'installed'
 - not_installed
@@ -78,20 +80,19 @@ First differing element 0:
 ?              ++++
 
 -  ['A skill named helper is already installed at '
--   '/private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-install-z0c_p02j/project/.agents/skills/helper '
+-   '/private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-install-8aj0sru0/project/.agents/skills/helper '
 -   'and '
--   '/private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-install-z0c_p02j/project/.claude/skills/helper '
+-   '/private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-install-8aj0sru0/project/.claude/skills/helper '
 -   '(recorded 2026-10-06). Nothing was installed. To replace it, remove those '
 -   'folders and run this again.'])
 
 ----------------------------------------------------------------------
-Ran 11 tests in 0.976s
+Ran 13 tests in 2.101s
 
 FAILED (failures=3)
 
-
 --- after reverting (git checkout -- canary/add.py): exit 0 ---
 ----------------------------------------------------------------------
-Ran 11 tests in 0.989s
+Ran 13 tests in 5.176s
 
 OK
