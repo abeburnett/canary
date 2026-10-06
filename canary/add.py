@@ -464,16 +464,21 @@ def dialog_text(summary):
         source = "a folder on this Mac"
     verdict = {"LIKELY_SAFE": "no problems found",
                "NEEDS_REVIEW": "needs your judgment"}.get(summary["verdict"], summary["verdict"])
-    lines = [f"SkillCanary checked this skill: {verdict}.", ""]
+    blocks = [[f"SkillCanary checked this skill: {verdict}."]]
+    if summary.get("headline"):
+        blocks.append([summary["headline"]])
     can = sorted({PLAIN[k] for k in summary["capabilities"] if k in PLAIN})
     if can:
-        lines += ["What it can do:"] + [f"- It {c}." for c in can] + [""]
+        blocks.append(["What it can do:"] + [f"- It {c}." for c in can])
     other = [r for r in summary["reasons"] if not r.startswith("Runs code or grants tools")]
-    lines += [f"- {r}" for r in other]
-    lines += ["", f"From the link: {source}", f"Installs as: {summary['name']}",
-              f"Into: {hosts}", "",
-              "The source and name come from the link and package, not from SkillCanary."]
-    return "\n".join(lines)
+    if other:
+        blocks.append([f"- {r}" for r in other])
+    if summary.get("next_steps"):
+        blocks.append(["What you can do:"] + [f"- {s}" for s in summary["next_steps"]])
+    blocks.append([f"From the link: {source}", f"Installs as: {summary['name']}",
+                   f"Into: {hosts}"])
+    blocks.append(["The source and name come from the link and package, not from SkillCanary."])
+    return "\n\n".join("\n".join(b) for b in blocks)
 
 
 DIALOG_SCRIPT = """on run argv
@@ -583,7 +588,8 @@ def add(source, *, home=None, support_dir=None, approve=None, fetch=None,
         verdict, reasons = result["verdict"], result["reasons"]
         out = {"schema": "canary.add/1", "outcome": None, "verdict": verdict, "name": name,
                "source": {"owner": owner, "repo": repo, "commit": commit},
-               "installed": [], "reasons": list(reasons)}
+               "installed": [], "reasons": list(reasons),
+               "headline": result["headline"], "next_steps": result["next_steps"]}
         if verdict == "UNSAFE":
             out["outcome"] = "refused"
             out["reasons"].append("Not installed: SkillCanary judged it unsafe.")
@@ -614,7 +620,8 @@ def add(source, *, home=None, support_dir=None, approve=None, fetch=None,
 
         summary = {"verdict": verdict, "reasons": reasons, "name": name, "owner": owner,
                    "capabilities": sorted({c["kind"] for c in result["scan"]["capabilities"]}),
-                   "repo": repo, "commit": commit, "hosts": hosts, "_snapshot": snapshot}
+                   "repo": repo, "commit": commit, "hosts": hosts, "_snapshot": snapshot,
+                   "headline": result["headline"], "next_steps": result["next_steps"]}
         answer = approve(summary)
         if answer is not True:
             out["outcome"] = "declined" if answer is False else "not_installed"

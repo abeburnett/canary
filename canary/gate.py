@@ -47,6 +47,19 @@ WATCHER = ("That is SkillCanary's watcher, which holds skills that arrive withou
 # The watcher's label or launch-agent file named in a shell command (decision
 # 10): as with installer words, a command that only mentions it is denied too.
 WATCHER_TEXT = re.compile(r"com\.skillcanary\.watcher", re.I)
+# The skill's own text is for the person's terminal (program 2026-10-06). The
+# hook denies these by name, before the allowance for `canary` commands, and a
+# command that only mentions them is denied too, like an installer. Both are
+# case-sensitive. An agent that runs Canary's Python directly, or builds the
+# command from pieces, gets past this; `canary explain` also refuses to run
+# without a terminal.
+EXPLAIN_TEXT = re.compile(r"\bcanary\s+explain\b")
+EXCERPTS_TEXT = re.compile(r"--excerpts\b")
+CANARY_WORD = re.compile(r"\bcanary\b")
+OWN_TEXT = ("{what} shows the skill's own text, which is for the person, not an agent. Give "
+            "the person this command to run in their own terminal: canary explain {arguments}")
+KNOWN_FLAGS = {"--json", "--text", "--excerpts"}
+KNOWN_VALUE_FLAGS = {"--backend", "--model", "--timeout", "--exclude"}
 UNREADABLE = ("SkillCanary could not check this tool call, so it is blocked. "
               "If it is harmless, ask the person to run it in their own terminal.")
 
@@ -143,11 +156,53 @@ def _is_canary(command, canary_bin):
     return st.st_uid == 0 and not st.st_mode & 0o022
 
 
+def _own_text_arguments(command):
+    """The one link or folder in a plain `canary explain|scan|check ...`
+    command, quoted for the shell; otherwise a placeholder."""
+    placeholder = "<link or folder>"
+    if any(c in SHELL_SYNTAX or c in installers.COMPOUND for c in command):
+        return placeholder
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return placeholder
+    if (len(tokens) < 3 or not (tokens[0] == "canary" or tokens[0].endswith("/canary"))
+            or tokens[1] not in ("explain", "scan", "check")):
+        return placeholder
+    arguments, i = [], 2
+    while i < len(tokens):
+        if tokens[i] in KNOWN_FLAGS:
+            i += 1
+        elif tokens[i] in KNOWN_VALUE_FLAGS and i + 1 < len(tokens):
+            i += 2
+        elif tokens[i].startswith("-"):
+            return placeholder
+        else:
+            arguments.append(tokens[i])
+            i += 1
+    return shlex.quote(arguments[0]) if len(arguments) == 1 else placeholder
+
+
+def _own_text(command):
+    """A deny reason when the command asks for the skill's own text."""
+    text = installers.tidy(command)
+    if EXPLAIN_TEXT.search(text):
+        what = "canary explain"
+    elif CANARY_WORD.search(text) and EXCERPTS_TEXT.search(text):
+        what = "--excerpts"
+    else:
+        return None
+    return OWN_TEXT.format(what=what, arguments=_own_text_arguments(command))
+
+
 def decide(call, home, roots, canary_bin=None, can_rewrite=False):
     """A deny reason, None to allow, or a Rewrite (only when the host can
     rewrite a command). Any internal error denies."""
     try:
         if call.tool_name in SHELL_TOOLS and isinstance(call.command, str):
+            own_text = _own_text(call.command)
+            if own_text:
+                return own_text
             if _is_canary(call.command, canary_bin):
                 return None
             in_skills = lambda p: any(_skill_folder(c, roots) for c in

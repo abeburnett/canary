@@ -16,6 +16,8 @@ USAGE = ("usage: canary scan <skill-file-or-directory> [--json | --text] [--exce
          "       canary check <skill-file-or-directory> [--json | --text] [--excerpts]"
          " [--backend auto|claude|anthropic_api|openai_api|none] [--model <id>]"
          " [--timeout <seconds>]\n"
+         "       canary explain <github-link-or-folder> [--backend <name>] [--model <id>]"
+         " [--timeout <seconds>]\n"
          "       canary add <github-link-or-folder> [--host claude|codex]... [--json | --text]"
          " [--backend <name>] [--model <id>] [--timeout <seconds>]\n"
          "       canary install [--json | --text] [--backend <name>] [--model <id>]"
@@ -29,7 +31,25 @@ USAGE = ("usage: canary scan <skill-file-or-directory> [--json | --text] [--exce
 VALUE_FLAGS = {"--backend", "--model", "--timeout"}
 
 
+def _stdout_is_terminal():
+    return sys.stdout.isatty()
+
+
+def _needs_terminal(command):
+    """True (after saying so) when `command` would show the skill's own text
+    but this output is not a person's terminal. An agent's shell is not one,
+    and nothing skips this check."""
+    if _stdout_is_terminal():
+        return False
+    what = "canary explain" if command == "explain" else f"canary {command} --excerpts"
+    print(f"{what} shows the skill's own text, so it runs only in your own terminal.",
+          file=sys.stderr)
+    return True
+
+
 def _scan(args):
+    if "--excerpts" in args and _needs_terminal("scan"):
+        return EXIT_USAGE
     exclude, rest, i = [], [], 0
     while i < len(args):
         if args[i] == "--exclude" and i + 1 < len(args):
@@ -58,6 +78,8 @@ def _scan(args):
 
 
 def _check(args):
+    if "--excerpts" in args and _needs_terminal("check"):
+        return EXIT_USAGE
     values, rest, i = {}, [], 0
     while i < len(args):
         if args[i] in VALUE_FLAGS:
@@ -91,6 +113,44 @@ def _check(args):
         print(classify.render_text(result))
     else:
         print(json.dumps(result, indent=2))
+    return EXIT_FOR_VERDICT[result["verdict"]]
+
+
+def _explain(args):
+    """`canary explain <link-or-folder>`: what Canary found, with the skill's
+    own text, for the person's terminal only."""
+    if _needs_terminal("explain"):
+        return EXIT_USAGE
+    values, rest, i = {}, [], 0
+    while i < len(args):
+        if args[i] in VALUE_FLAGS:
+            if i + 1 >= len(args) or args[i] in values:
+                print(USAGE, file=sys.stderr)
+                return EXIT_USAGE
+            values[args[i]] = args[i + 1]
+            i += 2
+            continue
+        rest.append(args[i])
+        i += 1
+    sources = [a for a in rest if not a.startswith("-")]
+    backend = values.get("--backend", "auto")
+    try:
+        timeout = float(values.get("--timeout", classify.DEFAULT_TIMEOUT_S))
+    except ValueError:
+        timeout = -1
+    if (len(sources) != 1 or len(sources) != len(rest) or not math.isfinite(timeout)
+            or timeout <= 0
+            or backend not in ("auto", "claude", "anthropic_api", "openai_api", "none")):
+        print(USAGE, file=sys.stderr)
+        return EXIT_USAGE
+    from canary import explain
+    try:
+        result = explain.run(sources[0], backend=backend, model=values.get("--model"),
+                             timeout_s=timeout)
+    except (add.SourceError, scan.PathError) as exc:
+        print(f"canary: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    print(explain.render(result))
     return EXIT_FOR_VERDICT[result["verdict"]]
 
 
@@ -382,6 +442,8 @@ def main(argv):
             return _scan(rest)
         if command == "check":
             return _check(rest)
+        if command == "explain":
+            return _explain(rest)
         if command == "add":
             return _add(rest)
         if command == "install":

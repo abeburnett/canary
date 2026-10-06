@@ -127,6 +127,15 @@ CONFUSABLES = str.maketrans({
 })
 WORD = re.compile(r"[^\W\d_]+")
 
+# Context labels (program 2026-10-06, owner decision 1). A label only tells the
+# reader where a finding sits; it never changes a severity, score or verdict,
+# because an attacker could wrap a real payload in a code block or a "never do
+# this:" line.
+FENCE_OPEN = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+FORBIDDING = re.compile(
+    r"\b(never|do not|don't|must not|should not|refuse to|reject|watch for|look out for"
+    r"|beware of)\b")
+
 
 class PathError(Exception):
     pass
@@ -491,6 +500,34 @@ def _obfuscation(rel, text):
     return findings
 
 
+def _code_lines(raw_lines):
+    """The line numbers inside fenced code blocks, decided on the raw lines.
+    An opening fence is up to three spaces, then three or more backticks or
+    tildes; the block closes at the next line of up to three spaces, at least
+    as many of the same character, and only whitespace. An unclosed block runs
+    to the end. The fence lines themselves are outside."""
+    inside, closer = set(), None
+    for n, line in enumerate(raw_lines, start=1):
+        if closer is None:
+            m = FENCE_OPEN.match(line)
+            if m:
+                closer = re.compile(" {0,3}" + re.escape(m.group(1)[0]) + "{"
+                                    + str(len(m.group(1))) + r",}\s*")
+        elif closer.fullmatch(line):
+            closer = None
+        else:
+            inside.add(n)
+    return inside
+
+
+def _context(line_no, code, raw_lines):
+    if line_no in code:
+        return "code_example"
+    if 1 <= line_no <= len(raw_lines) and FORBIDDING.search(normalize(raw_lines[line_no - 1]).lower()):
+        return "forbidding"
+    return None
+
+
 def _findings(rel, text):
     findings = _obfuscation(rel, text)
     seen = set()
@@ -507,6 +544,9 @@ def _findings(rel, text):
             if not any((f["check_id"], n) in seen for n in range(start, end + 1)):
                 seen.add((f["check_id"], start))
                 findings.append(f)
+    code = _code_lines(raw_lines)
+    for f in findings:
+        f["context"] = _context(f["line"], code, raw_lines)
     return findings
 
 
@@ -670,13 +710,15 @@ def render_text(result):
            f"Verdict: {result['verdict']}  (threat {result['threat_verdict']}, score {result['score']}; "
            f"{result['coverage']['files_scanned']}/{result['coverage']['files_total']} entries read)"]
     out += [f"  - {r}" for r in result["reasons"]]
+    from canary import explain
     for c in result["capabilities"]:
         out.append(f"  [CODE  ] {c['kind']} {where(c)}" + (f":{c['line']}" if c["line"] else ""))
     for s in result["coverage"]["skipped"]:
         out.append(f"  [SKIP  ] {s['reason']} {where(s)}")
     for f in result["findings"]:
         out.append(f"  [{f['severity'].upper():6}] {f['category']} {where(f)}:{f['line']}"
-                   + (f"  {f['excerpt']!r}" if "excerpt" in f else ""))
+                   + (f"  {f['excerpt']!r}" if "excerpt" in f else "")
+                   + (f" [{explain.CONTEXT_TAG[f['context']]}]" if f.get("context") else ""))
     if items and not revealed:
         out.append("  File names and excerpts are hidden. Run with --excerpts in your own terminal to see them.")
     return "\n".join(out)

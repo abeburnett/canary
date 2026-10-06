@@ -24,7 +24,7 @@ import stat
 import subprocess
 import time
 
-from canary import add, classify, guestlist, installers
+from canary import add, classify, explain, guestlist, installers
 
 INSTALLER_SECONDS = 600
 CHECK_WORKERS = 4
@@ -38,7 +38,7 @@ class InstallError(Exception):
 
 def _result(kind_, argv):
     return {"schema": "canary.install/1", "outcome": None, "verdict": None, "kind": kind_,
-            "skills": [], "installed": [], "reasons": []}
+            "skills": [], "installed": [], "reasons": [], "next_steps": []}
 
 
 def _env(stage_home, real_home, extra=None):
@@ -120,9 +120,10 @@ def _landed(stage_root):
 
 
 def _check_all(snapshots, backend, model, timeout_s, log_dir):
-    """classify.check each snapshot, a few at a time (one model call each)."""
+    """classify._check each snapshot, a few at a time (one model call each):
+    a (result, confident) pair for each."""
     with concurrent.futures.ThreadPoolExecutor(max_workers=CHECK_WORKERS) as pool:
-        futures = [pool.submit(classify.check, s, backend=backend, model=model,
+        futures = [pool.submit(classify._check, s, backend=backend, model=model,
                                timeout_s=timeout_s, log_dir=log_dir) for s in snapshots]
         return [f.result() for f in futures]
 
@@ -146,6 +147,11 @@ def dialog_text(command, items, verdict):
         lines.append(f"- {it['name']}{mark}")
         can = sorted({add.PLAIN[k] for k in it["capabilities"] if k in add.PLAIN})
         lines += [f"    It {c}." for c in can]
+        if it["verdict"] != "LIKELY_SAFE" and it.get("headline"):
+            lines.append(f"    {it['headline']}")
+    steps = list(dict.fromkeys(s for it in items for s in it.get("steps", [])))
+    if steps:
+        lines += ["", "What you can do:"] + [f"- {s}" for s in steps]
     places = sorted({_short(os.path.dirname(it["destination"]), os.path.expanduser("~"))
                      for it in items if it.get("destination")})
     if places:
@@ -236,13 +242,17 @@ def _snapshot_and_check(folders, run_dir, out, backend, model, timeout_s, suppor
             return None
     results = _check_all([it["snapshot"] for it in items], backend, model, timeout_s,
                          os.path.join(support_dir, "logs"))
-    for it, result in zip(items, results):
+    for it, (result, confident) in zip(items, results):
         it["verdict"] = result["verdict"]
+        it["headline"] = result["headline"]
+        it["steps"] = explain.next_steps(result, confident, "install")
         it["reasons"] = result["reasons"]
         it["capabilities"] = sorted({c["kind"] for c in result["scan"]["capabilities"]})
         it["package_digest"] = result["package_digest"]
     out["verdict"] = max((it["verdict"] for it in items), key=WORST.get)
-    out["skills"] = [{"name": it["name"], "verdict": it["verdict"]} for it in items]
+    out["skills"] = [{"name": it["name"], "verdict": it["verdict"], "headline": it["headline"]}
+                     for it in items]
+    out["next_steps"] = list(dict.fromkeys(s for it in items for s in it["steps"]))
     for it in items:
         out["reasons"] += [f"{it['name']}: {r}" for r in it["reasons"]]
     return items
@@ -466,7 +476,8 @@ def _plugin(parsed, home, cwd, support_dir, run_dir, run_id, log_path, out, appr
                                 name=plugin_id)
     if items is None:
         return out
-    out["skills"] = [{"name": plugin_id, "verdict": items[0]["verdict"]}]
+    out["skills"] = [{"name": plugin_id, "verdict": items[0]["verdict"],
+                      "headline": items[0]["headline"]}]
     if out["verdict"] == "UNSAFE":
         out["outcome"] = "refused"
         out["reasons"].append("Not installed: SkillCanary judged it unsafe.")

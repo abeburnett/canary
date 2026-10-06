@@ -274,6 +274,16 @@ class SetupTeachesAgentsAboutSkillCanary(unittest.TestCase):
         with open(os.path.join(root, "skills", "canary", "SKILL.md")) as fh:
             self.assertEqual(fh.read(), frontdoor.SKILL_TEXT)
 
+    def test_the_skill_tells_agents_to_relay_the_plain_judgment_and_keep_explain_for_the_person(self):
+        from canary import frontdoor
+        text = " ".join(frontdoor.SKILL_TEXT.split())
+        for phrase in (
+                "relay the headline first, then the reasons and the steps",
+                "explain (for the person only: never run canary explain or --excerpts yourself; "
+                "give the person the command to run in their own terminal)",
+                "canary doctor --prune"):
+            self.assertIn(phrase, text)
+
     def test_the_privileged_step_never_writes_the_skill(self):
         mac = Mac()
         mac.setup("guard")

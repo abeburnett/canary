@@ -61,7 +61,8 @@ Exit codes (every Canary command uses these):
   },
   "capabilities": [{"kind": "…", "path_id": "f:…", "line": 12}],
   "findings": [{"check_id": "…", "category": "…", "severity": "high|medium|low|info",
-                "path_id": "f:…", "line": 5, "excerpt_sha256": "…"}],
+                "path_id": "f:…", "line": 5, "excerpt_sha256": "…",
+                "context": "code_example | forbidding | null"}],
   "reasons": ["plain-language reason for the verdict"]
 }
 ```
@@ -82,10 +83,28 @@ Rules the verdict follows:
   parses (PNG chunk CRCs, JPEG segments, GIF blocks, WebP and WOFF lengths);
   anything that decodes as text is scanned as text, and PDFs and other
   binaries are incomplete coverage.
+- Every finding carries `context`, a fixed value Canary computes (so it is in
+  agent output too): `code_example` when the finding's line is inside a fenced
+  code block of the same file (decided on the raw lines: an opening fence is up
+  to three spaces then three or more backticks or tildes; the block closes at
+  the next line of up to three spaces, at least as many of the same character
+  and only whitespace; an unclosed block runs to the end; fence lines are
+  outside; a split-phrase finding uses its start line); else `forbidding` when
+  the line, after `scan.normalize` and lowercasing, has one of never, do not,
+  don't, must not, should not, refuse to, reject, watch for, look out for,
+  beware of; else `null`. **A context is a label only (owner decision,
+  2026-10-06): it never changes a severity, score or verdict, and the rule
+  from program 2026-09-26 stands: attack patterns are never dampened,
+  because an attacker could wrap a real payload in a code block or a "never
+  do this:" line.** `canary scan --text` ends such a finding line with
+  `[code example]` or `[warns against it]`.
 - Attacker-controlled text stays out of default output: no excerpts, and file
   names and the target path appear only as opaque `path_id` / `target_id`
   values. `--excerpts` adds `path`, `excerpt` and `target` fields and is for a
-  person's terminal, never an agent.
+  person's terminal, never an agent: the CLI refuses it (also on `canary
+  check`) when standard output is not a terminal, with exit 2 and `canary
+  <command> --excerpts shows the skill's own text, so it runs only in your own
+  terminal.`, before any scan; no flag or environment variable skips this.
 - `--exclude` names paths, relative to a directory target, that are scanned as
   separate packages (the Action uses it to scan files outside skill folders).
 
@@ -202,7 +221,21 @@ Decision rules (`canary/gate.py`, `decide`), in order:
    checks it as given and as resolved, so a link into a skills folder, or a
    link inside one that leads elsewhere, counts. Editing a skill that has a
    `SKILL.md` is allowed. A Codex patch the adapter cannot read is denied.
-5. SkillCanary's record: a file tool writing inside the support folder
+5. The skill's own text: a shell command whose tidied text matches `\bcanary\s+explain\b`,
+   or contains both `\bcanary\b` and `--excerpts\b` (case-sensitive), is denied
+   before rule 2's allowance, with `canary explain shows the skill's own
+   text, which is for the person, not an agent. Give the person this command
+   to run in their own terminal: canary explain <arguments>` (the `--excerpts`
+   form starts with `--excerpts`). `<arguments>` is the one link or folder
+   when the original command is a plain `canary explain|scan|check` with known
+   flags and no shell syntax, quoted with `shlex.quote`; else `<link or
+   folder>`. As with installers, a command that only mentions them
+   (`git log --grep="canary explain"`) is denied too. Accepted limit: an
+   agent that runs Canary's Python code directly, or assembles the command
+   from pieces, gets past both this rule and the terminal check; the terminal
+   check stops an agent's ordinary shell, and the hook stops the command by
+   name.
+5b. SkillCanary's record: a file tool writing inside the support folder
    (`~/Library/Application Support/Canary`, outside the quarantine) or to
    the lockfile (`~/.agents/.canary-lock.json`) is denied, "canary trust
    and canary add change it". Reading them is allowed.
@@ -341,9 +374,32 @@ a valid answer for any reason (`unavailable`, `too_large`, `failed`,
                   "evidence_sha256": "…"}],
     "log_id": "…"
   },
-  "reasons": ["plain-language reason for the verdict"]
+  "reasons": ["plain-language reason for the verdict"],
+  "headline": "one sentence leading with the combined judgment",
+  "next_steps": ["what the person can do, one step per reason for review"]
 }
 ```
+
+`headline` and `next_steps` (`canary/explain.py`, all Canary's own text, no
+package or model text) come from the structured result, never from parsing
+reason strings. The headline, first match wins: `UNSAFE` from the AI review
+(plus the pattern labels when there are scored findings); `UNSAFE` from the
+pattern scan; `No problems found: the pattern scan and the AI review both
+passed it.`; the AI review judged it safe with confidence of at least 0.7,
+coverage is complete, nothing runs code and only the patterns raised the
+verdict (`The AI review judged this skill safe (0.93). The pattern scan
+flagged <labels> for you to look at.`); otherwise `This skill needs your
+judgment.` Labels are the plain names of the checks with a scored finding.
+`next_steps` has one step for each reason that keeps the verdict at
+`NEEDS_REVIEW` (pattern hits, incomplete scan, nothing to scan, runs code,
+classifier unavailable, too large, failed or invalid, asked for review or not
+confident), in reason order and without repeats, and is empty for any other
+verdict. `canary install` words four of them differently for its dialog
+(`flow` "install": the person must choose Cancel before looking). The
+`confident` decision stays out of the output. `--text` prints the headline
+after `Verdict:` and the steps under `What you can do:` after the classifier
+lines. A test keeps `explain.RULES` in step with the catalog, so a new check
+cannot ship without its text.
 
 The model's `evidence`, `reasoning`, `summary` and own category wording are
 attacker-influenced, so they appear only with `--excerpts` (as `evidence`,
@@ -354,6 +410,22 @@ list (`instruction_override`, `approval_bypass`, `exfiltration`,
 `obfuscation`, `remote_code_execution`, `social_engineering`), and `other`
 for anything else. Validation rejects duplicate keys, `NaN` and `Infinity`,
 and compares confidence as an exact decimal.
+
+## `canary explain <github-link-or-folder> [--backend <name>] [--model <id>] [--timeout <seconds>]`
+
+What Canary found, in plain words, with the skill's own text, for the person
+(`canary/explain.py`; program 2026-10-06). Text only. It refuses unless
+standard output is a terminal (`canary explain shows the skill's own text, so
+it runs only in your own terminal.`, exit 2, before any fetch or scan); an
+unknown option, including `--json`, `--text` and `--excerpts`, is a usage
+error. A GitHub link is fetched and extracted by `canary add`'s own code into
+`quarantine/explain-<run id>` under the support folder (mode 0700, removed
+afterwards); a folder is checked in place. It runs `canary check` with
+excerpts and prints, each section omitted when empty: the verdict and
+headline; for each scored check its label, what it looks for, why it matters
+and each finding as `<path>:<line>  <excerpt>` with its context sentence;
+`What it can do:`; `Not read:`; `AI review:` with its status, verdict,
+findings and summary; `What you can do:`. Exit codes match `canary check`.
 
 ## `canary evidence <skill-folder>`
 
@@ -395,7 +467,8 @@ Steps:
    read-only, and the rest is deleted.
 2. `canary check` on that snapshot.
 3. `UNSAFE`: nothing is installed and nobody is asked. Otherwise the dialog
-   asks the person. It shows Canary's verdict and reasons, the source as
+   asks the person. It shows Canary's verdict, the headline, the capabilities
+   and reasons, `What you can do:` with the steps, the source as
    `owner/repo` at a short commit, and the installed name, with every
    package-supplied string labelled as such; never the package's description
    or excerpts, which an attacker writes. `NEEDS_REVIEW` defaults to Cancel.
@@ -444,7 +517,9 @@ Output (schema `canary.add/1`, all the agent receives):
   "name": "sanitized-name",
   "source": {"owner": "…", "repo": "…", "commit": "40-hex"},
   "installed": ["~/.claude/skills/<name>"],
-  "reasons": ["Canary's own reasons, no package text"]
+  "reasons": ["Canary's own reasons, no package text"],
+  "headline": "…",
+  "next_steps": ["…"]
 }
 ```
 
@@ -619,7 +694,9 @@ installs nothing and says where (the guest list then reports it). Every folder h
 root is copied without links into a snapshot (a link or special file
 refuses the whole install), named, and checked with `canary check`'s two
 layers, four at a time; each skill costs one classifier call. The person
-sees one dialog for everything the command adds. On approval, under `canary
+sees one dialog for everything the command adds: under each skill that is not
+`LIKELY_SAFE` its headline, then `What you can do:` with the union of the
+steps; still no reasons, excerpts, file names or model text. On approval, under `canary
 add`'s commit lock, each snapshot is copied to the same place under the real
 home or the real working folder and confirmed byte for byte, the links the
 installer made between those skills (for example `.claude/skills/<name>` to
@@ -645,8 +722,9 @@ marketplace add runs as given: it installs nothing an agent loads.
 
 Result: `{"schema": "canary.install/1", "outcome": "installed" | "declined" |
 "not_installed" | "refused" | "done", "verdict", "kind": "skills" | "plugin"
-| "marketplace", "skills": [{"name", "verdict"}], "installed": [...],
-"reasons": [...]}`, with `canary add`'s exit codes (`done` is 0).
+| "marketplace", "skills": [{"name", "verdict", "headline"}], "installed":
+[...], "reasons": [...], "next_steps": [...]}` (`next_steps` is the union of
+the skills' install-flow steps, in order), with `canary add`'s exit codes (`done` is 0).
 
 Limits: the installer runs as the person; staging changes where it writes
 by default, not where it can write. A write into a skills folder during the
