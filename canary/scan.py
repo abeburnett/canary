@@ -699,6 +699,23 @@ def scan_package(target, excerpts=False, exclude=(), texts=None):
     return result
 
 
+def terminal_safe(text):
+    """Text from a package or a model as it may reach a person's terminal:
+    every control character (C0, DEL, C1), format character (bidirectional
+    controls, zero-width, tag characters) and line or paragraph separator
+    becomes a visible escape, so it cannot move the cursor, clear the screen,
+    open a link or reorder what is read."""
+    out = []
+    for ch in str(text):
+        if unicodedata.category(ch) in ("Cc", "Cf", "Zl", "Zp", "Cs", "Co", "Cn"):
+            n = ord(ch)
+            out.append(f"\\x{n:02x}" if n < 0x100 else f"\\u{n:04x}" if n < 0x10000
+                       else f"\\U{n:08x}")
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
 def render_text(result):
     items = result["capabilities"] + result["coverage"]["skipped"] + result["findings"]
     revealed = any("path" in i for i in items)

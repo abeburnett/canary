@@ -220,7 +220,7 @@ def render(result):
         label, looks_for, why = RULES[check_id]
         lines = [label, f"  What it looks for: {looks_for}", f"  Why it matters: {why}"]
         for f in mine:
-            lines.append(f"  {f['path']}:{f['line']}  {f['excerpt']!r}")
+            lines.append(f"  {scan.terminal_safe(f['path'])}:{f['line']}  {f['excerpt']!r}")
             if f.get("context"):
                 lines.append(f"    {CONTEXT[f['context']]}")
         sections.append(lines)
@@ -231,7 +231,7 @@ def render(result):
         sections.append(["What it can do:"] + _bullets(f"It {c}." for c in can))
     skipped = result["scan"]["coverage"]["skipped"]
     if skipped:
-        sections.append(["Not read:"] + _bullets(f"{s['path']} ({s['reason']})" for s in skipped))
+        sections.append(["Not read:"] + _bullets(f"{scan.terminal_safe(s['path'])} ({s['reason']})" for s in skipped))
     c = result["classifier"]
     review = f"AI review: {c['status']}"
     if c["status"] == "ok":
@@ -239,9 +239,10 @@ def render(result):
     lines = [review]
     for f in c["findings"]:
         lines.append(f"  [{f['severity'].upper():6}] {f['category']}"
-                     + (f"  {f['evidence']!r}: {f['reasoning']}" if "evidence" in f else ""))
+                     + (f"  {f['evidence']!r}: {scan.terminal_safe(f['reasoning'])}"
+                    if "evidence" in f else ""))
     if "summary" in c:
-        lines.append(f"  Summary: {c['summary']}")
+        lines.append(f"  Summary: {scan.terminal_safe(c['summary'])}")
     sections.append(lines)
     if result["next_steps"]:
         sections.append(["What you can do:"] + _bullets(result["next_steps"]))

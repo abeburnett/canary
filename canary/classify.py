@@ -303,9 +303,10 @@ def render_text(result):
     lines.append(layer2)
     for f in c["findings"]:
         lines.append(f"  [{f['severity'].upper():6}] {f['category']}"
-                     + (f"  {f['evidence']!r}: {f['reasoning']}" if "evidence" in f else ""))
+                     + (f"  {f['evidence']!r}: {scan.terminal_safe(f['reasoning'])}"
+                    if "evidence" in f else ""))
     if "summary" in c:
-        lines.append(f"  Summary: {c['summary']}")
+        lines.append(f"  Summary: {scan.terminal_safe(c['summary'])}")
     if result["next_steps"]:
         lines.append("What you can do:")
         lines += [f"  - {step}" for step in result["next_steps"]]
