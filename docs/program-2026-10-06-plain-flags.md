@@ -358,6 +358,96 @@ the terminal rule for `explain` and `--excerpts`, the hook rule and its
 accepted limit; and the new REDIRECT sentence. `scanner/references/checks.md`
 notes the labels and that the no-dampening rule is unchanged.
 
+## Refutation round 2 rulings
+
+Spark round 2 (2026-10-06) checked the fold. These rulings are senior to the
+design text above wherever they differ.
+
+1. **Keys, complete.** Compute the new install's places with the same rule
+   as a record's: for each destination (for `canary add`, each host
+   destination; for `canary install`, every path in `taken`, folders and
+   links), `os.path.realpath(os.path.dirname(path))`. Then, in order: if any
+   live skill record with the same name shares a place, it is a conflict
+   (this covers a live record under the bare key in the same places); else
+   if the bare-name key is free or holds a dead record, use the bare name
+   (replacing it); else use the hashed key
+   `name + "@" + sha256("\n".join(sorted(places)).encode("utf-8")).hexdigest()[:12]`,
+   replacing a dead record there too. Both the check before the dialog
+   (`add.py:511`) and the checks inside the commit lock (`add.py:547`,
+   `install.py:314`) use this rule and the same refusal strings.
+2. **Malformed records.** A record whose `installed` is not a list, or that
+   contains anything other than non-empty strings, is dead for conflicts,
+   is listed by `old_records` with `installed` as `[]`, and is prunable. A
+   record value that is not a dict is treated the same way. Nothing in this
+   program raises on a malformed record.
+3. **Install-flow steps.** For `flow == "install"`, every step that mentions
+   `canary explain` uses these exact texts instead:
+   - pattern hits: `To look at the flagged lines first, choose Cancel, then run canary explain on the skill's GitHub link (for npx skills add owner/repo, that is https://github.com/owner/repo) or folder in your own terminal. Install it if they are only documentation; skip it if they tell the agent to do something you did not ask for.`
+   - classifier too large: `The AI review reads only skills under 256 KB. To look at the flagged lines, choose Cancel and run canary explain on the skill's GitHub link or folder in your own terminal, or install it only if you trust where it came from.`
+   - classifier failed or invalid: `Try the install again. If the AI review keeps failing, choose Cancel and run canary explain on the skill's GitHub link or folder in your own terminal.`
+   - classifier asked for review, or not confident: `The AI review wants a person to look. Choose Cancel and run canary explain on the skill's GitHub link or folder in your own terminal to see what it noticed.`
+   The other families use the same text in both flows. `install.py` keeps
+   each item's `confident` decision from its check (the same `Decimal` rule
+   as `classify`), so it can call `explain.next_steps(result, confident,
+   "install")`. `classify` exposes `confident` to callers without adding it
+   to the JSON output (for example a private `_check(...) -> (result,
+   confident)` that `check` wraps).
+4. **Terminal refusals, exact.** `canary scan --excerpts shows the skill's own
+   text, so it runs only in your own terminal.`, the same with `canary check
+   --excerpts`, and `canary explain shows the skill's own text, so it runs
+   only in your own terminal.` Unknown flags on `explain` (including
+   `--json`, `--text` and `--excerpts`) print usage and exit 2; the terminal
+   check comes first.
+5. **Hook messages, exact.** For a command matching the explain pattern:
+   `canary explain shows the skill's own text, which is for the person, not
+   an agent. Give the person this command to run in their own terminal:
+   canary explain <arguments>`. For the `--excerpts` pattern: `--excerpts
+   shows the skill's own text, which is for the person, not an agent. Give
+   the person this command to run in their own terminal: canary explain
+   <arguments>`. `<arguments>` is filled only when the original command
+   (not `tidy()` output) contains none of `gate.SHELL_SYNTAX` or
+   `installers.COMPOUND`, `shlex.split` succeeds, and the tokens are
+   `canary` (or a path ending in `/canary`), then `explain`, `scan` or
+   `check`, then exactly one argument that does not start with `-` plus only
+   known flags; it is that one argument, quoted with `shlex.quote`.
+   Otherwise it is the literal `<link or folder>`. Both patterns are
+   case-sensitive. A command that only mentions them, such as
+   `git log --grep="canary explain"`, is denied, like the installer rule;
+   `docs/architecture.md` records this.
+6. **`classify.render_text` order:** `Canary check: …`, `Verdict: …`, the
+   headline, the reasons, the `Classifier:` line and its findings and
+   summary, then `What you can do:` and the steps as `  - ` lines, then a
+   blank line and the scan block.
+7. **`canary explain` details:** section 3 lists only capabilities with
+   `add.PLAIN` text (as the dialogs do); section 5 prints the summary as
+   `  Summary: <summary>`; every bullet in explain uses `- ` at the section's
+   indent.
+8. **Doctor wiring.** `cli._doctor` calls `setup.doctor()` unchanged, then
+   `setup.old_records(home)` with `home = os.path.expanduser("~")`.
+   `setup.old_records(home=None)` and `setup.prune_records(home=None,
+   approve=None)` both resolve `None` to `~`. All `canary:` errors go to
+   stderr. `approve` counts as yes only when it returns `True`. A record with
+   no path shows `(no path recorded)` in the prune dialog too.
+9. **Copy.** Paths in refusals join like labels (`a`, `a and b`, `a, b and
+   c`). When the date is dropped, the sentence keeps its full stop. Use
+   "folders" everywhere for what is gone (doctor and the prune dialog), and
+   singular forms when n is 1: `Old install records: 1 (its folder is gone)`,
+   `Removed 1 old install record.`, `SkillCanary has 1 install record for a
+   skill or plugin whose folders are gone:`. `add.dialog_text`: the headline
+   paragraph is followed by one blank line. The skill's command-list entry
+   is exactly: `explain (for the person only: never run canary explain or
+   --excerpts yourself; give the person the command to run in their own
+   terminal)`.
+10. **Ruleset hash.** Changing `canary/scan.py` changes
+    `evidence.ruleset_sha256()` by design (`canary/evidence.py`, the comment
+    on `RULESET_FILES`). Tests compute it, so they stay green; record the
+    change in the slice P commit message.
+11. **The hook blocks the builder too.** In this checkout's sessions the
+    installed SkillCanary hook denies shell commands whose text mentions an
+    installer, `canary explain` or `--excerpts`. Write test fixtures and
+    files containing those words with the file tools, never with a heredoc
+    or `echo`.
+
 ## Done when
 
 1. A dead lock record never blocks `canary install` or `canary add`; a new
