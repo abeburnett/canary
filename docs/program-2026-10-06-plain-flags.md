@@ -49,7 +49,7 @@ heredoc did not say how to write such a file.
   they are.
 - `canary/add.py:511` and `:547`: the same name-only check; the messages say
   "use canary update to replace it" (no such command; `canary/cli.py` USAGE).
-- The lockfile (`docs/architecture.md`, "Lockfile") is
+- The lockfile (`docs/architecture.md`, "Lockfile"; the `plugins` map is written only by `install.py:490`) is
   `{"schema": "canary.lock/1", "skills": {"<name>": {...}}, "plugins": {...}}`,
   keyed by bare name, so a project install and a global install of one name
   cannot both be recorded. Readers and writers: `add._read_lock`,
@@ -74,72 +74,93 @@ heredoc did not say how to write such a file.
 
 ### 1. Lock records know where they are
 
-- **Scope.** A record's scope is `"user"` when every path in its `installed`
-  list is inside one of `guestlist.user_roots(home)` (compare realpaths, and
-  for a symlink compare the link's own location, not its target). Otherwise
-  its scope is the project folder: the realpath of the parent of the skills
-  folder's parent (for `/p/.agents/skills/x` that is `/p`). A record with an
-  empty `installed` list, or paths in more than one scope, has scope `None`.
-- **Keys.** New records are keyed by the bare name in user scope (unchanged)
-  and by `"<name>@<project folder>"` in project scope. Every new record also
-  stores `"name": "<name>"` and `"scope": "user"` or the project folder.
-  Existing records have neither field: their name is their key, and their
-  scope comes from their `installed` paths. The schema string stays
-  `canary.lock/1`; the new fields are additive.
-- **Live and dead.** A record is *live* when at least one of its `installed`
-  paths exists (`os.path.lexists`). Otherwise it is *dead*. Plugin records
-  (`lock["plugins"]`) follow the same rule.
-- **Conflicts.** A new install conflicts with a record only when the record is
-  live, has the same name, and has the same scope. A dead record never blocks
-  an install. When the new record's key equals a dead record's key, the new
-  record replaces it. Dead records under other keys are left for `canary
-  doctor`. The destination check (`os.path.lexists` on every destination)
+Refutation round 1 (Spark, 2026-10-06) replaced a "user or project scope"
+design that broke for plugins, odd install locations and extra skill roots.
+
+- **Places.** A skill record's *places* are the skills folders its installs
+  sit in: for each path in `installed`, the realpath of the path's parent
+  folder (the folder holding the link or folder itself, never a symlink's
+  target). New records store them as `"places": [...]` (sorted) and also store
+  `"name": "<name>"`, both computed once when the record is written. An older
+  record has neither field: its name is its key, and its places are computed
+  from its `installed` paths when it is read. Code never parses a key to find
+  a name or place. The schema string stays `canary.lock/1`; the fields are
+  additive. Plugin records (`lock["plugins"]`) are not changed by this design:
+  their `scope` field keeps its meaning and they get no conflict check.
+- **Live and dead.** An installed path is live when `os.path.exists` is true
+  for it (a symlink whose target is gone is not live). A record is *live* when
+  at least one of its `installed` paths is live, and *dead* otherwise,
+  including when `installed` is empty or missing. Skill and plugin records
+  both follow this rule.
+- **Conflicts.** A new skill install conflicts with a record only when the
+  record is a live skill record, its name equals the new name, and its places
+  share at least one folder with the new install's places. A dead record never
+  blocks. A project install and a user install of one name therefore never
+  conflict. The destination check (`os.path.lexists` on every destination)
   stays exactly as it is.
-- **Refusals name what is in the way.** Exact strings, with `<path>` the
-  record's first live `installed` path shortened with `~` as the
-  `installed` output already does, and `<date>` the record's `installed_at`
-  date (`YYYY-MM-DD`; omit the parenthesis when it is missing):
-  - live record: `A skill named <name> is already installed at <path>
-    (recorded <date>). To replace it, remove that folder and run this again.`
-  - a destination exists with no live record: `<path> already exists. To
-    replace it, remove it and run this again.`
+- **Keys.** The new record goes under the bare name when that key is free or
+  holds a dead record (which it replaces). When the bare name holds a live
+  record in other places, the new record goes under
+  `"<name>@<first 12 hex characters of sha256 of its places joined by newlines>"`;
+  if that key holds a live record too, the install is a conflict (same name,
+  same places). Dead records under other keys are left for `canary doctor`.
+- **Refusals name what is in the way.** Exact strings. `<paths>` lists the
+  record's live `installed` paths, shortened with `~` the way the `installed`
+  output already does, joined with ` and `; `<date>` is the `YYYY-MM-DD` part
+  of `installed_at` (drop ` (recorded <date>)` when it is missing or not a
+  string); `<them>` is `that folder` for one path and `those folders`
+  otherwise:
+  - live record: `A skill named <name> is already installed at <paths>
+    (recorded <date>). Nothing was installed. To replace it, remove <them>
+    and run this again.`
+  - a destination exists with no live record: `<path> already exists.
+    Nothing was installed. To replace it, remove it and run this again.`
   - the same conditions found again inside the commit lock use the same
-    strings. No message mentions `canary update`.
-- **`canary doctor` reports dead records.** Text output gains a section after
-  the gaps, only when there are dead records:
+    strings. No output, docs or skill text mentions `canary update`, except
+    the historical `docs/program-*.md` files, which stay as they are.
+- **Records found by `canary doctor`.** A new function
+  `setup.old_records(home)` returns the dead records as
+  `[{"kind": "skill"|"plugin", "key": …, "name": …, "installed": [...]}]`,
+  skills first, each group sorted by key. `setup.doctor` keeps its signature
+  and its 3-tuple return (tests and `e2e/lifecycle.py` unpack it). An
+  unreadable lockfile raises `add.LockError`; a missing one has no records.
+- **`canary doctor`** (text) prints, after the gaps and only when there are
+  old records:
 
   ```
   Old install records: <n> (their folders are gone)
-    <name>  <first installed path, shortened>
+    <name>  <first installed path, shortened, or "(no path recorded)">
   Run canary doctor --prune to remove them. It asks you first.
   ```
 
-  `--json` gains `"old_records": [{"kind": "skill"|"plugin", "key": …,
-  "name": …, "installed": [...]}]` (an empty list when there are none). Old
-  records do not count as gaps and do not change doctor's exit code.
-- **`canary doctor --prune`** lists the dead records, asks the person in
-  SkillCanary's dialog (`add.ask`, verdict `"NEEDS_REVIEW"` so Cancel is the
-  default, yes button `Remove records`), and on yes removes them inside
-  `add._Commit(home)` after re-reading the lockfile, removing only records
-  that are still dead at that moment. Dialog text:
+  `canary doctor --json` adds `"old_records"` (an empty list when there are
+  none). Old records never count as gaps or change the exit code. An
+  unreadable lockfile prints `canary: <LockError message>` to stderr and
+  doctor otherwise runs as before.
+- **`canary doctor --prune`** calls a new `setup.prune_records(home=None,
+  approve=None)`. It reads the old records; with none it prints `No old
+  install records.` and exits 0 without a dialog. Otherwise it calls
+  `approve(text)` with the dialog text below; the default `approve` is
+  `lambda text: add.ask(text, "NEEDS_REVIEW", yes="Remove records")`, so
+  Cancel is the default button. On `True` it takes `add._Commit(home)`,
+  re-reads the lockfile, removes only the records that are still dead,
+  writes it with `add._write_lock`, and prints `Removed <n> old install
+  records.` (exit 0). On `False` or `None` it prints `Nothing removed: the
+  person did not agree in SkillCanary's dialog.` (exit 10). An unreadable
+  lockfile prints `canary: <message>` and exits 3. `doctor` accepts exactly
+  `[]`, `["--json"]` or `["--prune"]`; anything else prints usage and exits 2.
+  `--prune` prints only the prune result, not the level or gaps. Dialog text
+  (at most 20 lines of records, then `- and <k> more`):
 
   ```
-  SkillCanary has <n> install records for skills whose folders are gone:
-  - <name>
+  SkillCanary has <n> install records for skills or plugins whose files are gone:
+  - <name> (<first installed path, shortened>)
   ...
-  Removing them lets you install skills with these names again. It does not
-  change any skill on this Mac.
+  Removing them lets you install these names again. It does not change any
+  skill or plugin on this Mac.
 
   The names come from the packages, not from SkillCanary.
   ```
-
-  (List at most 20 names, then `- and <k> more`.) Output: `Removed <n> old
-  install records.` (exit 0), `Nothing removed: the person did not agree in
-  SkillCanary's dialog.` (exit 10, for a decline or no dialog), or `No old
-  install records.` (exit 0, no dialog). `doctor` accepts `[]`, `["--json"]`
-  and `["--prune"]` only. The doctor function takes injectable `home` and
-  `approve` parameters, as `add` and `install` already do, so tests run
-  without a dialog.
 
 ### 2. Flags in plain language
 
@@ -172,53 +193,65 @@ All of it is Canary's own text: no package text, no model text.
   `null`. It is a fixed value Canary computes, so it appears in default (agent)
   output too.
   - `code_example`: the finding's line is inside a fenced code block of the
-    same file: a line whose text, after at most three leading spaces, starts
-    with three or more backticks or three or more tildes opens a block, and
-    the next fence line of the same character closes it. A file that never
-    closes a fence keeps everything after the opener inside. The fence lines
-    themselves are outside. For a finding from the paragraph pass, use its
-    start line.
-  - `forbidding`: otherwise, when the finding's line (lowercased, after
-    `scan.normalize`) matches
-    `\b(never|do not|don't|must not|should not|refuse|reject|watch for|look out for|beware of|block|flag)\b`.
+    same file, decided on the raw lines (before `scan.normalize`). An opening
+    fence is a line of at most three leading spaces (no tabs), then three or
+    more backticks or three or more tildes, then anything. The block closes at
+    the next line of at most three leading spaces, then at least as many of the
+    same character, then only whitespace. A block that never closes runs to
+    the end of the file. Fence lines themselves are outside. A paragraph-pass
+    finding uses its start line.
+  - `forbidding`: otherwise, when the finding's line, lowercased after
+    `scan.normalize`, matches
+    `\b(never|do not|don't|must not|should not|refuse to|reject|watch for|look out for|beware of)\b`.
   - `null` otherwise.
   - The label never changes `severity`, `score`, `threat_verdict` or
     `verdict`. A test puts the same attack line inside and outside a code
-    block and asserts identical score and verdict, and the existing
-    no-dampening test stays as it is.
+    block, and on a "never" line, and asserts identical score and verdict; the
+    existing no-dampening test stays as it is.
   - `CONTEXT[label]` text:
     - `code_example`: `Inside a code example. Examples are often documentation, but a skill can still tell the agent to run them.`
     - `forbidding`: `On a line that warns against it. Skills sometimes quote a phrase to forbid it; read the line to be sure.`
-- **The headline leads with the combined judgment.** `explain.headline(check)`
-  takes a `canary.check/1` result and returns one sentence. `classify.check`
-  stores it as `result["headline"]`. Rules, first match wins:
-  1. `verdict == "UNSAFE"` and the classifier said UNSAFE:
-     `SkillCanary judged this skill unsafe: the AI review found it unsafe.`
+- **The headline leads with the combined judgment.**
+  `explain.headline(check, confident)` takes a `canary.check/1` result and the
+  classifier's confidence decision, and returns one sentence. `classify.check`
+  computes `confident` once (as `_layer2` does today, with `Decimal`), passes
+  it in, and stores the sentence as `result["headline"]`; the `confident` flag
+  itself stays out of the output. Rules, first match wins:
+  1. `verdict == "UNSAFE"` and the classifier verdict is `UNSAFE`:
+     `SkillCanary judged this skill unsafe: the AI review found it unsafe.`,
+     and when there are scored findings, ` The pattern scan also found <labels>.`
   2. `verdict == "UNSAFE"`: `SkillCanary judged this skill unsafe: the pattern scan found <labels>.`
   3. `verdict == "LIKELY_SAFE"`: `No problems found: the pattern scan and the AI review both passed it.`
-  4. Only the pattern rules raised the verdict (classifier status `ok`,
-     verdict `SAFE`, confident; coverage complete; no review capabilities;
-     `threat_verdict == "NEEDS_REVIEW"`):
+  4. Only the pattern rules raised the verdict: classifier status `ok`,
+     classifier verdict `SAFE`, `confident` true, coverage complete, no
+     capability in `scan.REVIEW_CAPABILITIES`, and `threat_verdict ==
+     "NEEDS_REVIEW"`:
      `The AI review judged this skill safe (<confidence, 2 decimals>). The pattern scan flagged <labels> for you to look at.`
-  5. Otherwise: `This skill needs your judgment. The reasons and what you can do are below.`
+  5. Otherwise: `This skill needs your judgment.`
 
-  `<labels>` is the RULES labels of the scored findings' checks (severity not
-  `info`), deduplicated, in catalog order, joined as `a`, `a and b`, or
-  `a, b and c`.
-- **A next step for every review reason.** `explain.next_steps(check)` returns
-  the steps for the reasons that keep the verdict at `NEEDS_REVIEW`, in reason
-  order, without duplicates, and an empty list for any other verdict.
-  `classify.check` stores it as `result["next_steps"]`. Steps are derived from
-  the structured result (`scan.threat_verdict`, `scan.coverage`,
-  `scan.capabilities`, `classifier.status`, `classifier.verdict`, the
-  confidence rule), never by parsing reason strings. Exact text:
-  - pattern hits: `Look at the flagged lines: run canary explain with the same link or folder in your own terminal. Install it if they are only documentation; skip it if they tell the agent to do something you did not ask for.`
-  - scan incomplete or nothing to scan: `Some files could not be read, so the check is incomplete. Install it only if you trust where it came from.`
+  `<labels>` is the RULES labels of the checks with at least one scored finding
+  (severity not `info`), deduplicated, ordered as `catalog.CHECKS` then
+  `catalog.EXTRA`, joined as `a`, `a and b`, `a, b and c`, `a, b, c and d` and
+  so on (commas, then `and` before the last).
+- **A next step for every review reason.** `explain.next_steps(check,
+  confident, flow)` returns the steps for the reasons that keep the verdict
+  at `NEEDS_REVIEW`, in reason order, without duplicates, and an empty list
+  for any other verdict. `flow` is `"check"` (also used by `canary add`) or
+  `"install"`. `classify.check` stores the `"check"` steps as
+  `result["next_steps"]`; `canary install` asks for its own. Steps are
+  derived from the structured result (`scan.threat_verdict`,
+  `scan.coverage`, `scan.capabilities`, `classifier.status`,
+  `classifier.verdict`, `confident`), never by parsing reason strings. Exact
+  text:
+  - pattern hits, flow `check`: `Look at the flagged lines: run canary explain with the same link or folder in your own terminal. Install it if they are only documentation; skip it if they tell the agent to do something you did not ask for.`
+  - pattern hits, flow `install`: `To look at the flagged lines first, choose Cancel, then run canary explain on the skill's GitHub link or folder in your own terminal. Install it if they are only documentation; skip it if they tell the agent to do something you did not ask for.`
+  - scan incomplete (entries not read): `Some files could not be read, so the check is incomplete. Install it only if you trust where it came from.`
+  - nothing to scan (no readable text): `SkillCanary found no readable text in it, so there was nothing to check. Skip it unless you know why it is empty.`
   - runs code or grants tools: `It runs code or grants tools, so it needs your approval whatever the scan found. Install it only if you trust where it came from.`
   - classifier unavailable: `To add the AI review, sign in to Claude Code or set ANTHROPIC_API_KEY or OPENAI_API_KEY, then check it again.`
   - classifier too large: `The AI review reads only skills under 256 KB. Look at the flagged lines with canary explain, or install it only if you trust where it came from.`
   - classifier failed or invalid: `Check it again. If the AI review keeps failing, decide from the pattern scan with canary explain.`
-  - classifier asked for review or was not confident: `The AI review wants a person to look. Run canary explain with the same link or folder in your own terminal to see what it noticed.`
+  - classifier asked for review, or said safe without enough confidence: `The AI review wants a person to look. Run canary explain with the same link or folder in your own terminal to see what it noticed.`
 
   A test builds one result per reason family and asserts each gets exactly its
   step, so a new review reason cannot ship without one.
@@ -226,49 +259,77 @@ All of it is Canary's own text: no package text, no model text.
   - `classify.render_text`: the line after `Verdict:` is the headline; the
     existing reasons follow unchanged; then, when there are steps, a
     `What you can do:` line and the steps as `  - ` bullets.
-  - `scan.render_text` (pattern scan alone, `canary scan`): unchanged except
-    that each finding line ends with ` [code example]` or ` [warns against
-    it]` when it has a context.
-  - `canary add` and `canary install` results gain `"headline"` and
-    `"next_steps"` (for install, each item in `skills` gains its own
-    `headline`, and the top-level `next_steps` is the union in item order).
-    `reasons` keeps its current content, so nothing that reads it breaks.
-  - The approval dialogs (`add.dialog_text`, `install.dialog_text`) put the
-    headline (for install, each skill's headline after its name) directly
-    under the first line, keep the reasons, and end the Canary part with
-    `What you can do:` and the steps, before the labelled package strings.
-    `canary install`'s step for pattern hits also tells the person to choose
-    Cancel first: the dialog uses the same step text, prefixed with
-    `Choose Cancel, then `, lowercasing the step's first letter.
+  - `scan.render_text` (`canary scan`, pattern scan alone): unchanged except
+    that a finding line with a context ends with ` [code example]` or
+    ` [warns against it]`.
+  - `canary add` results gain `"headline"` and `"next_steps"` (from the check).
+    `canary install` keeps each checked item's `headline` and its
+    install-flow steps (from `_check_all`'s results); each entry of its
+    result's `skills` gains `"headline"`, and the result gains `"next_steps"`,
+    the union of the items' steps in item order. `reasons` keeps its current
+    content in both, so nothing that reads it breaks.
+  - `add.dialog_text`: the headline is the second paragraph, after the first
+    line; the capabilities and the reasons stay as they are (including the
+    existing filter that drops the "Runs code or grants tools" reason); then
+    `What you can do:` and the steps as `- ` lines; then the labelled source
+    lines as today.
+  - `install.dialog_text`: under each listed skill that is not
+    `LIKELY_SAFE`, after its existing lines, one line `    <headline>`;
+    after the list, `What you can do:` and the union of steps as `- ` lines;
+    then `Into:`, the command and the label as today. The install dialog
+    still shows no reasons.
   - The SkillCanary skill (`frontdoor.SKILL_TEXT` and `skills/canary/SKILL.md`,
     which a test keeps identical) tells agents to relay the headline, then the
-    reasons and the steps, and lists `canary explain` as a command for the
-    person only: "Never run canary explain yourself; give the person the
-    command to run in their own terminal."
-- **`canary explain <link-or-folder> [--backend …] [--model …] [--timeout …]`**,
-  for the person only.
-  - It accepts what `canary add` accepts: a local folder or a GitHub link. A
-    link is fetched with `add`'s own fetch code into a temporary folder that
-    is removed afterwards; no new network code.
-  - It runs `classify.check(path, excerpts=True, …)` with the same options and
-    validation as `canary check`, and prints, in order: the headline; the
-    verdict; for each scored check, its label, `What it looks for:`, `Why it
-    matters:`, then each hit as `  <file>:<line>  <excerpt repr>` with the
-    context text on the next line when there is one; the capabilities in the
-    plain words `add.PLAIN` already has; skipped files; the AI review's
-    verdict, confidence and its findings with evidence (as `check --excerpts
-    --text` shows them); then `What you can do:` and the steps. Exit codes
-    match `canary check`.
-  - It refuses to run when standard output is not a terminal: `canary
-    explain shows the skill's own text, so it runs only in your own
-    terminal.`, exit 2. Tests inject the terminal check.
-  - The hook denies an agent's shell command whose tidied text
-    (`installers.tidy`) matches `(^|[^\w/-])canary\s+explain\b` or
-    `/canary\s+explain\b`, **before** the `_is_canary` allowance, with:
-    `canary explain shows the skill's own text, which is for the person, not
-    an agent. Give the person this command to run in their own terminal:
-    canary explain <the same link or folder>`. Like the installer rule, a
-    command that only mentions it is denied too.
+    reasons and the steps; adds `explain` to the command list as a command
+    for the person only ("Never run canary explain or --excerpts yourself;
+    give the person the command to run in their own terminal."); and mentions
+    `canary doctor --prune` for old install records.
+- **Package text stays in the person's terminal.** `canary explain`, and the
+  existing `--excerpts` flag on `canary scan` and `canary check`, print the
+  skill's own text, so:
+  - The CLI refuses them when `cli._stdout_is_terminal()` (a module function
+    returning `sys.stdout.isatty()`) is false: `canary <command> shows the
+    skill's own text, so it runs only in your own terminal.` on stderr, exit
+    2, before any fetch or scan. There is no environment variable or flag
+    that skips this. In-process tests patch the function; the subprocess test
+    in `tests/test_scan.py` (`test_default_output_omits_the_payload_and_excerpts_flag_shows_it`)
+    is granted ownership to run its `--excerpts` arm with standard output on
+    a pseudo-terminal (`pty.openpty`), expected outcome unchanged.
+  - The hook denies an agent's shell command, **before** the `_is_canary`
+    allowance, when its tidied text (`installers.tidy`) matches
+    `\bcanary\s+explain\b` or contains both `\bcanary\b` and
+    `--excerpts\b`. A command that only mentions them is denied too, like
+    the installer rule. Message, filling in the arguments when the command
+    is a plain `canary explain …` that `shlex` can split (otherwise use
+    `<link or folder>`): `canary explain shows the skill's own text, which is
+    for the person, not an agent. Give the person this command to run in
+    their own terminal: canary explain <arguments>`.
+  - Accepted limit, recorded in `docs/architecture.md`: an agent that runs
+    Canary's Python code directly, or assembles the command from pieces,
+    gets past both checks, as with installers; the terminal check stops an
+    agent's ordinary shell, and the hook stops the command by name.
+- **`canary explain <link-or-folder> [--backend <name>] [--model <id>]
+  [--timeout <seconds>]`**, text only, for the person.
+  - Order: the terminal check; argument validation as `canary check`; then,
+    for a GitHub link, `add.parse_source` and `add`'s own fetch and
+    extraction into a new folder `quarantine/explain-<run id>` under the
+    support folder, mode `0700`, removed in a `finally`; no new network
+    code. A local folder is checked in place.
+  - It runs `classify.check(path, excerpts=True, …)` and prints these
+    sections in order, each omitted when empty:
+    1. `Verdict: <verdict>` and the headline on the next line.
+    2. For each scored check, in label order: the label as a heading line,
+       `  What it looks for: …`, `  Why it matters: …`, then each finding as
+       `  <path>:<line>  <excerpt repr>`, followed by `    <CONTEXT text>`
+       when it has a context.
+    3. `What it can do:` and the capabilities as `- It <add.PLAIN text>.`
+    4. `Not read:` and each skipped entry as `- <path> (<reason>)`.
+    5. `AI review: <status>`, and for status `ok`
+       `, said <verdict> at confidence <0.00>`, then its findings as
+       `check --excerpts --text` prints them, and its summary.
+    6. `What you can do:` and the steps.
+    Exit codes match `canary check`; a bad link prints `canary: <message>`
+    and exits 2.
   - `canary --help` lists `canary explain <github-link-or-folder> [--backend
     <name>] [--model <id>] [--timeout <seconds>]` and `canary doctor [--json
     | --prune]`.
@@ -276,35 +337,43 @@ All of it is Canary's own text: no package text, no model text.
 ### 3. The hook's installer message
 
 `gate.REDIRECT` gains one sentence at the end: `To write a file that only
-mentions an installer, use your file tool (Write or Edit), not the shell.`
-(Host-neutral wording: Codex has no tool named Write.)
+mentions an installer, use your file-editing tool (Write or Edit in Claude
+Code, apply_patch in Codex), not the shell.`
+
+### The Action manifest
+
+`scripts/action.py` refuses a bundle whose `canary/*.py` files do not match
+`scanner/manifest.json`. Each slice commit that changes `bin/` or `canary/`
+runs `python3 scripts/update-manifest.py <the slice's base commit>` and
+commits the regenerated manifest; `tests/test_action.py` must pass.
 
 ### Documentation
 
-`docs/architecture.md` describes the lock record fields, scope, key format,
-live and dead records, the conflict rule and the refusal strings (section
-"Lockfile" and `canary add` / `canary install` steps); `canary doctor
---prune`; the `context` field and that it never changes a score; the
-`headline` and `next_steps` fields; `canary explain` and the hook rule; and
-the new REDIRECT sentence. `scanner/references/checks.md` notes the labels
-and that the no-dampening rule is unchanged.
+`docs/architecture.md` describes the lock record fields (`name`, `places`),
+live and dead records, the conflict and key rules and the refusal strings
+(section "Lockfile" and the `canary add` / `canary install` steps); `canary
+doctor` old records and `--prune`; the `context` field and that it never
+changes a score; the `headline` and `next_steps` fields; `canary explain`,
+the terminal rule for `explain` and `--excerpts`, the hook rule and its
+accepted limit; and the new REDIRECT sentence. `scanner/references/checks.md`
+notes the labels and that the no-dampening rule is unchanged.
 
 ## Done when
 
 1. A dead lock record never blocks `canary install` or `canary add`; a new
-   install whose key equals a dead record's key replaces it. Named tests in
+   install under a dead record's key replaces it. Named tests in
    `tests/test_install.py` and `tests/test_add.py` each go red when the dead
    check is removed.
-2. A project install and a user (global) install of the same name both
-   succeed, in either order, and both records stay in the lockfile with
-   their `name` and `scope`.
-3. A live conflicting record still blocks, and the refusal is the exact
-   string above, naming the path and date. No output, docs or skill text
-   mentions `canary update`.
+2. A project install and a user install of the same name both succeed, in
+   either order, and both records stay in the lockfile with their `name` and
+   `places`; an older record without those fields still conflicts correctly.
+3. A live conflicting record still blocks, with the exact refusal above
+   naming its live paths and date. Outside the historical `docs/program-*.md`
+   files, no output, docs or skill text mentions `canary update`.
 4. `canary doctor` lists dead skill and plugin records in text and JSON
-   without changing the exit code; `canary doctor --prune` removes only
-   still-dead records after the person says yes, and nothing on decline or
-   with no dialog.
+   without changing its exit code or `setup.doctor`'s return; `canary doctor
+   --prune` removes only still-dead records after the person says yes, and
+   nothing on a decline or with no dialog.
 5. Every catalog check id has its RULES text, verified by a test that fails
    when a check id is added without text.
 6. Findings carry `context`; the same attack line inside and outside a code
@@ -313,17 +382,18 @@ and that the no-dampening rule is unchanged.
    patterns.
 7. `canary check` results carry `headline` and `next_steps` per the rules
    above; a test per headline rule and per reason family pins the exact text.
-8. The add and install dialogs show the headline and `What you can do:` with
-   the steps; no excerpt, file name or model text appears in them (existing
-   dialog tests stay green).
-9. `canary explain` prints the layout above for a local folder, refuses
-   without a terminal (exit 2), and the hook denies an agent's `canary
-   explain` before the canary allowance, in Claude and Codex payloads.
+8. The add and install dialogs show the headline(s) and `What you can do:`
+   with the steps; no excerpt, file name or model text appears in them, and
+   the install dialog still shows no reasons.
+9. `canary explain` prints the layout above for a local folder; `explain` and
+   `--excerpts` refuse without a terminal (exit 2) before any fetch or scan;
+   the hook denies both by name before the canary allowance, in Claude and
+   Codex payloads.
 10. REDIRECT ends with the new sentence.
 11. `frontdoor.SKILL_TEXT` and `skills/canary/SKILL.md` match and describe the
     headline, the steps, `canary explain` (person only) and `doctor --prune`;
     `docs/architecture.md` and `scanner/references/checks.md` describe the
-    new behavior.
+    new behavior; `scanner/manifest.json` matches the bundle.
 12. `python3 -m unittest discover -s tests` passes on the program branch's
     head, with the count reported; for each of bullets 1, 2, 4, 6, 7 and 9, a
     deliberate break turns a named test red while its neighbours stay green,
@@ -332,12 +402,13 @@ and that the no-dampening rule is unchanged.
 ## Plan
 
 1. Refute this contract (Spark 1.3 Contributor, read-only, `max`) against the
-   worktree it will run in; fold the findings.
+   worktree it will run in; fold the findings. Round 1 done (10 blocking, 13
+   major, folded above); round 2 checks the fold.
 2. Slice L (records, bullets 1-4 and 10) then slice P (plain flags, bullets
    5-9 and 11), built by one Sonnet 5.5 worker in one disposable worktree,
    each slice its own commit after the full suite passes.
 3. Spark reviews the finished diff; the builder folds; the coordinator
    re-checks the fold.
-4. Full suite on the merged program head, then the done-when audit (an Opus
-   subagent with fresh context).
+4. Full suite on the program head, then the done-when audit (an Opus subagent
+   with fresh context).
 5. The owner decides on push, pull request and merge.
