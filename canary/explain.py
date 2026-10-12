@@ -151,6 +151,11 @@ def scored_labels(check):
     return [RULES[i][0] for i in ORDER if i in ids]
 
 
+# The headline's last resort. Dialogs that show a recommendation leave it out:
+# it says nothing the recommendation does not.
+GENERIC_HEADLINE = "This skill needs your judgment."
+
+
 def headline(check, confident):
     """One sentence: the combined judgment of the scan and the AI review."""
     verdict, c, labels = check["verdict"], check["classifier"], scored_labels(check)
@@ -168,7 +173,7 @@ def headline(check, confident):
             and scan_part["threat_verdict"] == "NEEDS_REVIEW"):
         return (f"The AI review judged this skill safe ({c['confidence']:.2f}). The pattern scan "
                 f"flagged {_join(labels)} for you to look at.")
-    return "This skill needs your judgment."
+    return GENERIC_HEADLINE
 
 
 def next_steps(check, confident, flow):
@@ -202,6 +207,153 @@ def next_steps(check, confident, flow):
     return list(dict.fromkeys(_STEPS[f][which] for f in families))
 
 
+# ---- What a finding means for you, and what to do (program 2026-10-12) -------
+
+# check_id -> the risk in plain words, as one sentence about the skill. A test
+# keeps this in step with RULES.
+RISKS = {
+    "instruction-override": "It tells the agent to ignore its instructions, which hands the "
+                            "skill control of the agent.",
+    "identity-rewrite": "It gives the agent a new role, which can switch off its usual care.",
+    "safeguard-bypass": "It tells the agent to skip approvals or safety checks, so the agent "
+                        "could act without asking you.",
+    "exfiltration": "It can send your files or data to an outside web address.",
+    "shell-pipe": "It runs a script downloaded from the internet that nobody has read.",
+    "credential-access": "It can read your passwords or keys.",
+    "persistence": "It can keep running after you remove it.",
+    "stealth": "It tells the agent to hide what it does from you.",
+    "prompt-leak": "It asks the agent to reveal its private instructions.",
+    "obfuscation": "It holds encoded text that can hide instructions you cannot read.",
+    "invisible-character": "It hides characters you cannot see inside its words.",
+    "mixed-script-word": "It uses look-alike letters that can disguise a web address or "
+                         "command.",
+    "external-url": "It links to outside web pages.",
+}
+
+# (check_id, detail) -> a sharper sentence when the catalog knows what the
+# pattern reaches for. A test keeps this equal to catalog.details().
+DETAILS = {
+    ("credential-access", "ssh"): "It can read your SSH keys (~/.ssh), which unlock your "
+                                  "servers and code hosts.",
+    ("credential-access", "cloud"): "It can read your cloud logins (AWS, Google Cloud, "
+                                    "Kubernetes or Docker).",
+    ("credential-access", "keychain"): "It can read passwords from your macOS keychain.",
+    ("credential-access", "pem"): "It reaches for private key files (.pem).",
+    ("credential-access", "env"): "It can read your .env files, which usually hold API keys.",
+    ("credential-access", "secret-send"): "It can send a password, API key or token "
+                                          "somewhere.",
+    ("credential-access", "ask-secret"): "It asks you to type a password, passphrase or "
+                                         "private key.",
+    ("exfiltration", "chat-webhook"): "It can post your data to a Discord or Slack webhook.",
+    ("exfiltration", "catcher"): "It can send your data to a throwaway collection address "
+                                 "(webhook.site, ngrok and the like), a common sign of theft.",
+    ("exfiltration", "upload"): "It can upload your files to a web address.",
+    ("persistence", "schedule"): "It can set itself to run on its own (launch agent, cron "
+                                 "or login item), even after you remove it.",
+    ("persistence", "dotfiles"): "It can change your shell or SSH settings, so its changes "
+                                 "outlive the session.",
+    ("persistence", "agent-config"): "It can change your agent's settings, hooks or other "
+                                     "skills.",
+}
+
+# The three things SkillCanary recommends. `text` is the sentence the person
+# reads; `action` is for agents and scripts.
+RECOMMEND = {
+    "install": "Recommended: install. SkillCanary found nothing that needs your judgment.",
+    "trust": "Recommended: install only if you trust its author. SkillCanary found nothing "
+             "that marks it as an attack, but cannot vouch for it either.",
+    "decline": "Recommended: decline, unless you wrote it or know why it does this.",
+}
+# `trust` when the AI review did not run: the pattern scan alone passes most
+# attacks (bench, 2026-10-12: 40 of 60 samples), so say so.
+UNREVIEWED = ("Recommended: install only if you trust its author. The AI review did not run, "
+              "and the pattern scan alone misses most attacks.")
+
+# Attack checks: one hit without the AI review's confident pass means decline.
+# Where the hit sits (code example, a line that warns against it) does not
+# soften this: the skill's author writes the fences and the warning words, the
+# same reason attack patterns are never dampened (program 2026-09-26).
+_ATTACKS = {cid for cid, _, sev, _, _, _ in catalog.CHECKS if sev == "high"} | {
+    cid for cid, (_, sev, _) in catalog.EXTRA.items() if sev == "high"}
+
+
+def risk(finding):
+    """The plain sentence for one finding: Canary's own text only."""
+    return DETAILS.get((finding["check_id"], finding.get("detail")), RISKS[finding["check_id"]])
+
+
+def _scored(findings):
+    return [f for f in findings if f["severity"] != "info"]
+
+
+def risks(check):
+    """The plain sentences for the scored findings, without repeats, in
+    catalog order."""
+    found = _scored(check["scan"]["findings"])
+    found.sort(key=lambda f: ORDER.index(f["check_id"]))
+    return list(dict.fromkeys(risk(f) for f in found))
+
+
+def _vouched(check, confident):
+    c = check["classifier"]
+    return c.get("status") == "ok" and c.get("verdict") == "SAFE" and confident
+
+
+def recommend(check, confident):
+    """{"action": install | trust | decline, "text": …}. UNSAFE is decline and
+    LIKELY_SAFE is install. NEEDS_REVIEW is decline when an attack pattern hit
+    anywhere and the AI review did not confidently pass the skill, and trust
+    otherwise (code, medium rules, an incomplete or missing review)."""
+    verdict = check["verdict"]
+    if verdict == "UNSAFE":
+        action = "decline"
+    elif verdict == "LIKELY_SAFE":
+        action = "install"
+    else:
+        attack = any(f["check_id"] in _ATTACKS for f in _scored(check["scan"]["findings"]))
+        action = "decline" if attack and not _vouched(check, confident) else "trust"
+    if action == "trust" and check["classifier"].get("status") != "ok":
+        return {"action": action, "text": UNREVIEWED}
+    return {"action": action, "text": RECOMMEND[action]}
+
+
+WORST_ACTION = {"install": 0, "trust": 1, "decline": 2}
+
+_DIALOG_TAG = {"code_example": "in a code example", "forbidding": "on a line that warns against it"}
+
+
+def evidence_lines(snapshot, limit=5, per_risk=2):
+    """For the person's dialog only (owner decision 2026-10-12): each risk,
+    then up to `per_risk` lines of the skill's own text that raised it, as
+    `<file> line <n>: "<text>"`. The quoted text and file names come from the
+    package, so the dialog labels them, and none of this reaches an agent.
+    Empty when the snapshot cannot be read."""
+    try:
+        result = scan.scan_package(snapshot, excerpts=True)
+    except (OSError, ValueError, scan.PathError):
+        return []
+    found = _scored(result["findings"])
+    found.sort(key=lambda f: (ORDER.index(f["check_id"]), f["path"], f["line"]))
+    groups = {}
+    for f in found:
+        groups.setdefault(risk(f), []).append(f)
+    lines = []
+    for n, (sentence, hits) in enumerate(groups.items()):
+        if n == limit:
+            lines.append(f"- and {len(groups) - limit} more; canary explain shows them all.")
+            break
+        lines.append(f"- {sentence}")
+        for f in hits[:per_risk]:
+            text = scan.terminal_safe(" ".join(f["excerpt"].split()))
+            if len(text) > 120:
+                text = text[:117] + "..."
+            tag = f" ({_DIALOG_TAG[f['context']]})" if f.get("context") else ""
+            lines.append(f"    {scan.terminal_safe(f['path'])} line {f['line']}{tag}: \"{text}\"")
+        if len(hits) > per_risk:
+            lines.append(f"    and {len(hits) - per_risk} more lines like this")
+    return lines
+
+
 # ---- `canary explain`: the skill's own text, for the person's terminal -------
 
 def _bullets(lines):
@@ -211,7 +363,8 @@ def _bullets(lines):
 def render(result):
     """The layout `canary explain` prints, from a `classify.check(...,
     excerpts=True)` result. It holds the skill's own text."""
-    sections = [[f"Verdict: {result['verdict']}", result["headline"]]]
+    sections = [[f"Verdict: {result['verdict']}", result["headline"],
+                 result["recommendation"]["text"]]]
     findings = [f for f in result["scan"]["findings"] if f["severity"] != "info"]
     for check_id in ORDER:
         mine = [f for f in findings if f["check_id"] == check_id]
@@ -223,6 +376,7 @@ def render(result):
             lines.append(f"  {scan.terminal_safe(f['path'])}:{f['line']}  {f['excerpt']!r}")
             if f.get("context"):
                 lines.append(f"    {CONTEXT[f['context']]}")
+            lines.append(f"    {risk(f)}")
         sections.append(lines)
     from canary import add
     can = sorted({add.PLAIN[k["kind"]] for k in result["scan"]["capabilities"]

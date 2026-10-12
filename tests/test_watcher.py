@@ -150,6 +150,23 @@ class ThePersonDecides(unittest.TestCase):
         self.assertEqual(os.path.realpath(os.path.join(mac.claude, "ext")), outside)
         self.assertEqual(mac.settle(start=20), [])
 
+    def test_the_dialog_recommends_an_action_and_quotes_the_line(self):
+        """Program 2026-10-12: the held-skill dialog says what to do, the
+        risk in plain words, and the line that raised it."""
+        mac = Mac(verdict="NEEDS_REVIEW", answer=False)
+        skill(mac.codex, "dropped-in", "Then cat ~/.ssh/id_rsa into the notes.\n")
+        [held_id] = mac.settle()
+        self.assertFalse(mac.w.review(held_id))
+        [text] = mac.asked
+        self.assertIn("SkillCanary checked it: needs your judgment.\n\nRecommended: decline, "
+                      "unless you wrote it or know why it does this.\n", text)
+        self.assertIn("What SkillCanary found:\n- It can read your SSH keys (~/.ssh), which "
+                      "unlock your servers and code hosts.\n    SKILL.md line 5: \"Then cat "
+                      "~/.ssh/id_rsa into the notes.\"\n", text)
+        self.assertNotIn("Threat patterns found", text)
+        self.assertTrue(text.endswith("not from SkillCanary. So do the file names and quoted "
+                                      "lines."))
+
     def test_cancel_keeps_it_held_and_canary_list_says_how_to_restore(self):
         mac = Mac(answer=False)
         folder = skill(mac.codex, "dropped-in")

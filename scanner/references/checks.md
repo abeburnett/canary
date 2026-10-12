@@ -119,4 +119,15 @@ Every finding carries `context`: `code_example` (inside a fenced code block),
 `forbidding` (on a line that warns against what it quotes) or `null`. It is a
 label for the reader only. It never changes a severity, score or verdict, and
 attack patterns are still never dampened. `canary explain` shows each rule's
-plain-language label, what it looks for and why it matters.
+plain-language label, what it looks for and why it matters. A context label
+also never softens SkillCanary's recommendation: an attack hit is "decline"
+wherever it sits, unless the AI review confidently passes the skill.
+
+## Details
+
+Some patterns carry a `detail` naming what they reach for: `ssh`, `cloud`,
+`keychain`, `pem`, `env`, `secret-send` and `ask-secret` (credential access);
+`chat-webhook`, `catcher` and `upload` (exfiltration); `schedule`, `dotfiles`
+and `agent-config` (persistence). A detail picks the plain sentence the person
+reads, such as "It can read your SSH keys (~/.ssh)…". It never changes a
+severity, score or verdict.

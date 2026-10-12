@@ -279,6 +279,8 @@ def _check(path, backend="auto", model=None, timeout_s=DEFAULT_TIMEOUT_S,
               "scan": scan_result, "classifier": layer2, "reasons": reasons}
     result["headline"] = explain.headline(result, confident)
     result["next_steps"] = explain.next_steps(result, confident, "check")
+    result["recommendation"] = explain.recommend(result, confident)
+    result["risks"] = explain.risks(result)
     if excerpts:
         result["target"] = scan_result["target"]
     return result, confident
@@ -293,8 +295,12 @@ def check(path, backend="auto", model=None, timeout_s=DEFAULT_TIMEOUT_S,
 def render_text(result):
     c = result["classifier"]
     lines = [f"Canary check: {repr(result['target']) if 'target' in result else result['target_id']}",
-             f"Verdict: {result['verdict']}", result["headline"]]
+             f"Verdict: {result['verdict']}", result["headline"],
+             result["recommendation"]["text"]]
     lines += [f"  - {r}" for r in result["reasons"]]
+    if result["risks"]:
+        lines.append("What it could do to you:")
+        lines += [f"  - {r}" for r in result["risks"]]
     layer2 = f"Classifier: {c['status']}"
     if c["backend"]:
         layer2 += f" ({c['backend']}, {c['model']})"
