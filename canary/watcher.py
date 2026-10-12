@@ -30,7 +30,7 @@ import tempfile
 import threading
 import time
 
-from canary import add, classify, frontdoor, guestlist
+from canary import add, classify, explain, frontdoor, guestlist
 
 LABEL = "com.skillcanary.watcher"
 SETTLE_SECONDS = 2.0
@@ -288,6 +288,7 @@ class Watcher:
                 verdict, reasons = result["verdict"], result["reasons"]
                 caps = sorted({c["kind"] for c in result["scan"]["capabilities"]})
             except (add.SourceError, OSError):
+                result = None
                 verdict, reasons, caps = "UNSAFE", ["It holds links or special files "
                                                     "SkillCanary will not copy."], []
             if verdict == "UNSAFE":
@@ -296,7 +297,8 @@ class Watcher:
                             f"{_short(os.path.dirname(h['origin']), self.home)} without its "
                             "check: it judged it unsafe. canary list shows where it is.")
                 return False
-            answer = self.ask(dialog_text(h, verdict, reasons, caps, self.home), verdict)
+            answer = self.ask(dialog_text(h, verdict, reasons, caps, self.home,
+                                          result=result, snapshot=snap), verdict)
             if answer is True:
                 return self.put_back(h, snap, verdict)
             _decision(self, h["name"], verdict, "declined" if answer is False else "not_installed")
@@ -380,20 +382,34 @@ def _decision(w, name, verdict, outcome):
         pass
 
 
-def dialog_text(h, verdict, reasons, caps, home):
+def dialog_text(h, verdict, reasons, caps, home, result=None, snapshot=None):
+    """The held-skill dialog. With the check's `result`, it leads with the
+    recommendation and says what SkillCanary found in plain words; with the
+    checked `snapshot`, it quotes the lines that raised each risk."""
     word = {"LIKELY_SAFE": "no problems found",
             "NEEDS_REVIEW": "needs your judgment"}.get(verdict, verdict)
     lines = [f"A skill appeared in {_short(os.path.dirname(h['origin']), home)} without "
              "SkillCanary's check, so SkillCanary is holding it.", "",
              f"SkillCanary checked it: {word}."]
+    found = []
+    if result is not None:
+        lines += ["", result["recommendation"]["text"]]
+        if result["headline"] != explain.GENERIC_HEADLINE:
+            lines += ["", result["headline"]]
+        found = add.found_block({"_snapshot": snapshot, "risks": result["risks"]})
+        if found:
+            lines += [""] + found
     can = sorted({add.PLAIN[k] for k in caps if k in add.PLAIN})
     if can:
         lines += ["", "What it can do:"] + [f"- It {c}." for c in can]
-    other = [r for r in reasons if not r.startswith("Runs code or grants tools")]
-    lines += [f"- {r}" for r in other]
+    other = [r for r in reasons if not r.startswith("Runs code or grants tools")
+             and not (found and r.startswith("Threat patterns found"))]
+    if other:
+        lines += ([""] if result is not None else []) + [f"- {r}" for r in other]
     lines += ["", f"Folder name: {h['name']}", "",
               "Install puts it back where it was. Cancel keeps it held; nothing is deleted.",
-              "The folder name comes from whoever put it there, not from SkillCanary."]
+              "The folder name comes from whoever put it there, not from SkillCanary."
+              + (" So do the file names and quoted lines." if found and snapshot else "")]
     return "\n".join(lines)
 
 

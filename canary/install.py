@@ -142,13 +142,23 @@ def dialog_text(command, items, verdict):
     word = {"LIKELY_SAFE": "no problems found",
             "NEEDS_REVIEW": "needs your judgment"}.get(verdict, verdict)
     lines = [f"SkillCanary checked what this install would add: {word}.", ""]
+    if all("recommendation" in it for it in items):
+        lines += [_worst_recommendation(items)["text"], ""]
+    quoted = False
     for it in items:
         mark = "" if it["verdict"] == "LIKELY_SAFE" else "  (needs your judgment)"
         lines.append(f"- {it['name']}{mark}")
         can = sorted({add.PLAIN[k] for k in it["capabilities"] if k in add.PLAIN})
         lines += [f"    It {c}." for c in can]
-        if it["verdict"] != "LIKELY_SAFE" and it.get("headline"):
+        if (it["verdict"] != "LIKELY_SAFE" and it.get("headline")
+                and not (it.get("recommendation") and it["headline"] == explain.GENERIC_HEADLINE)):
             lines.append(f"    {it['headline']}")
+        if it["verdict"] != "LIKELY_SAFE" and it.get("recommendation"):
+            lines.append(f"    {it['recommendation']['text']}")
+            found = add.found_block({"_snapshot": it.get("snapshot"),
+                                     "risks": it.get("risks", [])})
+            lines += [f"    {line}" for line in found]
+            quoted = quoted or bool(found)
     steps = list(dict.fromkeys(s for it in items for s in it.get("steps", [])))
     if steps:
         lines += ["", "What you can do:"] + [f"- {s}" for s in steps]
@@ -158,8 +168,14 @@ def dialog_text(command, items, verdict):
         lines += ["", "Into: " + ", ".join(places)]
     lines += ["", f"Command: {' '.join(command)[:300]}", "",
               "Names come from the packages, and the command from the agent, "
-              "not from SkillCanary."]
+              "not from SkillCanary."
+              + (" So do the file names and quoted lines." if quoted else "")]
     return "\n".join(lines)
+
+
+def _worst_recommendation(items):
+    worst = max(items, key=lambda it: explain.WORST_ACTION[it["recommendation"]["action"]])
+    return dict(worst["recommendation"])
 
 
 def _ask(approve, command, items, verdict):
@@ -246,12 +262,16 @@ def _snapshot_and_check(folders, run_dir, out, backend, model, timeout_s, suppor
         it["verdict"] = result["verdict"]
         it["headline"] = result["headline"]
         it["steps"] = explain.next_steps(result, confident, "install")
+        it["recommendation"] = explain.recommend(result, confident)
+        it["risks"] = explain.risks(result)
         it["reasons"] = result["reasons"]
         it["capabilities"] = sorted({c["kind"] for c in result["scan"]["capabilities"]})
         it["package_digest"] = result["package_digest"]
     out["verdict"] = max((it["verdict"] for it in items), key=WORST.get)
-    out["skills"] = [{"name": it["name"], "verdict": it["verdict"], "headline": it["headline"]}
+    out["skills"] = [{"name": it["name"], "verdict": it["verdict"], "headline": it["headline"],
+                      "recommendation": it["recommendation"], "risks": it["risks"]}
                      for it in items]
+    out["recommendation"] = _worst_recommendation(items)
     out["next_steps"] = list(dict.fromkeys(s for it in items for s in it["steps"]))
     for it in items:
         out["reasons"] += [f"{it['name']}: {r}" for r in it["reasons"]]

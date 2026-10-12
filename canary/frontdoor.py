@@ -29,10 +29,12 @@ Run `canary add "<link>"` with the link exactly as they gave it. Then report
 the outcome in one or two sentences:
 
 - `installed` (exit 0): say where it was installed.
-- `declined` or `not_installed` (exit 10): relay the headline first, then
-  the reasons and the steps SkillCanary gave (`headline`, `reasons` and
-  `next_steps` in the result). Do not install the skill another way; that
-  decision belongs to the person.
+- `declined` or `not_installed` (exit 10): relay SkillCanary's
+  recommendation first (`recommendation.text`: install, install only if you
+  trust its author, or decline), then the headline, the risks, the reasons
+  and the steps (`headline`, `risks`, `reasons` and `next_steps` in the
+  result). Do not install the skill another way; that decision belongs to
+  the person.
 - `refused` (exit 20): say SkillCanary judged it unsafe and it was not
   installed.
 - Exit 2: the link or download did not work; repeat the message.
@@ -71,8 +73,8 @@ one sentence what it does. Do not retry the blocked action another way.
 
 ## When they want a skill checked, not installed
 
-Run `canary check "<path>" --text` and relay the headline, then the reasons
-and the steps. To see the flagged lines themselves, the person runs
+Run `canary check "<path>" --text` and relay the recommendation, then the
+headline, the risks, the reasons and the steps. To see the flagged lines themselves, the person runs
 `canary explain "<path or link>"` in their own terminal; you do not.
 
 ## When `canary` is not installed

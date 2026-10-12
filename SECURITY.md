@@ -30,6 +30,12 @@ agent, runs code as root that a normal user could have changed, or makes
 
 These are documented, not bugs; the site and `docs/architecture.md` state them.
 
+- **Questions quote the skill.** Since 2026-10-12, SkillCanary's dialog
+  shows the lines that raised each risk, so a skill's author writes part of
+  what you read there. The quoted lines are labelled, clipped and stripped of
+  control characters, and they never reach your agent; the recommendation
+  above them is SkillCanary's own.
+
 - **Guard checks installs, not every change.** The hook stops an agent's
   installer commands and file-tool creation of a new skill, and sends them
   through `canary add`. It does not stop an agent, or other software, from

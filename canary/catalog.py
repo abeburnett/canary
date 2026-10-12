@@ -35,9 +35,11 @@ def _curl_upload(text):
     return bool(m and _UPLOAD_FLAG.search(text, m.end()))
 
 
-# (check_id, category, severity, description, paragraph_pass, [(pattern, doc), ...])
+# (check_id, category, severity, description, paragraph_pass, [(pattern, doc[, detail]), ...])
 # A pattern is a regex source string or a function of the text; functions
-# replace patterns that would need an unbounded gap between two tokens.
+# replace patterns that would need an unbounded gap between two tokens. A
+# `detail` names what the pattern reaches for when that changes the plain
+# sentence the person reads (explain.DETAILS); it never changes a score.
 CHECKS = [
     ("instruction-override", "INSTRUCTION_OVERRIDE", "high",
      "Tries to override or discard the agent's own instructions", True,
@@ -62,12 +64,12 @@ CHECKS = [
       (r"disableallhooks|dangerously-skip-permissions|bypasspermissions", False)]),
     ("exfiltration", "EXFILTRATION", "high",
      "Instructs the agent to send data to an external endpoint", True,
-     [(r"discord(app)?\.com/api/webhooks", False),
-      (r"hooks\.slack\.com/services", False),
-      (r"requestbin\.(com|net)|requestcatcher\.com|webhook\.site|pipedream\.net|interact\.sh", False),
-      (r"(?<![a-z0-9-])[a-z0-9-]+\.ngrok(-free)?\.(io|app|dev)", False),
+     [(r"discord(app)?\.com/api/webhooks", False, "chat-webhook"),
+      (r"hooks\.slack\.com/services", False, "chat-webhook"),
+      (r"requestbin\.(com|net)|requestcatcher\.com|webhook\.site|pipedream\.net|interact\.sh", False, "catcher"),
+      (r"(?<![a-z0-9-])[a-z0-9-]+\.ngrok(-free)?\.(io|app|dev)", False, "catcher"),
       (r"(send|post|upload|forward|exfiltrate|transmit)\s+.{0,60}?\s+to\s+https?://", False),
-      (_curl_upload, False)]),
+      (_curl_upload, False, "upload")]),
     ("shell-pipe", "SHELL_PIPE", "high",
      "Runs a remote download straight in a shell or interpreter", True,
      [(_download_piped_to_shell, False),
@@ -76,22 +78,22 @@ CHECKS = [
       (r"\beval\s+[\"']?\$\(", False)]),
     ("credential-access", "CREDENTIAL_ACCESS", "high",
      "Reaches for secrets, keys, or credentials on the machine", True,
-     [(r"~/\.ssh|/\.ssh/|\bid_(rsa|ed25519|ecdsa|dsa)\b", False),
-      (r"~/\.aws|aws_secret_access_key|~/\.config/gcloud|~/\.kube/config|~/\.netrc|~/\.docker/config\.json", False),
-      (r"(keychain|security\s+find-(generic|internet)-password|login\.keychain)", False),
-      (r"\.pem\b", True),
-      (r"\.env\b.{0,200}?(read|load|cat|send|upload)", True),
-      (r"(api[_-]?key|secret[_-]?key|auth[_-]?token|password).{0,30}(send|post|upload|exfiltrate)", True),
-      (r"(enter|paste|type)\s+(your|the)\s+(password|passphrase|seed\s+phrase|private\s+key)", False)]),
+     [(r"~/\.ssh|/\.ssh/|\bid_(rsa|ed25519|ecdsa|dsa)\b", False, "ssh"),
+      (r"~/\.aws|aws_secret_access_key|~/\.config/gcloud|~/\.kube/config|~/\.netrc|~/\.docker/config\.json", False, "cloud"),
+      (r"(keychain|security\s+find-(generic|internet)-password|login\.keychain)", False, "keychain"),
+      (r"\.pem\b", True, "pem"),
+      (r"\.env\b.{0,200}?(read|load|cat|send|upload)", True, "env"),
+      (r"(api[_-]?key|secret[_-]?key|auth[_-]?token|password).{0,30}(send|post|upload|exfiltrate)", True, "secret-send"),
+      (r"(enter|paste|type)\s+(your|the)\s+(password|passphrase|seed\s+phrase|private\s+key)", False, "ask-secret")]),
     ("persistence", "PERSISTENCE", "medium",
      "Tries to persist itself, escalate, or modify agent configuration", True,
      [(r"persist\s+across\s+sessions", False),
       (r"modify\s+your\s+own\s+instructions", False),
-      (r"add\s+(yourself|a|an)\s+(cron|scheduled|launch\s*agent|login\s+item)", False),
-      (r"run\s+on\s+(startup|login|boot)", False),
-      (r"write\s+to\s+~/\.(config|ssh|aws|zshrc|bashrc|profile)", False),
-      (r"(~/\.claude|~/\.codex|~/\.cursor|~/\.agents)/(settings[\w.]*\.json|hooks\.json|config\.toml|skills)", False),
-      (r"launchctl\s+(load|bootstrap|bootout|unload)|LaunchAgents/|crontab\s", False)]),
+      (r"add\s+(yourself|a|an)\s+(cron|scheduled|launch\s*agent|login\s+item)", False, "schedule"),
+      (r"run\s+on\s+(startup|login|boot)", False, "schedule"),
+      (r"write\s+to\s+~/\.(config|ssh|aws|zshrc|bashrc|profile)", False, "dotfiles"),
+      (r"(~/\.claude|~/\.codex|~/\.cursor|~/\.agents)/(settings[\w.]*\.json|hooks\.json|config\.toml|skills)", False, "agent-config"),
+      (r"launchctl\s+(load|bootstrap|bootout|unload)|LaunchAgents/|crontab\s", False, "schedule")]),
     ("stealth", "STEALTH", "medium",
      "Instructs the agent to hide behavior from the user", True,
      [(r"do\s+not\s+(tell|inform|mention\s+(this\s+)?to)\s+the\s+user", False),
@@ -127,17 +129,24 @@ def _matcher(pattern):
     return lambda text: rx.search(text) is not None
 
 
-_COMPILED = [(cid, cat, sev, desc, para, [(_matcher(p), doc) for p, doc in pats])
+_COMPILED = [(cid, cat, sev, desc, para,
+              [(_matcher(p[0]), p[1], p[2] if len(p) > 2 else None) for p in pats])
              for cid, cat, sev, desc, para, pats in CHECKS]
 
 
-def finding(check_id, path, line, excerpt, severity=None):
+def details():
+    """Every (check_id, detail) pair the catalog names."""
+    return {(cid, p[2]) for cid, _, _, _, _, pats in CHECKS for p in pats if len(p) > 2}
+
+
+def finding(check_id, path, line, excerpt, severity=None, detail=None):
     if check_id in EXTRA:
         category, sev, desc = EXTRA[check_id]
     else:
         _, category, sev, desc, _, _ = next(c for c in CHECKS if c[0] == check_id)
     return {"check_id": check_id, "category": category, "severity": severity or sev,
-            "description": desc, "path": path, "line": line, "excerpt": _clip(excerpt)}
+            "description": desc, "detail": detail, "path": path, "line": line,
+            "excerpt": _clip(excerpt)}
 
 
 def _clip(text):
@@ -155,15 +164,16 @@ def match_line(path, line_no, line, raw_line):
     doc_context = DOC_CONTEXT.search(line) is not None
     for cid, _, sev, _, _, patterns in _COMPILED:
         hit = dampened = False
-        for matches, doc in patterns:
+        detail = None
+        for matches, doc, key in patterns:
             if matches(line):
                 if doc and doc_context:
-                    dampened = True
+                    dampened, detail = True, detail or key
                 else:
-                    hit = True
+                    hit, detail = True, key
                     break
         if hit or dampened:
-            out.append(finding(cid, path, line_no, raw_line, None if hit else "info"))
+            out.append(finding(cid, path, line_no, raw_line, None if hit else "info", detail))
     return out
 
 
@@ -172,8 +182,8 @@ def match_paragraph(path, start_line, joined, raw_joined):
     for cid, _, _, _, para, patterns in _COMPILED:
         if not para:
             continue
-        for matches, doc in patterns:
+        for matches, doc, key in patterns:
             if not doc and matches(joined):
-                out.append(finding(cid, path, start_line, raw_joined))
+                out.append(finding(cid, path, start_line, raw_joined, detail=key))
                 break
     return out

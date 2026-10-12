@@ -22,7 +22,7 @@ import tarfile
 import tempfile
 import time
 
-from canary import classify, guestlist, scan
+from canary import classify, explain, guestlist, scan
 from canary.hosts import claude as claude_host
 from canary.hosts import codex as codex_host
 
@@ -488,20 +488,45 @@ def dialog_text(summary):
     verdict = {"LIKELY_SAFE": "no problems found",
                "NEEDS_REVIEW": "needs your judgment"}.get(summary["verdict"], summary["verdict"])
     blocks = [[f"SkillCanary checked this skill: {verdict}."]]
-    if summary.get("headline"):
+    if summary.get("recommendation"):
+        blocks.append([summary["recommendation"]["text"]])
+    if summary.get("headline") and not (summary.get("recommendation")
+                                        and summary["headline"] == explain.GENERIC_HEADLINE):
         blocks.append([summary["headline"]])
+    found = found_block(summary)
+    if found:
+        blocks.append(found)
     can = sorted({PLAIN[k] for k in summary["capabilities"] if k in PLAIN})
     if can:
         blocks.append(["What it can do:"] + [f"- It {c}." for c in can])
-    other = [r for r in summary["reasons"] if not r.startswith("Runs code or grants tools")]
+    other = [r for r in summary["reasons"] if not r.startswith(_SAID_ELSEWHERE)
+             and not (found and r.startswith("Threat patterns found"))]
     if other:
         blocks.append([f"- {r}" for r in other])
     if summary.get("next_steps"):
         blocks.append(["What you can do:"] + [f"- {s}" for s in summary["next_steps"]])
     blocks.append([f"From the link: {source}", f"Installs as: {summary['name']}",
                    f"Into: {hosts}"])
-    blocks.append(["The source and name come from the link and package, not from SkillCanary."])
+    blocks.append(["The source and name, and any file names and quoted lines, come from the "
+                   "link and package, not from SkillCanary."])
     return "\n\n".join("\n".join(b) for b in blocks)
+
+
+# Reasons a dialog already says another way: the capabilities list, and (when
+# the plain risks are shown) the pattern scan's category line.
+_SAID_ELSEWHERE = "Runs code or grants tools"
+
+
+def found_block(summary):
+    """`What SkillCanary found:` for a dialog: each risk in plain words and,
+    from the checked snapshot, the lines that raised it (the person's dialog
+    only; owner decision 2026-10-12). Falls back to the risks alone."""
+    lines = []
+    if summary.get("_snapshot") and summary.get("risks"):
+        lines = explain.evidence_lines(summary["_snapshot"])
+    if not lines:
+        lines = [f"- {r}" for r in summary.get("risks", [])]
+    return ["What SkillCanary found:"] + lines if lines else []
 
 
 DIALOG_SCRIPT = """on run argv
@@ -612,7 +637,8 @@ def add(source, *, home=None, support_dir=None, approve=None, fetch=None,
         out = {"schema": "canary.add/1", "outcome": None, "verdict": verdict, "name": name,
                "source": {"owner": owner, "repo": repo, "commit": commit},
                "installed": [], "reasons": list(reasons),
-               "headline": result["headline"], "next_steps": result["next_steps"]}
+               "headline": result["headline"], "next_steps": result["next_steps"],
+               "recommendation": result["recommendation"], "risks": result["risks"]}
         if verdict == "UNSAFE":
             out["outcome"] = "refused"
             out["reasons"].append("Not installed: SkillCanary judged it unsafe.")
@@ -644,7 +670,8 @@ def add(source, *, home=None, support_dir=None, approve=None, fetch=None,
         summary = {"verdict": verdict, "reasons": reasons, "name": name, "owner": owner,
                    "capabilities": sorted({c["kind"] for c in result["scan"]["capabilities"]}),
                    "repo": repo, "commit": commit, "hosts": hosts, "_snapshot": snapshot,
-                   "headline": result["headline"], "next_steps": result["next_steps"]}
+                   "headline": result["headline"], "next_steps": result["next_steps"],
+                   "recommendation": result["recommendation"], "risks": result["risks"]}
         answer = approve(summary)
         if answer is not True:
             out["outcome"] = "declined" if answer is False else "not_installed"

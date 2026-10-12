@@ -376,9 +376,23 @@ a valid answer for any reason (`unavailable`, `too_large`, `failed`,
   },
   "reasons": ["plain-language reason for the verdict"],
   "headline": "one sentence leading with the combined judgment",
-  "next_steps": ["what the person can do, one step per reason for review"]
+  "next_steps": ["what the person can do, one step per reason for review"],
+  "recommendation": {"action": "install" | "trust" | "decline", "text": "Recommended: …"},
+  "risks": ["each scored finding's risk in plain words, without repeats"]
 }
 ```
+
+`recommendation` and `risks` (program 2026-10-12, `canary/explain.py`) are
+Canary's own text. The recommendation: `UNSAFE` is `decline`; `LIKELY_SAFE`
+is `install`; `NEEDS_REVIEW` is `decline` when a high-severity (attack) rule
+hit a line that is neither in a code example nor warning against it, and the
+AI review did not confidently pass the skill; otherwise `trust` ("install
+only if you trust its author"), worded differently when the AI review did not
+run, because the pattern scan alone passes most attacks. A risk is one
+sentence per rule (`explain.RISKS`), or a sharper one when the catalog pattern
+that hit names what it reaches for (`detail` on the finding, such as `ssh`,
+`cloud` or `chat-webhook`; `explain.DETAILS`). A detail never changes a score.
+Tests keep `RISKS` in step with the rules and `DETAILS` with the catalog.
 
 `headline` and `next_steps` (`canary/explain.py`, all Canary's own text, no
 package or model text) come from the structured result, never from parsing
@@ -467,11 +481,18 @@ Steps:
    read-only, and the rest is deleted.
 2. `canary check` on that snapshot.
 3. `UNSAFE`: nothing is installed and nobody is asked. Otherwise the dialog
-   asks the person. It shows Canary's verdict, the headline, the capabilities
-   and reasons, `What you can do:` with the steps, the source as
-   `owner/repo` at a short commit, and the installed name, with every
-   package-supplied string labelled as such; never the package's description
-   or excerpts, which an attacker writes. `NEEDS_REVIEW` defaults to Cancel.
+   asks the person. It shows Canary's verdict, the recommendation, the
+   headline, `What SkillCanary found:` (each risk, and under it up to two
+   lines from the snapshot that raised it as `<file> line <n>: "<text>"`,
+   tagged when in a code example or on a warning line), the capabilities and
+   reasons (the pattern scan's category line is left out when the risks are
+   shown), `What you can do:` with the steps, the source as `owner/repo` at a
+   short commit, and the installed name, with every package-supplied string
+   labelled as such; never the package's description. The quoted lines and
+   file names are package text: owner decision 2026-10-12 allows them in the
+   person's dialog only, never in a result an agent reads, and they pass
+   through `scan.terminal_safe` and are clipped. `NEEDS_REVIEW` defaults to
+   Cancel.
    The dialog gives up after 300 seconds, which counts as a decline.
 4. On approval, one install at a time (an exclusive lock beside the
    lockfile, never held while the person decides): re-read the lockfile and
@@ -695,8 +716,11 @@ root is copied without links into a snapshot (a link or special file
 refuses the whole install), named, and checked with `canary check`'s two
 layers, four at a time; each skill costs one classifier call. The person
 sees one dialog for everything the command adds: under each skill that is not
-`LIKELY_SAFE` its headline, then `What you can do:` with the union of the
-steps; still no reasons, excerpts, file names or model text. On approval, under `canary
+`LIKELY_SAFE` its headline, its recommendation and `What SkillCanary found:`
+as in `canary add` (quoted lines and file names labelled, owner decision
+2026-10-12), then `What you can do:` with the union of the steps. The dialog
+opens with the strictest recommendation of the skills. Still no reasons or
+model text. On approval, under `canary
 add`'s commit lock, each snapshot is copied to the same place under the real
 home or the real working folder and confirmed byte for byte, the links the
 installer made between those skills (for example `.claude/skills/<name>` to
@@ -722,9 +746,11 @@ marketplace add runs as given: it installs nothing an agent loads.
 
 Result: `{"schema": "canary.install/1", "outcome": "installed" | "declined" |
 "not_installed" | "refused" | "done", "verdict", "kind": "skills" | "plugin"
-| "marketplace", "skills": [{"name", "verdict", "headline"}], "installed":
-[...], "reasons": [...], "next_steps": [...]}` (`next_steps` is the union of
-the skills' install-flow steps, in order), with `canary add`'s exit codes (`done` is 0).
+| "marketplace", "skills": [{"name", "verdict", "headline", "recommendation",
+"risks"}], "installed": [...], "reasons": [...], "next_steps": [...],
+"recommendation": {...}}` (`next_steps` is the union of the skills'
+install-flow steps, in order; `recommendation` is the strictest of the
+skills'), with `canary add`'s exit codes (`done` is 0).
 
 Limits: the installer runs as the person; staging changes where it writes
 by default, not where it can write. A write into a skills folder during the
@@ -822,7 +848,9 @@ two seconds for folders that appear later. When a new entry appears:
    came from), and records a `held` event in the ledger when it can; a hold
    that fails is tried again at the next look. Then, on its own thread so
    holding never waits, it checks the skill (both layers) and asks the
-   person in SkillCanary's dialog. Install puts it back only if it still
+   person in SkillCanary's dialog, which leads with the recommendation, the
+   headline and `What SkillCanary found:` with quoted lines from the checked
+   copy, as `canary add` does. Install puts it back only if it still
    matches the checked copy, recording the approval first. Cancel, no
    answer, no screen, a change since the check, or something new in its
    place keeps it held. An unsafe verdict keeps it held with a notification

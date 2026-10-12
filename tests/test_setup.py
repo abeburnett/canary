@@ -278,7 +278,9 @@ class SetupTeachesAgentsAboutSkillCanary(unittest.TestCase):
         from canary import frontdoor
         text = " ".join(frontdoor.SKILL_TEXT.split())
         for phrase in (
-                "relay the headline first, then the reasons and the steps",
+                "relay SkillCanary's recommendation first (`recommendation.text`: install, "
+                "install only if you trust its author, or decline), then the headline, the "
+                "risks, the reasons and the steps",
                 "explain (for the person only: never run canary explain or --excerpts yourself; "
                 "give the person the command to run in their own terminal)",
                 "canary doctor --prune"):
