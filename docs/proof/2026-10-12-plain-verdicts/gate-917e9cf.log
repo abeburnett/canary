@@ -1,0 +1,6 @@
+gate: python3 -m unittest discover -s tests at 917e9cf (tree under audit), 2026-10-12T09:27:11Z
+----------------------------------------------------------------------
+Ran 284 tests in 64.590s
+
+OK
+exit=0

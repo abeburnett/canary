@@ -67,3 +67,10 @@ Done-when audit, round 1 (milestone-auditor, Fable 5.1, high, at `cab4222`):
 bullets 1 and 3-6 SHOWN; bullet 2 RE-SCOPED because the quote limits had no
 owner decision. The owner then kept the limits (owner decision 2); the README
 now states them.
+
+Done-when audit, round 2 (same auditor, at `917e9cf`): all six bullets SHOWN,
+`AUDIT: PASS`. Caveats it noted: `invisible-character` and
+`mixed-script-word` have no test asserting the rule id fires (only that the
+verdict is not `LIKELY_SAFE`), and the AI-review column of `results.csv`
+cannot be reproduced from the repository alone. Gate log:
+`docs/proof/2026-10-12-plain-verdicts/gate-917e9cf.log`.
