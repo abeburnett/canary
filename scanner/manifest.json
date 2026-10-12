@@ -1,8 +1,8 @@
 {
-  "version": "222c3df",
+  "version": "ec665bc",
   "files": {
     "bin/canary": "6be3492d4a1c5373bf1040f4a612737548593853448d95f436d5828e9545ffa9",
-    "canary/__init__.py": "ae739b3e3b817044ada923b44ba82c752fe8b7c2133908d58fff8fd4b5146298",
+    "canary/__init__.py": "62fb98cd69cab6a05bf88a86f0702efa7848600b208fd56673f6fda3bbcefa3b",
     "canary/add.py": "923f471503fb496dd73dded3de3fa3445452a3cca09550bedd1068567304ffd0",
     "canary/catalog.py": "71e10481b33405cac42aaec69b62de36915ff2391bfeaab447ee4ea61d7fea12",
     "canary/classifiers/anthropic_api.py": "a38794d24641ab62a3acfa889e6f264ee2f83fe68e42c028d8fe211d01b6f833",
