@@ -504,8 +504,6 @@ def _plugin(parsed, home, cwd, support_dir, run_dir, run_id, log_path, out, appr
                                 name=plugin_id)
     if items is None:
         return out
-    out["skills"] = [{"name": plugin_id, "verdict": items[0]["verdict"],
-                      "headline": items[0]["headline"]}]
     if out["verdict"] == "UNSAFE":
         out["outcome"] = "refused"
         out["reasons"].append("Not installed: SkillCanary judged it unsafe.")

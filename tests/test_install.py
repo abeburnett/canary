@@ -426,6 +426,11 @@ class PluginsAreCheckedThenInstalled(unittest.TestCase):
         self.assertIn("quarantine", configs[0])  # checked in staging first
         self.assertEqual(configs[1], os.path.join(mac.home, ".claude"))
         self.assertEqual(len(mac.asked), 1)
+        # Program 2026-10-12 (premerge review): plugins keep the new fields.
+        [plugin] = out["skills"]
+        self.assertEqual((plugin["name"], plugin["recommendation"]["action"], plugin["risks"]),
+                         ("tidy@mkt", "install", []))
+        self.assertEqual(out["recommendation"]["action"], "install")
 
     def test_a_plugin_that_changed_after_its_check_is_uninstalled(self):
         mac = Mac()

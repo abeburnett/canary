@@ -17,7 +17,7 @@
     "canary/guestlist.py": "6514e6f1a2cc565eabd2dc0c82036c24b0974ed147186b2beb1c29eda56bc7fd",
     "canary/hosts/claude.py": "4a317a3236c23a1bf006231c0545389d670b0c0dede26a7d2b7314ac6e2c38c3",
     "canary/hosts/codex.py": "e951d4cf3d072c2e55e1a99b6b6396e1128eaca49e639683deb4729b07d11d15",
-    "canary/install.py": "d0f9daa05e1069a67845451328811dad6c3fa62b2347e83237b843ca73996eb4",
+    "canary/install.py": "f7316316025de4b3db3f5871e37590effcf741ee616ed505463351453ff738c4",
     "canary/installers.py": "53d310ec6acfe87e837fcd7d94e8a7c464657743317e88c4c74bfe16eb135a50",
     "canary/scan.py": "68279bfdafdf3258e3ae69354fd126498284393312db4912ed26c749b70126f0",
     "canary/setup.py": "eca8c24b921de8d34658333be6bd2b5650deb0b407f0730e148e88f4a9db52bd",
