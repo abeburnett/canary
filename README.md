@@ -14,7 +14,9 @@ decide with the facts in front of you.
 When an agent installs a skill, or one appears in your skills folder without
 a check, SkillCanary holds it and asks you. Each question starts with a
 recommendation, then gives each risk in plain words and the line in the skill
-that raised it:
+that raised it (up to two lines per risk; `canary explain` shows the rest, and
+an install that flags more than three skills lists their risks without
+quotes, so the dialog fits on screen):
 
 ```text
 Recommended: decline, unless you wrote it or know why it does this.

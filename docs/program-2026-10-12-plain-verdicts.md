@@ -18,7 +18,13 @@ tier is dropped (future-think `wayfinder/tickets/06-venture-decisions.md`).
    coming from the skill. Agent output and JSON keep omitting package text.
    This narrows the 2026-10-06 rule that kept excerpts and file names out of
    dialogs.
-2. **Publication stays with the owner.** Releases, site deploys and Stripe
+2. **Quote limits (2026-10-12, asked in session after the done-when audit).**
+   The owner keeps the limits on quoted lines: a `canary install` that flags
+   more than three skills lists their risks without quotes, and any dialog
+   quotes at most five risks and two lines each, with a count and a pointer
+   to `canary explain` for the rest. Reason: a macOS dialog cannot scroll.
+   Every finding still gets its risk sentence and the recommendation.
+3. **Publication stays with the owner.** Releases, site deploys and Stripe
    changes are not part of this program; item 4 is a proposal only.
 
 ## Done when
@@ -31,7 +37,7 @@ The owner's four work items, as stated, plus the test run he asked for:
 2. Every finding is actionable: it states the risk in plain words (for
    example "this skill can read your SSH keys") and a recommended action
    (install, install only if you trust the author, or decline), with the
-   evidence line.
+   evidence line (within the quote limits of owner decision 2).
 3. Detection is verified against real or fixture skills with known-bad
    patterns, and a record says which README claims hold.
 4. A proposal (not executed) says how to retire the paid tier and the site's
@@ -56,3 +62,8 @@ in `d9c8165`. `premerge-review` (GPT-6.1 Sol, high, 2026-10-12): no security
 findings; one should-fix (plugin results dropped `recommendation` and
 `risks`), folded with a test in `PluginsAreCheckedThenInstalled`; verdict
 MERGE-AFTER-FIXES.
+
+Done-when audit, round 1 (milestone-auditor, Fable 5.1, high, at `cab4222`):
+bullets 1 and 3-6 SHOWN; bullet 2 RE-SCOPED because the quote limits had no
+owner decision. The owner then kept the limits (owner decision 2); the README
+now states them.
