@@ -61,6 +61,7 @@ Exit codes (every Canary command uses these):
   },
   "capabilities": [{"kind": "…", "path_id": "f:…", "line": 12}],
   "findings": [{"check_id": "…", "category": "…", "severity": "high|medium|low|info",
+                "detail": "ssh | cloud | … | null",
                 "path_id": "f:…", "line": 5, "excerpt_sha256": "…",
                 "context": "code_example | forbidding | null"}],
   "reasons": ["plain-language reason for the verdict"]
@@ -385,8 +386,9 @@ a valid answer for any reason (`unavailable`, `too_large`, `failed`,
 `recommendation` and `risks` (program 2026-10-12, `canary/explain.py`) are
 Canary's own text. The recommendation: `UNSAFE` is `decline`; `LIKELY_SAFE`
 is `install`; `NEEDS_REVIEW` is `decline` when a high-severity (attack) rule
-hit a line that is neither in a code example nor warning against it, and the
-AI review did not confidently pass the skill; otherwise `trust` ("install
+hit anywhere and the AI review did not confidently pass the skill (a code
+example or a warning word never softens this: the author writes both);
+otherwise `trust` ("install
 only if you trust its author"), worded differently when the AI review did not
 run, because the pattern scan alone passes most attacks. A risk is one
 sentence per rule (`explain.RISKS`), or a sharper one when the catalog pattern
@@ -488,7 +490,9 @@ Steps:
    reasons (the pattern scan's category line is left out when the risks are
    shown), `What you can do:` with the steps, the source as `owner/repo` at a
    short commit, and the installed name, with every package-supplied string
-   labelled as such; never the package's description. The quoted lines and
+   labelled as such; never the package's description. `canary install` quotes
+   lines only when at most three of its skills need a look (one dialog has no
+   scroll bar); above that it lists the risks alone. The quoted lines and
    file names are package text: owner decision 2026-10-12 allows them in the
    person's dialog only, never in a result an agent reads, and they pass
    through `scan.terminal_safe` and are clipped. `NEEDS_REVIEW` defaults to

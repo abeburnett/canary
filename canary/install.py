@@ -131,6 +131,9 @@ def _check_all(snapshots, backend, model, timeout_s, log_dir):
 WORST = {"LIKELY_SAFE": 0, "NEEDS_REVIEW": 1, "UNSAFE": 2}
 
 
+QUOTE_UP_TO = 3
+
+
 def dialog_text(command, items, verdict):
     """One dialog for everything the command installs. Names come from the
     packages; the command comes from the agent."""
@@ -144,6 +147,9 @@ def dialog_text(command, items, verdict):
     lines = [f"SkillCanary checked what this install would add: {word}.", ""]
     if all("recommendation" in it for it in items):
         lines += [_worst_recommendation(items)["text"], ""]
+    # One dialog has no scroll bar: quote lines only when few skills need a
+    # look, and give the risks alone above that.
+    quote = sum(it["verdict"] != "LIKELY_SAFE" for it in items) <= QUOTE_UP_TO
     quoted = False
     for it in items:
         mark = "" if it["verdict"] == "LIKELY_SAFE" else "  (needs your judgment)"
@@ -155,10 +161,10 @@ def dialog_text(command, items, verdict):
             lines.append(f"    {it['headline']}")
         if it["verdict"] != "LIKELY_SAFE" and it.get("recommendation"):
             lines.append(f"    {it['recommendation']['text']}")
-            found = add.found_block({"_snapshot": it.get("snapshot"),
+            found = add.found_block({"_snapshot": it.get("snapshot") if quote else None,
                                      "risks": it.get("risks", [])})
             lines += [f"    {line}" for line in found]
-            quoted = quoted or bool(found)
+            quoted = quoted or (quote and bool(found))
     steps = list(dict.fromkeys(s for it in items for s in it.get("steps", [])))
     if steps:
         lines += ["", "What you can do:"] + [f"- {s}" for s in steps]

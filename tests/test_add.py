@@ -507,8 +507,8 @@ HEADLINE = ("The AI review judged this skill safe (0.93). The pattern scan flagg
             "the agent's instructions for you to look at.")
 
 
-TRUST = ("Recommended: install only if you trust its author. Nothing in it looks like an "
-         "attack, but SkillCanary cannot vouch for it.")
+TRUST = ("Recommended: install only if you trust its author. SkillCanary found nothing that "
+         "marks it as an attack, but cannot vouch for it either.")
 DECLINE = "Recommended: decline, unless you wrote it or know why it does this."
 OVERRIDE_RISK = ("It tells the agent to ignore its instructions, which hands the skill control "
                  "of the agent.")

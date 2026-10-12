@@ -31,8 +31,8 @@ Each question gives one of three recommendations:
 | Recommendation | What it means | What to do |
 |---|---|---|
 | Install | The pattern scan and the AI review both passed it. | Choose **Install**. |
-| Install only if you trust its author | Nothing in it looks like an attack, but it runs code, quotes risky commands as examples, or the AI review didn't clear it. | Install it if you know where it came from. Otherwise choose **Cancel**. |
-| Decline | It tells the agent to do something risky in plain instructions, and the AI review didn't clear it. | Choose **Cancel**, unless you wrote it or know why it does this. |
+| Install only if you trust its author | SkillCanary found nothing that marks it as an attack, but it runs code, gives the agent a new role, or the AI review didn't run or wants a person to look. | Install it if you know where it came from. Otherwise choose **Cancel**. |
+| Decline | It tells the agent to do something risky, and the AI review didn't clear it. A risky line inside a code example still counts, because the skill's author writes the examples too. | Choose **Cancel**, unless you wrote it or know why it does this. |
 
 SkillCanary doesn't install a skill it judges unsafe, and it doesn't ask; it
 tells you why. Cancel deletes nothing: a held skill stays held, and
@@ -63,7 +63,7 @@ wshobson/agents. The per-skill results are in
 | Checks that ran | Attacks it declined | Real skills: install / trust / decline |
 |---|---|---|
 | Pattern scan and AI review | 60 of 60 | 65 / 25 / 4 |
-| Pattern scan only | 16 of 60 | 0 / 90 / 4 |
+| Pattern scan only | 20 of 60 | 0 / 85 / 9 |
 
 The AI review does most of the work. It runs on your own Claude Code login,
 or on `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`. Without one, every question

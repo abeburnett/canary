@@ -260,17 +260,19 @@ DETAILS = {
 # reads; `action` is for agents and scripts.
 RECOMMEND = {
     "install": "Recommended: install. SkillCanary found nothing that needs your judgment.",
-    "trust": "Recommended: install only if you trust its author. Nothing in it looks like an "
-             "attack, but SkillCanary cannot vouch for it.",
+    "trust": "Recommended: install only if you trust its author. SkillCanary found nothing "
+             "that marks it as an attack, but cannot vouch for it either.",
     "decline": "Recommended: decline, unless you wrote it or know why it does this.",
 }
 # `trust` when the AI review did not run: the pattern scan alone passes most
-# attacks (bench, 2026-10-12: 44 of 60 samples), so say so.
+# attacks (bench, 2026-10-12: 40 of 60 samples), so say so.
 UNREVIEWED = ("Recommended: install only if you trust its author. The AI review did not run, "
               "and the pattern scan alone misses most attacks.")
 
-# Attack checks: one open hit (not in a code example, not on a line that warns
-# against it) without the AI review's confident pass means decline.
+# Attack checks: one hit without the AI review's confident pass means decline.
+# Where the hit sits (code example, a line that warns against it) does not
+# soften this: the skill's author writes the fences and the warning words, the
+# same reason attack patterns are never dampened (program 2026-09-26).
 _ATTACKS = {cid for cid, _, sev, _, _, _ in catalog.CHECKS if sev == "high"} | {
     cid for cid, (_, sev, _) in catalog.EXTRA.items() if sev == "high"}
 
@@ -299,19 +301,17 @@ def _vouched(check, confident):
 
 def recommend(check, confident):
     """{"action": install | trust | decline, "text": …}. UNSAFE is decline and
-    LIKELY_SAFE is install. NEEDS_REVIEW is decline when an attack pattern sits
-    in plain instructions and the AI review did not confidently pass it, and
-    trust otherwise (examples, warnings, code, an incomplete or missing
-    review)."""
+    LIKELY_SAFE is install. NEEDS_REVIEW is decline when an attack pattern hit
+    anywhere and the AI review did not confidently pass the skill, and trust
+    otherwise (code, medium rules, an incomplete or missing review)."""
     verdict = check["verdict"]
     if verdict == "UNSAFE":
         action = "decline"
     elif verdict == "LIKELY_SAFE":
         action = "install"
     else:
-        open_attack = any(f["check_id"] in _ATTACKS and f["context"] is None
-                          for f in _scored(check["scan"]["findings"]))
-        action = "decline" if open_attack and not _vouched(check, confident) else "trust"
+        attack = any(f["check_id"] in _ATTACKS for f in _scored(check["scan"]["findings"]))
+        action = "decline" if attack and not _vouched(check, confident) else "trust"
     if action == "trust" and check["classifier"].get("status") != "ok":
         return {"action": action, "text": UNREVIEWED}
     return {"action": action, "text": RECOMMEND[action]}
