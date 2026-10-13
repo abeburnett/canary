@@ -279,3 +279,21 @@ These rulings are senior to the design text above wherever they differ.
    overridden approval).
 5. The dialog script returns the button and typed text on two lines.
 6. A held special file (FIFO) that fails to copy is not tested; a link is.
+
+## Done-when audit (2026-10-13)
+
+Fable 5.1 (`milestone-auditor`, high, read-only) at `46f29c6`: all nine
+bullets SHOWN, `AUDIT: PASS`. It found no one-click or no-typing override
+for any folder name it tried (whitespace variants, newlines, zero-width
+characters, very long names, names equal to `install anyway` or to the button
+label). Caveats it recorded:
+
+- `counterfactual-2.log` predated the pre-merge fold; it is recaptured at
+  `46f29c6` (strict comparison breaks the named test on its assertion; the
+  class's other three tests stay green; green after the revert).
+- The gate logs are bare unittest output; the chain to `f17b568` is the file
+  name, the 308-test count at head, and `46f29c6` changing no code.
+- Not entered by tests: the real osascript dialog (its text field, the
+  two-line answer, Return choosing Cancel), a held FIFO, and a running
+  watcher observing a `canary add` or `canary install` override (that
+  mechanism is unchanged from `main`).

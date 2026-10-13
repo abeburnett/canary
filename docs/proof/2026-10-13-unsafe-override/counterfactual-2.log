@@ -1,40 +1,37 @@
-Bullet 2: add.ask compares the typed text exactly, without trimming or ignoring case
-
-== The break ==
-$ git diff -- canary/add.py
+### head: 46f29c6
+### break: compare the typed text exactly (no trim, no casefold)
 diff --git a/canary/add.py b/canary/add.py
-index e9670e6..553d879 100644
+index 0d1cbff..606ed16 100644
 --- a/canary/add.py
 +++ b/canary/add.py
-@@ -584,7 +584,7 @@ def ask(text, verdict, yes=None, confirm=None):
+@@ -586,7 +586,7 @@ def ask(text, verdict, yes=None, confirm=None):
      button, _, typed = proc.stdout.partition("\n")
      if button.strip() != yes:
          return None
--    return typed.strip().casefold() == confirm.strip().casefold()
-+    return typed == confirm
+-    return bool(typed.strip()) and typed.strip().casefold() == confirm.strip().casefold()
++    return bool(typed.strip()) and typed == confirm
  
  
  # ---- the flow ------------------------------------------------------------
-exit code: 0
 
-== Broken: the named test, then its class ==
-$ /Users/abrahamburnett/.pyenv/versions/3.10.3/bin/python3 -m unittest -v tests.test_add.TheOverrideDialogComparesWhatIsTyped.test_only_the_yes_button_with_the_matching_text_installs
+### named test with the break
 test_only_the_yes_button_with_the_matching_text_installs (tests.test_add.TheOverrideDialogComparesWhatIsTyped) ... 
 ======================================================================
 FAIL: test_only_the_yes_button_with_the_matching_text_installs (tests.test_add.TheOverrideDialogComparesWhatIsTyped) (stdout='Install anyway\n  TREG \n')
 ----------------------------------------------------------------------
 Traceback (most recent call last):
-  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-addcddd3b07b705ba/tests/test_add.py", line 258, in test_only_the_yes_button_with_the_matching_text_installs
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/unsafe-override/tests/test_add.py", line 258, in test_only_the_yes_button_with_the_matching_text_installs
     self.assertIs(got, expected)
 AssertionError: False is not True
 
 ----------------------------------------------------------------------
-Ran 1 test in 0.000s
+Ran 1 test in 0.001s
 
 FAILED (failures=1)
 exit code: 1
 
-$ /Users/abrahamburnett/.pyenv/versions/3.10.3/bin/python3 -m unittest -v tests.test_add.TheOverrideDialogComparesWhatIsTyped
+### class with the break
+test_a_blank_phrase_never_approves (tests.test_add.TheOverrideDialogComparesWhatIsTyped) ... ok
 test_cancel_and_silence_are_not_an_override (tests.test_add.TheOverrideDialogComparesWhatIsTyped) ... ok
 test_only_the_yes_button_with_the_matching_text_installs (tests.test_add.TheOverrideDialogComparesWhatIsTyped) ... test_without_a_phrase_the_yes_button_alone_still_decides (tests.test_add.TheOverrideDialogComparesWhatIsTyped) ... ok
 
@@ -42,42 +39,27 @@ test_only_the_yes_button_with_the_matching_text_installs (tests.test_add.TheOver
 FAIL: test_only_the_yes_button_with_the_matching_text_installs (tests.test_add.TheOverrideDialogComparesWhatIsTyped) (stdout='Install anyway\n  TREG \n')
 ----------------------------------------------------------------------
 Traceback (most recent call last):
-  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-addcddd3b07b705ba/tests/test_add.py", line 258, in test_only_the_yes_button_with_the_matching_text_installs
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/unsafe-override/tests/test_add.py", line 258, in test_only_the_yes_button_with_the_matching_text_installs
     self.assertIs(got, expected)
 AssertionError: False is not True
 
 ----------------------------------------------------------------------
-Ran 3 tests in 0.001s
+Ran 4 tests in 0.001s
 
 FAILED (failures=1)
 exit code: 1
 
-== Restored ==
-$ git checkout -- canary/add.py
-exit code: 0
-
-$ git diff --stat
-exit code: 0
-
-== Restored: the named test, then its class ==
-$ /Users/abrahamburnett/.pyenv/versions/3.10.3/bin/python3 -m unittest -v tests.test_add.TheOverrideDialogComparesWhatIsTyped.test_only_the_yes_button_with_the_matching_text_installs
-test_only_the_yes_button_with_the_matching_text_installs (tests.test_add.TheOverrideDialogComparesWhatIsTyped) ... ok
-
-----------------------------------------------------------------------
-Ran 1 test in 0.000s
-
-OK
-exit code: 0
-
-$ /Users/abrahamburnett/.pyenv/versions/3.10.3/bin/python3 -m unittest -v tests.test_add.TheOverrideDialogComparesWhatIsTyped
+### revert: git checkout -- canary/add.py
+ .../counterfactual-2.log                           | 59 +++++-----------------
+ 1 file changed, 14 insertions(+), 45 deletions(-)
+### class after the revert
+test_a_blank_phrase_never_approves (tests.test_add.TheOverrideDialogComparesWhatIsTyped) ... ok
 test_cancel_and_silence_are_not_an_override (tests.test_add.TheOverrideDialogComparesWhatIsTyped) ... ok
 test_only_the_yes_button_with_the_matching_text_installs (tests.test_add.TheOverrideDialogComparesWhatIsTyped) ... ok
 test_without_a_phrase_the_yes_button_alone_still_decides (tests.test_add.TheOverrideDialogComparesWhatIsTyped) ... ok
 
 ----------------------------------------------------------------------
-Ran 3 tests in 0.000s
+Ran 4 tests in 0.000s
 
 OK
 exit code: 0
-
-summary: broken named test exit 1 (must be non-zero); restored named test exit 0 and class exit 0 (must be 0)
