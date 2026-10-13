@@ -245,3 +245,37 @@ These rulings are senior to the design text above wherever they differ.
    bullets 1, 2, 5 and 6 a deliberate break turns a named test red while its
    neighbours stay green, captured as raw logs in
    `docs/proof/2026-10-13-unsafe-override/`.
+
+## Build and review (2026-10-13)
+
+| Commit | What |
+|---|---|
+| `de8a8b4` | The override in every flow, the record, restore reasons, SKILL text and docs |
+| `2888673` | A restore test gets its own answer double |
+| `406481a` | Counterfactual logs for bullets 1, 2, 5 and 6 |
+| `f17b568` | Fold of the pre-merge review |
+
+- **Refutation** (Spark 1.3 Contributor, `refute-plan`): PROCEED-WITH-FIXES,
+  4 blocking and 11 smaller findings, folded as the round 1 rulings.
+- **Pre-merge review** (GPT-6.1 Sol, high, `main...406481a`):
+  MERGE-AFTER-FIXES. Security: a held folder named only with spaces made the
+  phrase blank, and an empty answer matched it, so one click overrode. Fixed
+  in `f17b568`: `add.ask` fails closed on a blank phrase and never accepts an
+  empty answer, and a blank folder name gets the fixed phrase `install
+  anyway` (counterfactual `counterfactual-blank-phrase.log`). Note: lock
+  records for same-name copies took the first copy's verdict; they now take
+  the group's worst, matching the ledger.
+- **Gate** at `f17b568`: 308 tests OK on Python 3.10 and `/usr/bin/python3`
+  (3.9.6); logs `gate-f17b568-py310.log`, `gate-f17b568-py39.log`.
+
+### Readings recorded (builder, accepted by the coordinator)
+
+1. The `h is None` race line omits the ` canary list shows where it is.`
+   suffix, since SkillCanary no longer holds the skill.
+2. `canary restore` binds a no-op `notify`; the daemon still notifies.
+3. The copy-failed notification names links or special files instead of
+   "judged it unsafe".
+4. `canary list --json` carries `override` on every skill (`true` only for an
+   overridden approval).
+5. The dialog script returns the button and typed text on two lines.
+6. A held special file (FIFO) that fails to copy is not tested; a link is.
