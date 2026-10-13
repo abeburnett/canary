@@ -288,8 +288,9 @@ class ThePersonDecides(unittest.TestCase):
         [held_id] = mac.settle()
         sent = []
         with unittest.mock.patch.object(watcher, "_notify", sent.append):
-            result = watcher.restore(held_id, mac.home, mac.support, backend=model(),
-                                     model="fake")
+            result = watcher.restore(held_id, mac.home, mac.support,
+                                     ask=lambda text, verdict, confirm=None: None,
+                                     backend=model(), model="fake")
         self.assertEqual((result, sent), ((False, STILL_LINKS), []))
 
 
