@@ -128,12 +128,16 @@ class Mac:
             return answer
         return approve
 
-    def install(self, argv, answer=True, verdict="SAFE", spec=None, **extra):
+    def install(self, argv, answer=True, verdict="SAFE", spec=None, backend=None,
+                real_dialog=False, **extra):
+        """`real_dialog` leaves `approve` unset, so the question goes to
+        `add.ask` (which a test replaces)."""
         patch = self.environment(FAKE_SPEC=json.dumps(spec or {"skills": []}), **extra)
         try:
             return install.install(argv, home=self.home, cwd=self.project,
-                                   support_dir=self.support, approve=self.approver(answer),
-                                   backend=model(verdict), model="fake")
+                                   support_dir=self.support,
+                                   approve=None if real_dialog else self.approver(answer),
+                                   backend=backend or model(verdict), model="fake")
         finally:
             patch.stop()
 
@@ -155,6 +159,12 @@ class Mac:
 
 
 ONE = {"skills": [{"name": "helper", "link": True}]}
+
+
+def evil_backend(system_prompt, fenced, timeout_s, *, model):
+    """UNSAFE for a skill whose text says EVIL, SAFE for the rest."""
+    return json.dumps({"verdict": "UNSAFE" if "EVIL" in fenced else "SAFE", "confidence": 0.95,
+                       "findings": [], "summary": "ok"})
 ADD = ["npx", "skills", "add", "someone/repo", "-g", "-y"]
 
 
@@ -201,11 +211,104 @@ class SkillsComeFromStaging(unittest.TestCase):
         self.assertEqual(os.listdir(os.path.join(mac.home, ".agents", "skills")), [])
         self.assertIn("declined", mac.events("helper"))
 
-    def test_an_unsafe_skill_is_refused_without_asking(self):
+    def test_an_unsafe_skill_is_refused_unless_the_person_types_its_name(self):
+        # Program 2026-10-13 (ruling 7): was "refused without asking".
+        for answer, said in ((False, "You chose not to install it anyway."),
+                             (None, "Nobody answered the SkillCanary dialog.")):
+            with self.subTest(answer=answer):
+                mac = Mac()
+                out = mac.install(ADD, answer=answer, verdict="UNSAFE", spec=ONE)
+                self.assertEqual(out["outcome"], "refused")
+                self.assertEqual(install.EXIT_FOR_OUTCOME[out["outcome"]], 20)
+                self.assertEqual([a["summary"].get("confirm") for a in mac.asked], ["helper"])
+                self.assertIn("Not installed: SkillCanary judged part of it unsafe.", out["reasons"])
+                self.assertIn(said, out["reasons"])
+                self.assertNotIn("overridden", out)
+                self.assertEqual(os.listdir(os.path.join(mac.home, ".agents", "skills")), [])
+                self.assertIn("refused", mac.events("helper"))
+
+    def test_an_unsafe_skill_installs_when_the_person_types_its_name_and_says_so(self):
         mac = Mac()
         out = mac.install(ADD, verdict="UNSAFE", spec=ONE)
-        self.assertEqual((out["outcome"], mac.asked), ("refused", []))
-        self.assertEqual(os.listdir(os.path.join(mac.home, ".agents", "skills")), [])
+        self.assertEqual((out["outcome"], out["verdict"], out.get("overridden")),
+                         ("installed", "UNSAFE", True))
+        self.assertEqual(install.EXIT_FOR_OUTCOME[out["outcome"]], 0)
+        self.assertTrue(os.path.isfile(os.path.join(mac.home, ".agents", "skills", "helper",
+                                                    "SKILL.md")))
+        entry = mac.lock()["skills"]["helper"]
+        self.assertEqual((entry["verdict"], entry.get("overridden")), ("UNSAFE", True))
+        with open(os.path.join(mac.support, "ledger.jsonl")) as fh:
+            approved = [e for e in map(json.loads, fh) if e["event"] == "approved"]
+        self.assertEqual([e.get("override") for e in approved], [True])
+
+    def test_an_unsafe_skill_that_cannot_be_installed_anyway_is_not_asked_about(self):
+        mac = Mac()
+        os.makedirs(os.path.join(mac.home, ".agents", "skills", "helper"))
+        out = mac.install(ADD, verdict="UNSAFE", spec=ONE)
+        self.assertEqual((out["outcome"], mac.asked), ("not_installed", []))
+
+    def test_two_unsafe_skills_are_confirmed_with_one_phrase_and_marked_apart(self):
+        spec = {"skills": [{"name": "alpha", "link": True, "body": "EVIL\n"},
+                           {"name": "beta", "link": True, "body": "EVIL\n"},
+                           {"name": "gamma", "link": True}]}
+        mac = Mac()
+        out = mac.install(ADD, backend=evil_backend, spec=spec)
+        self.assertEqual([a["summary"].get("confirm") for a in mac.asked],
+                         ["install 2 unsafe skills"])
+        [asked] = mac.asked
+        text = install.dialog_text(ADD, asked["summary"]["items"], asked["summary"]["verdict"],
+                                   asked["summary"]["confirm"])
+        self.assertIn("- alpha  (judged unsafe)\n", text)
+        self.assertIn("- gamma\n", text)
+        self.assertTrue(text.endswith("SkillCanary recommends you don't install this. To install "
+                                      "it anyway, type install 2 unsafe skills below and choose "
+                                      "Install anyway."))
+        self.assertEqual(out["outcome"], "installed")
+
+    def test_identical_copies_are_recorded_with_the_groups_worst_verdict(self):
+        spec = {"skills": [{"name": "helper", "folder": "helper-a"},
+                           {"name": "helper", "folder": "helper-b"}]}
+
+        def one_at_a_time(snapshots, backend, model_, timeout_s, log_dir):
+            # The first copy is checked SAFE and the second UNSAFE, in that order.
+            return [install.classify._check(s, backend=model(v), model="fake",
+                                            timeout_s=timeout_s, log_dir=log_dir)
+                    for s, v in zip(snapshots, ("SAFE", "UNSAFE"))]
+
+        mac = Mac()
+        with unittest.mock.patch.object(install, "_check_all", one_at_a_time):
+            out = mac.install(ADD, spec=spec)
+        self.assertEqual((out["outcome"], out.get("overridden")), ("installed", True))
+        entry = mac.lock()["skills"]["helper"]
+        self.assertEqual((entry["verdict"], entry.get("overridden")), ("UNSAFE", True))
+
+    def test_in_a_mixed_install_only_the_unsafe_skill_is_marked_overridden(self):
+        spec = {"skills": [{"name": "alpha", "link": True, "body": "EVIL\n"},
+                           {"name": "gamma", "link": True}]}
+        mac = Mac()
+        out = mac.install(ADD, backend=evil_backend, spec=spec)
+        self.assertEqual([a["summary"].get("confirm") for a in mac.asked], ["alpha"])
+        self.assertEqual((out["outcome"], out.get("overridden")), ("installed", True))
+        skills = mac.lock()["skills"]
+        self.assertEqual((skills["alpha"].get("overridden"), skills["gamma"].get("overridden")),
+                         (True, None))
+
+    def test_the_real_dialog_is_always_asked_with_the_phrase_to_type(self):
+        asked = []
+
+        def recorder(text, verdict, yes=None, confirm=None):
+            asked.append((verdict, confirm))
+            return False
+
+        spec = {"skills": [{"name": "alpha", "link": True, "body": "EVIL\n"},
+                           {"name": "gamma", "link": True}]}
+        with unittest.mock.patch.object(add, "ask", recorder):
+            Mac().install(ADD, backend=evil_backend, spec=spec, real_dialog=True)
+            Mac().install(ADD, verdict="UNSAFE", spec=ONE, real_dialog=True)
+            Mac().install(["claude", "plugin", "install", "tidy@mkt"], verdict="UNSAFE",
+                          real_dialog=True)
+        self.assertEqual(asked, [("UNSAFE", "alpha"), ("UNSAFE", "helper"),
+                                 ("UNSAFE", "tidy@mkt")])
 
     def test_a_link_inside_a_skill_stops_the_install(self):
         mac = Mac()
@@ -440,6 +543,19 @@ class PluginsAreCheckedThenInstalled(unittest.TestCase):
                       [r["argv"] for r in mac.runs()])
         with open(os.path.join(mac.home, ".claude", "plugins", "installed_plugins.json")) as fh:
             self.assertNotIn("tidy@mkt", json.load(fh)["plugins"])
+
+    def test_an_unsafe_plugin_installs_only_when_the_person_types_its_id(self):
+        mac = Mac()
+        out = mac.install(self.PLUGIN, answer=False, verdict="UNSAFE")
+        self.assertEqual((out["outcome"], [a["summary"].get("confirm") for a in mac.asked]),
+                         ("refused", ["tidy@mkt"]))
+        self.assertEqual([r["config"] for r in mac.runs() if r["argv"][:2] == ["plugin", "install"]
+                          and "quarantine" not in r["config"]], [])
+        mac = Mac()
+        out = mac.install(self.PLUGIN, verdict="UNSAFE")
+        self.assertEqual((out["outcome"], out["verdict"], out.get("overridden")),
+                         ("installed", "UNSAFE", True))
+        self.assertIs(mac.lock()["plugins"]["tidy@mkt"].get("overridden"), True)
 
     def test_a_declined_plugin_never_runs_the_real_install(self):
         mac = Mac()

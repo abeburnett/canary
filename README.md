@@ -36,8 +36,12 @@ Each question gives one of three recommendations:
 | Install only if you trust its author | SkillCanary found nothing that marks it as an attack, but it runs code, gives the agent a new role, or the AI review didn't run or wants a person to look. | Install it if you know where it came from. Otherwise choose **Cancel**. |
 | Decline | It tells the agent to do something risky, and the AI review didn't clear it. A risky line inside a code example still counts, because the skill's author writes the examples too. | Choose **Cancel**, unless you wrote it or know why it does this. |
 
-SkillCanary doesn't install a skill it judges unsafe, and it doesn't ask; it
-tells you why. Cancel deletes nothing: a held skill stays held, and
+When SkillCanary judges a skill unsafe, it still asks, and it recommends you
+decline. The dialog has a text field and Cancel is the default. To install the
+skill anyway, type its name into the field and choose **Install anyway**; one
+click can't do it. `canary list` marks such a skill `installed anyway`. Anyone
+at your Mac's keyboard can type the name, so SkillCanary records the override
+but can't judge it. Cancel deletes nothing: a held skill stays held, and
 `canary list` shows how to restore it.
 
 ## What it protects against

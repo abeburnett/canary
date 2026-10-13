@@ -371,14 +371,14 @@ def _restore(args):
         return EXIT_USAGE
     from canary import watcher
     try:
-        back = watcher.restore(args[0])
+        back, reason = watcher.restore(args[0])
     except ValueError as exc:
         print(f"canary: {exc}", file=sys.stderr)
         return EXIT_USAGE
     except OSError as exc:
         print(f"canary: {exc.strerror or exc}; it stays held.", file=sys.stderr)
         return 1
-    print("Put back where it was." if back else "Still held; canary list shows where.")
+    print("Put back where it was." if back else reason)
     return 0 if back else 10
 
 

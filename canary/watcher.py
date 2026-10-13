@@ -38,6 +38,14 @@ SETTLE_SECONDS = 2.0
 MAX_WAIT_SECONDS = 30.0
 POLL_SECONDS = 2.0
 SEEN = "watcher-seen.json"
+SUFFIX = " canary list shows where it is."
+STILL_CANCELLED = "Still held: you chose not to install it." + SUFFIX
+STILL_SILENT = "Still held: nobody answered the SkillCanary dialog." + SUFFIX
+STILL_LINKS = "Still held: it holds links or special files SkillCanary will not copy." + SUFFIX
+STILL_CHANGED = "Still held: it changed after its check." + SUFFIX
+STILL_TAKEN = "Still held: something else is in its place now." + SUFFIX
+STILL_NOT_MOVED = "Still held: SkillCanary could not move it back." + SUFFIX
+STILL_GONE = "Still held: SkillCanary is no longer holding it."
 HOLD_ID = re.compile(r"\d{8}T\d{6}Z-[0-9a-f]{8}")
 
 
@@ -273,10 +281,11 @@ class Watcher:
         return held_id
 
     def review(self, held_id):
-        """Check a held entry and ask the person. True when it went back."""
+        """Check a held entry and ask the person. (True, None) when it went
+        back, else (False, the line that says why it stays held)."""
         h = next((h for h in held(self.support, self.roots) if h["id"] == held_id), None)
         if h is None:
-            return False
+            return False, STILL_GONE
         entry = _held_path(self.support, h)
         work = tempfile.mkdtemp(prefix="canary-held-")
         try:
@@ -288,21 +297,24 @@ class Watcher:
                 verdict, reasons = result["verdict"], result["reasons"]
                 caps = sorted({c["kind"] for c in result["scan"]["capabilities"]})
             except (add.SourceError, OSError):
-                result = None
-                verdict, reasons, caps = "UNSAFE", ["It holds links or special files "
-                                                    "SkillCanary will not copy."], []
-            if verdict == "UNSAFE":
-                _decision(self, h["name"], verdict, "refused")
+                # No checked copy exists, so there is nothing to put back or ask about.
+                _decision(self, h["name"], "UNSAFE", "refused")
                 self.notify(f"SkillCanary is holding {h['name']}, which arrived in "
                             f"{_short(os.path.dirname(h['origin']), self.home)} without its "
-                            "check: it judged it unsafe. canary list shows where it is.")
-                return False
-            answer = self.ask(dialog_text(h, verdict, reasons, caps, self.home,
-                                          result=result, snapshot=snap), verdict)
+                            "check: it holds links or special files SkillCanary will not copy. "
+                            "canary list shows where it is.")
+                return False, STILL_LINKS
+            text = dialog_text(h, verdict, reasons, caps, self.home, result=result, snapshot=snap)
+            if verdict == "UNSAFE":
+                answer = self.ask(text, verdict, confirm=_phrase(h["name"]))
+            else:
+                answer = self.ask(text, verdict)
             if answer is True:
                 return self.put_back(h, snap, verdict)
-            _decision(self, h["name"], verdict, "declined" if answer is False else "not_installed")
-            return False
+            _decision(self, h["name"], verdict,
+                      "refused" if verdict == "UNSAFE" else
+                      "declined" if answer is False else "not_installed")
+            return False, STILL_CANCELLED if answer is False else STILL_SILENT
         finally:
             shutil.rmtree(work, ignore_errors=True)
 
@@ -315,23 +327,24 @@ class Watcher:
             if guestlist.digest(_resolved(entry, origin)) != guestlist.digest(snap):
                 self.notify(f"SkillCanary did not put {h['name']} back: it changed after "
                             "its check. It stays held; canary list shows how to restore it.")
-                return False
+                return False, STILL_CHANGED
             if os.path.lexists(origin):
                 self.notify(f"SkillCanary could not put {h['name']} back: something else is "
                             "there now. It stays held; canary list shows where.")
-                return False
+                return False, STILL_TAKEN
             # The approval names where the entry will resolve once it is back.
             resolved = origin if not os.path.islink(entry) else _resolved(entry, origin)
             guestlist.record_install(self.home, [resolved], h["name"], verdict,
-                                     support=self.support, source=snap, how="watcher")
+                                     support=self.support, source=snap, how="watcher",
+                                     override=(verdict == "UNSAFE"))
             os.rename(entry, origin)
         except OSError:
             self.notify(f"SkillCanary could not put {h['name']} back. It stays held; "
                         "canary list shows where.")
-            return False
+            return False, STILL_NOT_MOVED
         shutil.rmtree(os.path.dirname(entry), ignore_errors=True)
         _record(self.support, [{"at": _now(), "event": "restored", "id": h["id"]}])
-        return True
+        return True, None
 
     def run(self, stop=None):
         """The launch agent's loop: kqueue on the skills folders, with a look
@@ -410,7 +423,15 @@ def dialog_text(h, verdict, reasons, caps, home, result=None, snapshot=None):
               "Install puts it back where it was. Cancel keeps it held; nothing is deleted.",
               "The folder name comes from whoever put it there, not from SkillCanary."
               + (" So do the file names and quoted lines." if found and snapshot else "")]
+    if verdict == "UNSAFE":
+        lines += ["", add.override_sentence(_phrase(h["name"]))]
     return "\n".join(lines)
+
+
+def _phrase(name):
+    """What the person types to put an unsafe skill back: its folder name,
+    which whoever made the folder chose, so a blank name gets a fixed phrase."""
+    return name if name.strip() else "install anyway"
 
 
 def _short(path, home):
@@ -429,12 +450,13 @@ def _notify(text):
 
 def restore(held_id, home=None, support=None, ask=None, backend="auto", model=None):
     """`canary restore <id>`: check again and ask the person; only their
-    approval puts it back."""
+    approval puts it back. (True, None), or (False, the line saying why not)."""
     home = home or os.path.expanduser("~")
     w = Watcher.__new__(Watcher)
     w.home = home
     w.support = support or os.path.join(home, guestlist.SUPPORT[2:])
-    w.ask, w.notify = ask or add.ask, _notify
+    # The command prints why it failed, so it sends no notification as well.
+    w.ask, w.notify = ask or add.ask, lambda text: None
     w.backend, w.model = backend, model
     w.roots = guestlist.user_roots(home)
     if not any(h["id"] == held_id for h in held(w.support, w.roots)):

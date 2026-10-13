@@ -1,0 +1,129 @@
+Bullet 5: the 'changed after its check' reason line loses its closing words
+
+== The break ==
+$ git diff -- canary/watcher.py
+diff --git a/canary/watcher.py b/canary/watcher.py
+index 4cc3478..9876686 100644
+--- a/canary/watcher.py
++++ b/canary/watcher.py
+@@ -42,7 +42,7 @@ SUFFIX = " canary list shows where it is."
+ STILL_CANCELLED = "Still held: you chose not to install it." + SUFFIX
+ STILL_SILENT = "Still held: nobody answered the SkillCanary dialog." + SUFFIX
+ STILL_LINKS = "Still held: it holds links or special files SkillCanary will not copy." + SUFFIX
+-STILL_CHANGED = "Still held: it changed after its check." + SUFFIX
++STILL_CHANGED = "Still held: it changed." + SUFFIX
+ STILL_TAKEN = "Still held: something else is in its place now." + SUFFIX
+ STILL_NOT_MOVED = "Still held: SkillCanary could not move it back." + SUFFIX
+ STILL_GONE = "Still held: SkillCanary is no longer holding it."
+exit code: 0
+
+== Broken: the named test, then its class ==
+$ /Users/abrahamburnett/.pyenv/versions/3.10.3/bin/python3 -m unittest -v tests.test_watcher.WhatCannotSlipPast.test_a_skill_changed_after_its_check_is_not_put_back
+test_a_skill_changed_after_its_check_is_not_put_back (tests.test_watcher.WhatCannotSlipPast) ... FAIL
+
+======================================================================
+FAIL: test_a_skill_changed_after_its_check_is_not_put_back (tests.test_watcher.WhatCannotSlipPast)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-addcddd3b07b705ba/tests/test_watcher.py", line 373, in test_a_skill_changed_after_its_check_is_not_put_back
+    self.assertEqual(mac.w.review(held_id), (False, STILL_CHANGED))
+AssertionError: Tuples differ: (Fals[13 chars]d: it changed. canary list shows where it is.') != (Fals[13 chars]d: it changed after its check. canary list shows where it is.')
+
+First differing element 1:
+'Still held: it changed. canary list shows where it is.'
+'Still held: it changed after its check. canary list shows where it is.'
+
++ (False,
+- (False, 'Still held: it changed. canary list shows where it is.')
+? -------
+
++  'Still held: it changed after its check. canary list shows where it is.')
+?                         ++++++++++++++++
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.008s
+
+FAILED (failures=1)
+exit code: 1
+
+$ /Users/abrahamburnett/.pyenv/versions/3.10.3/bin/python3 -m unittest -v tests.test_watcher.WhatCannotSlipPast
+test_a_failed_put_back_is_reported_not_raised (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_a_folder_let_go_without_a_skill_md_is_held_when_it_gets_one (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_a_folder_there_at_start_that_gains_a_skill_md_is_held (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_a_forged_hold_cannot_name_a_place_outside_the_skills_folders (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_a_hold_that_fails_is_tried_again (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_a_restart_does_not_forget_what_arrived (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_a_skill_changed_after_its_check_is_not_put_back (tests.test_watcher.WhatCannotSlipPast) ... FAIL
+test_an_entry_that_never_stops_changing_is_held_anyway (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_holds_survive_a_broken_ledger (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_one_bad_look_does_not_stop_the_watcher (tests.test_watcher.WhatCannotSlipPast) ... canary watch: OSError: disk trouble
+ok
+test_staging_names_are_no_way_around (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_trusting_a_skill_needs_the_person (tests.test_watcher.WhatCannotSlipPast) ... ok
+
+======================================================================
+FAIL: test_a_skill_changed_after_its_check_is_not_put_back (tests.test_watcher.WhatCannotSlipPast)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-addcddd3b07b705ba/tests/test_watcher.py", line 373, in test_a_skill_changed_after_its_check_is_not_put_back
+    self.assertEqual(mac.w.review(held_id), (False, STILL_CHANGED))
+AssertionError: Tuples differ: (Fals[13 chars]d: it changed. canary list shows where it is.') != (Fals[13 chars]d: it changed after its check. canary list shows where it is.')
+
+First differing element 1:
+'Still held: it changed. canary list shows where it is.'
+'Still held: it changed after its check. canary list shows where it is.'
+
++ (False,
+- (False, 'Still held: it changed. canary list shows where it is.')
+? -------
+
++  'Still held: it changed after its check. canary list shows where it is.')
+?                         ++++++++++++++++
+
+
+----------------------------------------------------------------------
+Ran 12 tests in 0.054s
+
+FAILED (failures=1)
+exit code: 1
+
+== Restored ==
+$ git checkout -- canary/watcher.py
+exit code: 0
+
+$ git diff --stat
+exit code: 0
+
+== Restored: the named test, then its class ==
+$ /Users/abrahamburnett/.pyenv/versions/3.10.3/bin/python3 -m unittest -v tests.test_watcher.WhatCannotSlipPast.test_a_skill_changed_after_its_check_is_not_put_back
+test_a_skill_changed_after_its_check_is_not_put_back (tests.test_watcher.WhatCannotSlipPast) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.008s
+
+OK
+exit code: 0
+
+$ /Users/abrahamburnett/.pyenv/versions/3.10.3/bin/python3 -m unittest -v tests.test_watcher.WhatCannotSlipPast
+test_a_failed_put_back_is_reported_not_raised (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_a_folder_let_go_without_a_skill_md_is_held_when_it_gets_one (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_a_folder_there_at_start_that_gains_a_skill_md_is_held (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_a_forged_hold_cannot_name_a_place_outside_the_skills_folders (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_a_hold_that_fails_is_tried_again (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_a_restart_does_not_forget_what_arrived (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_a_skill_changed_after_its_check_is_not_put_back (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_an_entry_that_never_stops_changing_is_held_anyway (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_holds_survive_a_broken_ledger (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_one_bad_look_does_not_stop_the_watcher (tests.test_watcher.WhatCannotSlipPast) ... canary watch: OSError: disk trouble
+ok
+test_staging_names_are_no_way_around (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_trusting_a_skill_needs_the_person (tests.test_watcher.WhatCannotSlipPast) ... ok
+
+----------------------------------------------------------------------
+Ran 12 tests in 0.058s
+
+OK
+exit code: 0
+
+summary: broken named test exit 1 (must be non-zero); restored named test exit 0 and class exit 0 (must be 0)

@@ -1,7 +1,7 @@
 """Behavioural tests for `canary add` (docs/architecture.md, "canary add").
 
-Each scenario guards one rule: hostile archives are refused whole, UNSAFE is
-never offered to the person, only the person's approval installs, the
+Each scenario guards one rule: hostile archives are refused whole, UNSAFE
+installs only when the person types its name, only the person's approval installs, the
 installed copy is byte-for-byte what was checked, installs never overwrite,
 and the agent-facing result carries no package text. Fetch, approval and the
 classifier are fakes; nothing touches the real home folder or the network.
@@ -135,14 +135,65 @@ class HostileArchivesAreRefusedWhole(unittest.TestCase):
 
 
 class OnlyThePersonInstalls(unittest.TestCase):
-    def test_unsafe_is_refused_without_asking(self):
-        env, approve = Env(), Approver(True)
+    def unsafe(self, answer):
+        env, approve = Env(), Approver(answer)
         archive = tarball([("notes/SKILL.md", tarfile.REGTYPE, SKILL)])
         result = env.add(URL, approve, fetch=FakeGitHub(archive), backend=model("UNSAFE"))
-        self.assertEqual((result["outcome"], result["verdict"]), ("refused", "UNSAFE"))
-        self.assertEqual(add.EXIT_FOR_OUTCOME[result["outcome"]], 20)
+        return env, approve, result
+
+    def ledger(self, env):
+        with open(os.path.join(env.support, "ledger.jsonl")) as fh:
+            return [json.loads(line) for line in fh]
+
+    def test_unsafe_is_refused_unless_the_person_types_the_name(self):
+        # Program 2026-10-13 (ruling 7): was "refused without asking".
+        for answer, said in ((False, "You chose not to install it anyway."),
+                             (None, "Nobody answered the SkillCanary dialog.")):
+            with self.subTest(answer=answer):
+                env, approve, result = self.unsafe(answer)
+                self.assertEqual((result["outcome"], result["verdict"]), ("refused", "UNSAFE"))
+                self.assertEqual(add.EXIT_FOR_OUTCOME[result["outcome"]], 20)
+                self.assertEqual([s["confirm"] for s in approve.seen], ["notes"])
+                self.assertIn("Not installed: SkillCanary judged it unsafe.", result["reasons"])
+                self.assertIn(said, result["reasons"])
+                self.assertNotIn("overridden", result)
+                self.assertEqual(env.installed(), [])
+                self.assertIn("refused", [e["event"] for e in self.ledger(env)])
+
+    def test_unsafe_installs_when_the_person_types_the_name_and_says_so(self):
+        env, approve, result = self.unsafe(True)
+        self.assertEqual((result["outcome"], result["verdict"], result.get("overridden")),
+                         ("installed", "UNSAFE", True))
+        self.assertEqual(add.EXIT_FOR_OUTCOME[result["outcome"]], 0)
+        self.assertEqual(len(env.installed()), 2)
+        self.assertIs(env.lock()["skills"]["notes"].get("overridden"), True)
+        approved = [e for e in self.ledger(env) if e["event"] == "approved"]
+        self.assertEqual([e.get("override") for e in approved], [True, True])
+
+    def test_an_unsafe_skill_that_cannot_be_installed_anyway_is_not_asked_about(self):
+        env, approve = Env(), Approver(True)
+        existing = os.path.join(env.home, ".claude", "skills", "notes")
+        os.makedirs(existing)
+        archive = tarball([("notes/SKILL.md", tarfile.REGTYPE, SKILL)])
+        result = env.add(URL, approve, fetch=FakeGitHub(archive), backend=model("UNSAFE"))
+        self.assertEqual(result["outcome"], "not_installed")
+        self.assertEqual(add.EXIT_FOR_OUTCOME[result["outcome"]], 10)
         self.assertEqual(approve.seen, [])
-        self.assertEqual(env.installed(), [])
+
+    def test_the_real_dialog_is_always_asked_with_the_name_to_type(self):
+        asked = []
+
+        def recorder(text, verdict, yes=None, confirm=None):
+            asked.append((text, verdict, confirm))
+            return False
+
+        env = Env()
+        archive = tarball([("notes/SKILL.md", tarfile.REGTYPE, SKILL)])
+        with unittest.mock.patch.object(add, "ask", recorder):
+            env.add(URL, None, fetch=FakeGitHub(archive), backend=model("UNSAFE"))
+        self.assertEqual([(v, c) for _, v, c in asked], [("UNSAFE", "notes")])
+        self.assertTrue(asked[0][0].endswith("SkillCanary recommends you don't install this. To install "
+                                      "it anyway, type notes below and choose Install anyway."))
 
     def test_a_decline_installs_nothing(self):
         env, approve = Env(), Approver(False)
@@ -178,6 +229,50 @@ class OnlyThePersonInstalls(unittest.TestCase):
                                        "add", URL, flag], capture_output=True, text=True,
                                       timeout=60)
                 self.assertEqual(proc.returncode, 2)
+
+
+class TheOverrideDialogComparesWhatIsTyped(unittest.TestCase):
+    """Program 2026-10-13: an unsafe skill installs only when the person
+    types its name and chooses Install anyway. The macOS dialog cannot run
+    here, so the osascript call is replaced and its output parsed."""
+
+    def answer(self, stdout="", returncode=0, stderr="", **kwargs):
+        calls = []
+
+        def fake_run(argv, **_):
+            calls.append(argv)
+            return subprocess.CompletedProcess(argv, returncode, stdout, stderr)
+
+        with unittest.mock.patch.object(add.sys, "platform", "darwin"), \
+                unittest.mock.patch.object(add.shutil, "which", lambda _: "/usr/bin/osascript"), \
+                unittest.mock.patch.object(add.subprocess, "run", fake_run):
+            return add.ask("text", "UNSAFE", **kwargs), calls
+
+    def test_only_the_yes_button_with_the_matching_text_installs(self):
+        cases = [("Install anyway\ntreg", True), ("Install anyway\n  TREG \n", True),
+                 ("Install anyway\ntre", False), ("Install anyway\n", False),
+                 ("Install anyway\ntreg now", False)]
+        for stdout, expected in cases:
+            with self.subTest(stdout=stdout):
+                got, calls = self.answer(stdout, confirm="treg")
+                self.assertIs(got, expected)
+        self.assertIn("review", calls[0])
+
+    def test_cancel_and_silence_are_not_an_override(self):
+        self.assertIs(self.answer(returncode=1, stderr="execution error: User canceled. (-128)",
+                                  confirm="treg")[0], False)
+        self.assertIsNone(self.answer("timeout", confirm="treg")[0])
+        self.assertIsNone(self.answer(returncode=1, stderr="boom", confirm="treg")[0])
+
+    def test_a_blank_phrase_never_approves(self):
+        # A held folder's name is the phrase, and its creator controls the name.
+        got, calls = self.answer("Install anyway\n", confirm=" ")
+        self.assertEqual((got, calls), (None, []))
+        self.assertIs(self.answer("Install anyway\n", confirm="treg")[0], False)
+
+    def test_without_a_phrase_the_yes_button_alone_still_decides(self):
+        self.assertIs(self.answer("Install anyway", yes=None)[0], True)
+        self.assertIsNone(self.answer("Cancel")[0])
 
 
 class ApprovedInstallsAreTheCheckedBytes(unittest.TestCase):

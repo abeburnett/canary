@@ -228,7 +228,8 @@ def _state(events):
                             "name": e.get("name"), "since": e.get("at")}
         elif kind == "approved":
             skills[path] = {"status": CHECKED, "digest": e.get("digest"),
-                            "approved": e.get("digest"), "name": e.get("name"), "since": e.get("at")}
+                            "approved": e.get("digest"), "name": e.get("name"), "since": e.get("at"),
+                            "override": e.get("override") is True}
         elif kind == "arrived":
             skills[path] = {"status": UNCHECKED, "digest": e.get("digest"), "approved": None,
                             "name": e.get("name"), "since": e.get("at")}
@@ -308,7 +309,8 @@ def scan(home=None, support=None, cwd=None, first_look=False):
         for name in names:
             skills.append({"name": name, "names": names, "path": path,
                            "status": s.get("status", UNCHECKED),
-                           "changed_since_approval": changed, "since": s.get("since")})
+                           "changed_since_approval": changed, "since": s.get("since"),
+                           "override": s.get("status") == CHECKED and bool(s.get("override"))})
     from canary import watcher
     held = [{"id": h["id"], "name": h["name"], "origin": h["origin"], "since": h["at"],
              "restore": f"canary restore {h['id']}"}
@@ -319,8 +321,10 @@ def scan(home=None, support=None, cwd=None, first_look=False):
             "held": held}
 
 
-def record_install(home, folders, name, verdict, support=None, source=None, how="canary add"):
-    """Record the check and the approval of `folders`. With `source`, the
+def record_install(home, folders, name, verdict, support=None, source=None, how="canary add",
+                   override=False):
+    """Record the check and the approval of `folders`; `override` marks an
+    approval the person gave despite an unsafe verdict. With `source`, the
     checked copy they are about to be made from: SkillCanary records the
     approval before the files appear, so the watcher never holds its own
     installs. A failed install leaves an approval for a path that is not
@@ -331,7 +335,8 @@ def record_install(home, folders, name, verdict, support=None, source=None, how=
     with _Lock(support):
         events = [{"at": at, "event": "checked", "name": name, "verdict": verdict}]
         events += [{"at": at, "event": "approved", "how": how, "name": name,
-                    "skill": os.path.realpath(f), "digest": fixed or digest(os.path.realpath(f))}
+                    "skill": os.path.realpath(f), "digest": fixed or digest(os.path.realpath(f)),
+                    **({"override": True} if override else {})}
                    for f in folders]
         _append(support, events)
 
@@ -397,7 +402,8 @@ def render_text(report):
     if report["skills"]:
         width = max(len(s["name"]) for s in report["skills"])
         for s in report["skills"]:
-            status = "changed since approval" if s["changed_since_approval"] else s["status"]
+            status = ("changed since approval" if s["changed_since_approval"]
+                      else "installed anyway" if s.get("override") else s["status"])
             lines.append(f"{s['name']:<{width}}  {status:<22}  {s['path']}")
     else:
         lines.append("No skills found.")
