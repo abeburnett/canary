@@ -1,0 +1,113 @@
+Bullet 1: canary add treats a cancelled unsafe question as an ordinary decline, not a refusal
+
+== The break ==
+$ git diff -- canary/add.py
+diff --git a/canary/add.py b/canary/add.py
+index e9670e6..6481eee 100644
+--- a/canary/add.py
++++ b/canary/add.py
+@@ -690,7 +690,7 @@ def add(source, *, home=None, support_dir=None, approve=None, fetch=None,
+         if unsafe:
+             summary["confirm"] = name
+         answer = approve(summary)
+-        if unsafe and answer is not True:
++        if unsafe and answer is None:
+             # Only the person's answer to the confirm dialog refuses an unsafe skill.
+             out["outcome"] = "refused"
+             out["reasons"].append("Not installed: SkillCanary judged it unsafe.")
+exit code: 0
+
+== Broken: the named test, then its class ==
+$ /Users/abrahamburnett/.pyenv/versions/3.10.3/bin/python3 -m unittest -v tests.test_add.OnlyThePersonInstalls.test_unsafe_is_refused_unless_the_person_types_the_name
+test_unsafe_is_refused_unless_the_person_types_the_name (tests.test_add.OnlyThePersonInstalls) ... 
+======================================================================
+FAIL: test_unsafe_is_refused_unless_the_person_types_the_name (tests.test_add.OnlyThePersonInstalls) (answer=False)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-addcddd3b07b705ba/tests/test_add.py", line 154, in test_unsafe_is_refused_unless_the_person_types_the_name
+    self.assertEqual((result["outcome"], result["verdict"]), ("refused", "UNSAFE"))
+AssertionError: Tuples differ: ('declined', 'UNSAFE') != ('refused', 'UNSAFE')
+
+First differing element 0:
+'declined'
+'refused'
+
+- ('declined', 'UNSAFE')
+?   ^ ^^^^
+
++ ('refused', 'UNSAFE')
+?   ^ ^^^
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.008s
+
+FAILED (failures=1)
+exit code: 1
+
+$ /Users/abrahamburnett/.pyenv/versions/3.10.3/bin/python3 -m unittest -v tests.test_add.OnlyThePersonInstalls
+test_a_decline_installs_nothing (tests.test_add.OnlyThePersonInstalls) ... ok
+test_a_skills_folder_it_cannot_write_is_named_before_asking (tests.test_add.OnlyThePersonInstalls) ... ok
+test_an_unsafe_skill_that_cannot_be_installed_anyway_is_not_asked_about (tests.test_add.OnlyThePersonInstalls) ... ok
+test_the_cli_has_no_way_to_approve (tests.test_add.OnlyThePersonInstalls) ... ok
+test_the_real_dialog_is_always_asked_with_the_name_to_type (tests.test_add.OnlyThePersonInstalls) ... ok
+test_unsafe_installs_when_the_person_types_the_name_and_says_so (tests.test_add.OnlyThePersonInstalls) ... ok
+test_unsafe_is_refused_unless_the_person_types_the_name (tests.test_add.OnlyThePersonInstalls) ... 
+======================================================================
+FAIL: test_unsafe_is_refused_unless_the_person_types_the_name (tests.test_add.OnlyThePersonInstalls) (answer=False)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-addcddd3b07b705ba/tests/test_add.py", line 154, in test_unsafe_is_refused_unless_the_person_types_the_name
+    self.assertEqual((result["outcome"], result["verdict"]), ("refused", "UNSAFE"))
+AssertionError: Tuples differ: ('declined', 'UNSAFE') != ('refused', 'UNSAFE')
+
+First differing element 0:
+'declined'
+'refused'
+
+- ('declined', 'UNSAFE')
+?   ^ ^^^^
+
++ ('refused', 'UNSAFE')
+?   ^ ^^^
+
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.265s
+
+FAILED (failures=1)
+exit code: 1
+
+== Restored ==
+$ git checkout -- canary/add.py
+exit code: 0
+
+$ git diff --stat
+exit code: 0
+
+== Restored: the named test, then its class ==
+$ /Users/abrahamburnett/.pyenv/versions/3.10.3/bin/python3 -m unittest -v tests.test_add.OnlyThePersonInstalls.test_unsafe_is_refused_unless_the_person_types_the_name
+test_unsafe_is_refused_unless_the_person_types_the_name (tests.test_add.OnlyThePersonInstalls) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.009s
+
+OK
+exit code: 0
+
+$ /Users/abrahamburnett/.pyenv/versions/3.10.3/bin/python3 -m unittest -v tests.test_add.OnlyThePersonInstalls
+test_a_decline_installs_nothing (tests.test_add.OnlyThePersonInstalls) ... ok
+test_a_skills_folder_it_cannot_write_is_named_before_asking (tests.test_add.OnlyThePersonInstalls) ... ok
+test_an_unsafe_skill_that_cannot_be_installed_anyway_is_not_asked_about (tests.test_add.OnlyThePersonInstalls) ... ok
+test_the_cli_has_no_way_to_approve (tests.test_add.OnlyThePersonInstalls) ... ok
+test_the_real_dialog_is_always_asked_with_the_name_to_type (tests.test_add.OnlyThePersonInstalls) ... ok
+test_unsafe_installs_when_the_person_types_the_name_and_says_so (tests.test_add.OnlyThePersonInstalls) ... ok
+test_unsafe_is_refused_unless_the_person_types_the_name (tests.test_add.OnlyThePersonInstalls) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.264s
+
+OK
+exit code: 0
+
+summary: broken named test exit 1 (must be non-zero); restored named test exit 0 and class exit 0 (must be 0)

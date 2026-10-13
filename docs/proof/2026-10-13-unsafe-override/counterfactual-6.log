@@ -1,0 +1,118 @@
+Bullet 6: a held entry that could not be copied is asked about before it is refused
+
+== The break ==
+$ git diff -- canary/watcher.py
+diff --git a/canary/watcher.py b/canary/watcher.py
+index 4cc3478..bff58aa 100644
+--- a/canary/watcher.py
++++ b/canary/watcher.py
+@@ -299,6 +299,7 @@ class Watcher:
+             except (add.SourceError, OSError):
+                 # No checked copy exists, so there is nothing to put back or ask about.
+                 _decision(self, h["name"], "UNSAFE", "refused")
++                self.ask("question", "UNSAFE", confirm=h["name"])
+                 self.notify(f"SkillCanary is holding {h['name']}, which arrived in "
+                             f"{_short(os.path.dirname(h['origin']), self.home)} without its "
+                             "check: it holds links or special files SkillCanary will not copy. "
+exit code: 0
+
+== Broken: the named test, then its class ==
+$ /Users/abrahamburnett/.pyenv/versions/3.10.3/bin/python3 -m unittest -v tests.test_watcher.ThePersonDecides.test_a_held_skill_with_links_is_refused_without_a_question
+test_a_held_skill_with_links_is_refused_without_a_question (tests.test_watcher.ThePersonDecides) ... FAIL
+
+======================================================================
+FAIL: test_a_held_skill_with_links_is_refused_without_a_question (tests.test_watcher.ThePersonDecides)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-addcddd3b07b705ba/tests/test_watcher.py", line 257, in test_a_held_skill_with_links_is_refused_without_a_question
+    self.assertEqual((mac.asked, len(mac.notes)), ([], 1))
+AssertionError: Tuples differ: (['question'], 1) != ([], 1)
+
+First differing element 0:
+['question']
+[]
+
+- (['question'], 1)
++ ([], 1)
+
+----------------------------------------------------------------------
+Ran 1 test in 0.007s
+
+FAILED (failures=1)
+exit code: 1
+
+$ /Users/abrahamburnett/.pyenv/versions/3.10.3/bin/python3 -m unittest -v tests.test_watcher.ThePersonDecides
+test_a_held_skill_with_links_is_refused_without_a_question (tests.test_watcher.ThePersonDecides) ... FAIL
+test_a_link_put_back_still_leads_to_its_folder (tests.test_watcher.ThePersonDecides) ... ok
+test_an_unsafe_skill_goes_back_when_the_person_types_its_name_and_says_so (tests.test_watcher.ThePersonDecides) ... ok
+test_an_unsafe_skill_stays_held_unless_the_person_types_its_name (tests.test_watcher.ThePersonDecides) ... ok
+test_canary_restore_does_not_also_send_a_notification (tests.test_watcher.ThePersonDecides) ... ok
+test_canary_restore_prints_the_reason_or_the_success_line (tests.test_watcher.ThePersonDecides) ... ok
+test_cancel_keeps_it_held_and_canary_list_says_how_to_restore (tests.test_watcher.ThePersonDecides) ... ok
+test_every_restore_failure_says_why (tests.test_watcher.ThePersonDecides) ... ok
+test_install_puts_it_back_and_it_counts_as_checked (tests.test_watcher.ThePersonDecides) ... ok
+test_restore_still_needs_the_person (tests.test_watcher.ThePersonDecides) ... ok
+test_the_dialog_recommends_an_action_and_quotes_the_line (tests.test_watcher.ThePersonDecides)
+Program 2026-10-12: the held-skill dialog says what to do, the ... ok
+test_the_real_dialog_is_always_asked_with_the_name_to_type (tests.test_watcher.ThePersonDecides) ... ok
+
+======================================================================
+FAIL: test_a_held_skill_with_links_is_refused_without_a_question (tests.test_watcher.ThePersonDecides)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-addcddd3b07b705ba/tests/test_watcher.py", line 257, in test_a_held_skill_with_links_is_refused_without_a_question
+    self.assertEqual((mac.asked, len(mac.notes)), ([], 1))
+AssertionError: Tuples differ: (['question'], 1) != ([], 1)
+
+First differing element 0:
+['question']
+[]
+
+- (['question'], 1)
++ ([], 1)
+
+----------------------------------------------------------------------
+Ran 12 tests in 0.094s
+
+FAILED (failures=1)
+exit code: 1
+
+== Restored ==
+$ git checkout -- canary/watcher.py
+exit code: 0
+
+$ git diff --stat
+exit code: 0
+
+== Restored: the named test, then its class ==
+$ /Users/abrahamburnett/.pyenv/versions/3.10.3/bin/python3 -m unittest -v tests.test_watcher.ThePersonDecides.test_a_held_skill_with_links_is_refused_without_a_question
+test_a_held_skill_with_links_is_refused_without_a_question (tests.test_watcher.ThePersonDecides) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.006s
+
+OK
+exit code: 0
+
+$ /Users/abrahamburnett/.pyenv/versions/3.10.3/bin/python3 -m unittest -v tests.test_watcher.ThePersonDecides
+test_a_held_skill_with_links_is_refused_without_a_question (tests.test_watcher.ThePersonDecides) ... ok
+test_a_link_put_back_still_leads_to_its_folder (tests.test_watcher.ThePersonDecides) ... ok
+test_an_unsafe_skill_goes_back_when_the_person_types_its_name_and_says_so (tests.test_watcher.ThePersonDecides) ... ok
+test_an_unsafe_skill_stays_held_unless_the_person_types_its_name (tests.test_watcher.ThePersonDecides) ... ok
+test_canary_restore_does_not_also_send_a_notification (tests.test_watcher.ThePersonDecides) ... ok
+test_canary_restore_prints_the_reason_or_the_success_line (tests.test_watcher.ThePersonDecides) ... ok
+test_cancel_keeps_it_held_and_canary_list_says_how_to_restore (tests.test_watcher.ThePersonDecides) ... ok
+test_every_restore_failure_says_why (tests.test_watcher.ThePersonDecides) ... ok
+test_install_puts_it_back_and_it_counts_as_checked (tests.test_watcher.ThePersonDecides) ... ok
+test_restore_still_needs_the_person (tests.test_watcher.ThePersonDecides) ... ok
+test_the_dialog_recommends_an_action_and_quotes_the_line (tests.test_watcher.ThePersonDecides)
+Program 2026-10-12: the held-skill dialog says what to do, the ... ok
+test_the_real_dialog_is_always_asked_with_the_name_to_type (tests.test_watcher.ThePersonDecides) ... ok
+
+----------------------------------------------------------------------
+Ran 12 tests in 0.084s
+
+OK
+exit code: 0
+
+summary: broken named test exit 1 (must be non-zero); restored named test exit 0 and class exit 0 (must be 0)
