@@ -567,6 +567,8 @@ def ask(text, verdict, yes=None, confirm=None):
     nobody answered. With `confirm` (a phrase), the dialog also has a text
     field, and True needs the yes button and the phrase typed in it, ignoring
     case and surrounding spaces; the yes button with other text is False."""
+    if confirm is not None and not confirm.strip():
+        return None  # a blank phrase would match an empty answer: fail closed
     if sys.platform != "darwin" or not shutil.which("osascript"):
         return None
     kind = "review" if verdict != "LIKELY_SAFE" else "safe"
@@ -584,7 +586,7 @@ def ask(text, verdict, yes=None, confirm=None):
     button, _, typed = proc.stdout.partition("\n")
     if button.strip() != yes:
         return None
-    return typed.strip().casefold() == confirm.strip().casefold()
+    return bool(typed.strip()) and typed.strip().casefold() == confirm.strip().casefold()
 
 
 # ---- the flow ------------------------------------------------------------

@@ -11,6 +11,7 @@ import os
 import shutil
 import contextlib
 import io
+import subprocess
 import tarfile
 import tempfile
 import unittest
@@ -246,6 +247,30 @@ class ThePersonDecides(unittest.TestCase):
             watcher.restore(held_id, mac.home, mac.support, backend=model("UNSAFE"),
                             model="fake")
         self.assertEqual(asked, [("UNSAFE", "dropped-in")] * 2)
+
+    def test_a_folder_named_with_only_spaces_needs_the_fixed_phrase(self):
+        # The folder's creator picks the name; a blank phrase must not let an
+        # empty answer, or one click, approve.
+        sent = []
+
+        def fake_run(argv, **_):
+            sent.append(argv)
+            return subprocess.CompletedProcess(argv, 0, "Install anyway\n", "")
+
+        with unittest.mock.patch.object(add.sys, "platform", "darwin"), \
+                unittest.mock.patch.object(add.shutil, "which", lambda _: "/usr/bin/osascript"), \
+                unittest.mock.patch.object(add.subprocess, "run", fake_run):
+            mac = Mac(verdict="UNSAFE")
+            mac.w = watcher.Watcher(mac.home, mac.support, notify=mac.notes.append,
+                                    backend=model("UNSAFE"), model="fake")
+            folder = skill(mac.codex, " ")
+            [held_id] = mac.settle()
+            self.assertEqual(mac.w.review(held_id), (False, STILL_CANCELLED))
+        self.assertEqual(len(sent), 1)
+        self.assertTrue(sent[0][sent[0].index("--") + 1].endswith(
+            "To install it anyway, type install anyway below and choose Install anyway."))
+        self.assertFalse(os.path.lexists(folder))
+        self.assertEqual(len(mac.held()), 1)
 
     def test_a_held_skill_with_links_is_refused_without_a_question(self):
         # There is no checked copy to put back, so there is nothing to ask about.

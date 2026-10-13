@@ -1,0 +1,99 @@
+Blank phrase: add.ask loses its guard against a blank confirm phrase
+
+== The break ==
+$ git diff -- canary/add.py
+diff --git a/canary/add.py b/canary/add.py
+index 0d1cbff..d091846 100644
+--- a/canary/add.py
++++ b/canary/add.py
+@@ -567,7 +567,7 @@ def ask(text, verdict, yes=None, confirm=None):
+     nobody answered. With `confirm` (a phrase), the dialog also has a text
+     field, and True needs the yes button and the phrase typed in it, ignoring
+     case and surrounding spaces; the yes button with other text is False."""
+-    if confirm is not None and not confirm.strip():
++    if False:
+         return None  # a blank phrase would match an empty answer: fail closed
+     if sys.platform != "darwin" or not shutil.which("osascript"):
+         return None
+exit code: 0
+
+== Broken: the named test, then its class ==
+$ /Users/abrahamburnett/.pyenv/versions/3.10.3/bin/python3 -m unittest -v tests.test_add.TheOverrideDialogComparesWhatIsTyped.test_a_blank_phrase_never_approves
+test_a_blank_phrase_never_approves (tests.test_add.TheOverrideDialogComparesWhatIsTyped) ... FAIL
+
+======================================================================
+FAIL: test_a_blank_phrase_never_approves (tests.test_add.TheOverrideDialogComparesWhatIsTyped)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-addcddd3b07b705ba/tests/test_add.py", line 270, in test_a_blank_phrase_never_approves
+    self.assertEqual((got, calls), (None, []))
+AssertionError: Tuples differ: (False, [['osascript', '-e', 'on run argv\[1015 chars]m']]) != (None, [])
+
+First differing element 0:
+False
+None
+
+Diff is 1289 characters long. Set self.maxDiff to None to see it.
+
+----------------------------------------------------------------------
+Ran 1 test in 0.001s
+
+FAILED (failures=1)
+exit code: 1
+
+$ /Users/abrahamburnett/.pyenv/versions/3.10.3/bin/python3 -m unittest -v tests.test_add.TheOverrideDialogComparesWhatIsTyped
+test_a_blank_phrase_never_approves (tests.test_add.TheOverrideDialogComparesWhatIsTyped) ... FAIL
+test_cancel_and_silence_are_not_an_override (tests.test_add.TheOverrideDialogComparesWhatIsTyped) ... ok
+test_only_the_yes_button_with_the_matching_text_installs (tests.test_add.TheOverrideDialogComparesWhatIsTyped) ... ok
+test_without_a_phrase_the_yes_button_alone_still_decides (tests.test_add.TheOverrideDialogComparesWhatIsTyped) ... ok
+
+======================================================================
+FAIL: test_a_blank_phrase_never_approves (tests.test_add.TheOverrideDialogComparesWhatIsTyped)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-addcddd3b07b705ba/tests/test_add.py", line 270, in test_a_blank_phrase_never_approves
+    self.assertEqual((got, calls), (None, []))
+AssertionError: Tuples differ: (False, [['osascript', '-e', 'on run argv\[1015 chars]m']]) != (None, [])
+
+First differing element 0:
+False
+None
+
+Diff is 1289 characters long. Set self.maxDiff to None to see it.
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.001s
+
+FAILED (failures=1)
+exit code: 1
+
+== Restored ==
+$ git checkout -- canary/add.py
+exit code: 0
+
+$ git diff --stat
+exit code: 0
+
+== Restored: the named test, then its class ==
+$ /Users/abrahamburnett/.pyenv/versions/3.10.3/bin/python3 -m unittest -v tests.test_add.TheOverrideDialogComparesWhatIsTyped.test_a_blank_phrase_never_approves
+test_a_blank_phrase_never_approves (tests.test_add.TheOverrideDialogComparesWhatIsTyped) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK
+exit code: 0
+
+$ /Users/abrahamburnett/.pyenv/versions/3.10.3/bin/python3 -m unittest -v tests.test_add.TheOverrideDialogComparesWhatIsTyped
+test_a_blank_phrase_never_approves (tests.test_add.TheOverrideDialogComparesWhatIsTyped) ... ok
+test_cancel_and_silence_are_not_an_override (tests.test_add.TheOverrideDialogComparesWhatIsTyped) ... ok
+test_only_the_yes_button_with_the_matching_text_installs (tests.test_add.TheOverrideDialogComparesWhatIsTyped) ... ok
+test_without_a_phrase_the_yes_button_alone_still_decides (tests.test_add.TheOverrideDialogComparesWhatIsTyped) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.001s
+
+OK
+exit code: 0
+
+summary: broken named test exit 1 (must be non-zero); restored named test exit 0 and class exit 0 (must be 0)

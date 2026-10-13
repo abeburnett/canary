@@ -265,6 +265,23 @@ class SkillsComeFromStaging(unittest.TestCase):
                                       "Install anyway."))
         self.assertEqual(out["outcome"], "installed")
 
+    def test_identical_copies_are_recorded_with_the_groups_worst_verdict(self):
+        spec = {"skills": [{"name": "helper", "folder": "helper-a"},
+                           {"name": "helper", "folder": "helper-b"}]}
+
+        def one_at_a_time(snapshots, backend, model_, timeout_s, log_dir):
+            # The first copy is checked SAFE and the second UNSAFE, in that order.
+            return [install.classify._check(s, backend=model(v), model="fake",
+                                            timeout_s=timeout_s, log_dir=log_dir)
+                    for s, v in zip(snapshots, ("SAFE", "UNSAFE"))]
+
+        mac = Mac()
+        with unittest.mock.patch.object(install, "_check_all", one_at_a_time):
+            out = mac.install(ADD, spec=spec)
+        self.assertEqual((out["outcome"], out.get("overridden")), ("installed", True))
+        entry = mac.lock()["skills"]["helper"]
+        self.assertEqual((entry["verdict"], entry.get("overridden")), ("UNSAFE", True))
+
     def test_in_a_mixed_install_only_the_unsafe_skill_is_marked_overridden(self):
         spec = {"skills": [{"name": "alpha", "link": True, "body": "EVIL\n"},
                            {"name": "gamma", "link": True}]}

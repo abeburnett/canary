@@ -306,7 +306,7 @@ class Watcher:
                 return False, STILL_LINKS
             text = dialog_text(h, verdict, reasons, caps, self.home, result=result, snapshot=snap)
             if verdict == "UNSAFE":
-                answer = self.ask(text, verdict, confirm=h["name"])
+                answer = self.ask(text, verdict, confirm=_phrase(h["name"]))
             else:
                 answer = self.ask(text, verdict)
             if answer is True:
@@ -424,8 +424,14 @@ def dialog_text(h, verdict, reasons, caps, home, result=None, snapshot=None):
               "The folder name comes from whoever put it there, not from SkillCanary."
               + (" So do the file names and quoted lines." if found and snapshot else "")]
     if verdict == "UNSAFE":
-        lines += ["", add.override_sentence(h["name"])]
+        lines += ["", add.override_sentence(_phrase(h["name"]))]
     return "\n".join(lines)
+
+
+def _phrase(name):
+    """What the person types to put an unsafe skill back: its folder name,
+    which whoever made the folder chose, so a blank name gets a fixed phrase."""
+    return name if name.strip() else "install anyway"
 
 
 def _short(path, home):

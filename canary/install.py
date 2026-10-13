@@ -410,12 +410,13 @@ def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approv
                 installed = ([it["destination"] for it in mine]
                              + [d for d, _ in link_plan if os.path.realpath(d) in
                                 {os.path.realpath(it["destination"]) for it in mine}])
+                worst = max((it["verdict"] for it in mine), key=WORST.get)
                 lock["skills"][keys[name]] = {
                     "source": "installer", "command": list(argv), "name": name,
                     "places": add.places_of(installed),
-                    "package_digest": mine[0]["package_digest"], "verdict": mine[0]["verdict"],
+                    "package_digest": mine[0]["package_digest"], "verdict": worst,
                     "installed": installed, "installed_at": stamp}
-                if mine[0]["verdict"] == "UNSAFE":
+                if worst == "UNSAFE":
                     lock["skills"][keys[name]]["overridden"] = True
             add._write_lock(home, lock)
         except (OSError, add.SourceError):

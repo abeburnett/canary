@@ -264,6 +264,12 @@ class TheOverrideDialogComparesWhatIsTyped(unittest.TestCase):
         self.assertIsNone(self.answer("timeout", confirm="treg")[0])
         self.assertIsNone(self.answer(returncode=1, stderr="boom", confirm="treg")[0])
 
+    def test_a_blank_phrase_never_approves(self):
+        # A held folder's name is the phrase, and its creator controls the name.
+        got, calls = self.answer("Install anyway\n", confirm=" ")
+        self.assertEqual((got, calls), (None, []))
+        self.assertIs(self.answer("Install anyway\n", confirm="treg")[0], False)
+
     def test_without_a_phrase_the_yes_button_alone_still_decides(self):
         self.assertIs(self.answer("Install anyway", yes=None)[0], True)
         self.assertIsNone(self.answer("Cancel")[0])
