@@ -213,7 +213,7 @@ class SkillsInstalledThroughTheDoor(unittest.TestCase):
         mac = Mac()
         archive = tarball([("notes2/SKILL.md", tarfile.REGTYPE, SKILL.replace("notes", "notes2"))])
         add.add(URL.replace("notes", "notes2"), home=mac.home, support_dir=mac.support,
-                approve=Approver(True), fetch=FakeGitHub(archive), backend=model("UNSAFE"),
+                approve=Approver(False), fetch=FakeGitHub(archive), backend=model("UNSAFE"),
                 model="fake")
         self.assertIn("refused", [e["event"] for e in mac.events() if e.get("name") == "notes2"])
 
@@ -223,6 +223,39 @@ class SkillsInstalledThroughTheDoor(unittest.TestCase):
         add.add(URL.replace("notes", "notes2"), home=mac.home, support_dir=mac.support,
                 approve=Approver(False), fetch=FakeGitHub(archive), backend=model(), model="fake")
         self.assertIn("declined", [e["event"] for e in mac.events() if e.get("name") == "notes2"])
+
+
+class AnInstallAnywayIsRecordedAndShown(unittest.TestCase):
+    """Program 2026-10-13: the ledger says a person installed a skill despite
+    an unsafe verdict, and canary list says so."""
+
+    def installed_anyway(self, mac):
+        folder = mac.skill(mac.claude, "treg")
+        guestlist.record_install(mac.home, [folder], "treg", "UNSAFE", support=mac.support,
+                                 override=True)
+        return folder
+
+    def test_the_approval_carries_the_override_and_the_check_keeps_its_verdict(self):
+        mac = Mac()
+        mac.scan(first_look=True)
+        self.installed_anyway(mac)
+        events = [e for e in mac.events() if e.get("name") == "treg"]
+        self.assertEqual([(e["event"], e.get("verdict"), e.get("override")) for e in events],
+                         [("checked", "UNSAFE", None), ("approved", None, True)])
+
+    def test_canary_list_shows_installed_anyway_until_the_contents_change(self):
+        mac = Mac()
+        mac.scan(first_look=True)
+        self.installed_anyway(mac)
+        report = mac.scan()
+        treg = mac.status(report, "treg")
+        self.assertEqual((treg["status"], treg.get("override")), ("checked", True))
+        self.assertIs(mac.status(report, "notes")["override"], False)
+        self.assertEqual(report["unchecked"], [])
+        self.assertRegex(guestlist.render_text(report), r"treg\s+installed anyway\s")
+        mac.skill(mac.claude, "treg", body="Different.\n")
+        report = mac.scan()
+        self.assertRegex(guestlist.render_text(report), r"treg\s+changed since approval\s")
 
 
 class TheSessionStartLine(unittest.TestCase):

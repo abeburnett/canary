@@ -286,6 +286,24 @@ class SetupTeachesAgentsAboutSkillCanary(unittest.TestCase):
                 "canary doctor --prune"):
             self.assertIn(phrase, text)
 
+    def test_the_skill_and_the_docs_describe_installing_an_unsafe_skill_anyway(self):
+        """Program 2026-10-13: agents learn what `refused` and `overridden`
+        mean, and never to work around the dialog; the docs name the typed
+        confirmation and its limit."""
+        from canary import frontdoor
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        text = " ".join(frontdoor.SKILL_TEXT.split())
+        for phrase in ("installed it despite an unsafe verdict", "never suggest a way around "
+                       "the dialog"):
+            self.assertIn(phrase, text)
+        for doc in ("README.md", os.path.join("docs", "architecture.md")):
+            with open(os.path.join(root, doc), encoding="utf-8") as fh:
+                body = fh.read()
+            self.assertIn("type", body, doc)
+            self.assertIn("Install anyway", body, doc)
+        with open(os.path.join(root, "docs", "architecture.md"), encoding="utf-8") as fh:
+            self.assertIn("can type the name", " ".join(fh.read().split()))
+
     def test_the_privileged_step_never_writes_the_skill(self):
         mac = Mac()
         mac.setup("guard")

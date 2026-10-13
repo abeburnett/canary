@@ -509,7 +509,16 @@ def dialog_text(summary):
                    f"Into: {hosts}"])
     blocks.append(["The source and name, and any file names and quoted lines, come from the "
                    "link and package, not from SkillCanary."])
+    if summary["verdict"] == "UNSAFE":
+        blocks.append([override_sentence(summary.get("confirm") or summary["name"])])
     return "\n\n".join("\n".join(b) for b in blocks)
+
+
+def override_sentence(phrase):
+    """What ends every dialog about an unsafe skill: the recommendation stands,
+    and typing `phrase` is the one way to go ahead."""
+    return (f"SkillCanary recommends you don't install this. To install it anyway, type "
+            f"{phrase} below and choose Install anyway.")
 
 
 # Reasons a dialog already says another way: the capabilities list, and (when
@@ -532,7 +541,11 @@ def found_block(summary):
 DIALOG_SCRIPT = """on run argv
   set theText to item 1 of argv
   set yesLabel to item 4 of argv
-  if item 2 of argv is "review" then
+  if item 5 of argv is "confirm" then
+    set r to display dialog theText with title "SkillCanary" default answer "" buttons {yesLabel, "Cancel"} default button "Cancel" cancel button "Cancel" with icon stop giving up after (item 3 of argv as integer)
+    if gave up of r then return "timeout"
+    return (button returned of r) & linefeed & (text returned of r)
+  else if item 2 of argv is "review" then
     set r to display dialog theText with title "SkillCanary" buttons {yesLabel, "Cancel"} default button "Cancel" cancel button "Cancel" with icon caution giving up after (item 3 of argv as integer)
   else
     set r to display dialog theText with title "SkillCanary" buttons {"Cancel", yesLabel} default button yesLabel cancel button "Cancel" giving up after (item 3 of argv as integer)
@@ -545,26 +558,33 @@ end run"""
 def macos_dialog(summary):
     """True to install, False when the person cancels, None when no dialog
     could be shown or nobody answered."""
-    return ask(dialog_text(summary), summary["verdict"])
+    return ask(dialog_text(summary), summary["verdict"], confirm=summary.get("confirm"))
 
 
-def ask(text, verdict, yes=None):
+def ask(text, verdict, yes=None, confirm=None):
     """Show `text` in SkillCanary's dialog: True when the person picks the yes
     button, False when they cancel, None when no dialog could be shown or
-    nobody answered."""
+    nobody answered. With `confirm` (a phrase), the dialog also has a text
+    field, and True needs the yes button and the phrase typed in it, ignoring
+    case and surrounding spaces; the yes button with other text is False."""
     if sys.platform != "darwin" or not shutil.which("osascript"):
         return None
     kind = "review" if verdict != "LIKELY_SAFE" else "safe"
     yes = yes or ("Install anyway" if kind == "review" else "Install")
     try:
         proc = subprocess.run(["osascript", "-e", DIALOG_SCRIPT, "--", text,
-                               kind, str(DIALOG_SECONDS), yes],
+                               kind, str(DIALOG_SECONDS), yes, "confirm" if confirm else ""],
                               capture_output=True, text=True, timeout=DIALOG_SECONDS + 30)
     except (OSError, subprocess.TimeoutExpired):
         return None
     if proc.returncode != 0:
         return False if "-128" in proc.stderr else None
-    return True if proc.stdout.strip() == yes else None
+    if not confirm:
+        return True if proc.stdout.strip() == yes else None
+    button, _, typed = proc.stdout.partition("\n")
+    if button.strip() != yes:
+        return None
+    return typed.strip().casefold() == confirm.strip().casefold()
 
 
 # ---- the flow ------------------------------------------------------------
@@ -639,12 +659,6 @@ def add(source, *, home=None, support_dir=None, approve=None, fetch=None,
                "installed": [], "reasons": list(reasons),
                "headline": result["headline"], "next_steps": result["next_steps"],
                "recommendation": result["recommendation"], "risks": result["risks"]}
-        if verdict == "UNSAFE":
-            out["outcome"] = "refused"
-            out["reasons"].append("Not installed: SkillCanary judged it unsafe.")
-            _record(guestlist.record_decision, home, name, verdict, "refused", support=support_dir)
-            return out
-
         destinations = [os.path.join(HOSTS[h][1].install_root(home), name) for h in hosts]
         places = places_of(destinations)
         reason = conflict_reason(lock, [name], places, destinations, home)
@@ -672,7 +686,18 @@ def add(source, *, home=None, support_dir=None, approve=None, fetch=None,
                    "repo": repo, "commit": commit, "hosts": hosts, "_snapshot": snapshot,
                    "headline": result["headline"], "next_steps": result["next_steps"],
                    "recommendation": result["recommendation"], "risks": result["risks"]}
+        unsafe = verdict == "UNSAFE"
+        if unsafe:
+            summary["confirm"] = name
         answer = approve(summary)
+        if unsafe and answer is not True:
+            # Only the person's answer to the confirm dialog refuses an unsafe skill.
+            out["outcome"] = "refused"
+            out["reasons"].append("Not installed: SkillCanary judged it unsafe.")
+            out["reasons"].append("You chose not to install it anyway." if answer is False else
+                                  "Nobody answered the SkillCanary dialog.")
+            _record(guestlist.record_decision, home, name, verdict, "refused", support=support_dir)
+            return out
         if answer is not True:
             out["outcome"] = "declined" if answer is False else "not_installed"
             _record(guestlist.record_decision, home, name, verdict, out["outcome"],
@@ -700,12 +725,13 @@ def add(source, *, home=None, support_dir=None, approve=None, fetch=None,
                 return out
             # Recorded before the files appear, so the watcher leaves them alone.
             _record(guestlist.record_install, home, destinations, name, verdict,
-                    support=support_dir, source=snapshot)
+                    support=support_dir, source=snapshot, override=unsafe)
             done = _install(snapshot, destinations, snapshot_digest, run_id, name, out)
             if done is None:
                 return out
             try:
-                return _finish(out, lock, home, key, name, verdict, result, done, fields)
+                return _finish(out, lock, home, key, name, verdict, result, done, fields,
+                               overridden=unsafe)
             except OSError:
                 for dest in done:
                     _remove(dest)
@@ -764,13 +790,16 @@ def _install(snapshot, destinations, digest, run_id, name, out):
     return done
 
 
-def _finish(out, lock, home, key, name, verdict, result, done, source_fields):
+def _finish(out, lock, home, key, name, verdict, result, done, source_fields, overridden=False):
     lock["skills"][key] = dict(source_fields, name=name, places=places_of(done),
                                package_digest=result["package_digest"],
                                verdict=verdict, installed=done,
-                               installed_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+                               installed_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                               **({"overridden": True} if overridden else {}))
     _write_lock(home, lock)
     out["outcome"] = "installed"
+    if overridden:
+        out["overridden"] = True
     out["installed"] = [_short(d, home) for d in done]
     return out
 

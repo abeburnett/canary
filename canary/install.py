@@ -134,7 +134,7 @@ WORST = {"LIKELY_SAFE": 0, "NEEDS_REVIEW": 1, "UNSAFE": 2}
 QUOTE_UP_TO = 3
 
 
-def dialog_text(command, items, verdict):
+def dialog_text(command, items, verdict, confirm=None):
     """One dialog for everything the command installs. Names come from the
     packages; the command comes from the agent."""
     if not items:
@@ -152,7 +152,8 @@ def dialog_text(command, items, verdict):
     quote = sum(it["verdict"] != "LIKELY_SAFE" for it in items) <= QUOTE_UP_TO
     quoted = False
     for it in items:
-        mark = "" if it["verdict"] == "LIKELY_SAFE" else "  (needs your judgment)"
+        mark = {"LIKELY_SAFE": "", "UNSAFE": "  (judged unsafe)"}.get(
+            it["verdict"], "  (needs your judgment)")
         lines.append(f"- {it['name']}{mark}")
         can = sorted({add.PLAIN[k] for k in it["capabilities"] if k in add.PLAIN})
         lines += [f"    It {c}." for c in can]
@@ -176,6 +177,8 @@ def dialog_text(command, items, verdict):
               "Names come from the packages, and the command from the agent, "
               "not from SkillCanary."
               + (" So do the file names and quoted lines." if quoted else "")]
+    if verdict == "UNSAFE":
+        lines += ["", add.override_sentence(confirm or _phrase(items))]
     return "\n".join(lines)
 
 
@@ -184,10 +187,31 @@ def _worst_recommendation(items):
     return dict(worst["recommendation"])
 
 
-def _ask(approve, command, items, verdict):
+def _phrase(items):
+    """What the person types to install unsafe skills anyway: the skill's
+    name (a plugin's id), or a phrase counting them when there are several.
+    None when nothing is unsafe."""
+    names = list(dict.fromkeys(it["name"] for it in items if it["verdict"] == "UNSAFE"))
+    if not names:
+        return None
+    return names[0] if len(names) == 1 else f"install {len(names)} unsafe skills"
+
+
+def _ask(approve, command, items, verdict, confirm=None):
+    summary = {"command": command, "items": items, "verdict": verdict}
+    if confirm:
+        summary["confirm"] = confirm
     if approve is not None:
-        return approve({"command": command, "items": items, "verdict": verdict})
-    return add.ask(dialog_text(command, items, verdict), verdict)
+        return approve(summary)
+    return add.ask(dialog_text(command, items, verdict, confirm), verdict, confirm=confirm)
+
+
+def _unsafe_refusal(out, answer, reason):
+    """The person did not type the phrase: nothing is installed."""
+    out["outcome"] = "refused"
+    out["reasons"].append(reason)
+    out["reasons"].append("You chose not to install it anyway." if answer is False else
+                          "Nobody answered the SkillCanary dialog.")
 
 
 def install(argv, *, home=None, cwd=None, support_dir=None, approve=None, backend="auto",
@@ -334,15 +358,15 @@ def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approv
     for it in items:
         if names.setdefault(it["name"], it["digest"]) != it["digest"]:
             return _not(out, f"Two different skills are both named {it['name']}; nothing was installed.")
-    if out["verdict"] == "UNSAFE":
-        out["outcome"] = "refused"
-        out["reasons"].append("Not installed: SkillCanary judged part of it unsafe.")
-        _record_all(items, home, support_dir, "refused")
-        return out
     reason = add.conflict_reason(add._read_lock(home), list(names), places, taken, home)
     if reason:
         return _not(out, reason)
-    answer = _ask(approve, list(argv), items, out["verdict"])
+    unsafe = out["verdict"] == "UNSAFE"
+    answer = _ask(approve, list(argv), items, out["verdict"], _phrase(items) if unsafe else None)
+    if unsafe and answer is not True:
+        _unsafe_refusal(out, answer, "Not installed: SkillCanary judged part of it unsafe.")
+        _record_all(items, home, support_dir, "refused")
+        return out
     if answer is not True:
         out["outcome"] = "declined" if answer is False else "not_installed"
         out["reasons"].append("The person declined the install." if answer is False else
@@ -366,7 +390,8 @@ def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approv
             mine = [it for it in items if it["name"] == name]
             add._record(guestlist.record_install, home, [it["destination"] for it in mine], name,
                         max((it["verdict"] for it in mine), key=WORST.get),
-                        support=support_dir, source=mine[0]["snapshot"], how="canary install")
+                        support=support_dir, source=mine[0]["snapshot"], how="canary install",
+                        override=any(it["verdict"] == "UNSAFE" for it in mine))
         done = []
         try:
             for it in items:
@@ -390,6 +415,8 @@ def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approv
                     "places": add.places_of(installed),
                     "package_digest": mine[0]["package_digest"], "verdict": mine[0]["verdict"],
                     "installed": installed, "installed_at": stamp}
+                if mine[0]["verdict"] == "UNSAFE":
+                    lock["skills"][keys[name]]["overridden"] = True
             add._write_lock(home, lock)
         except (OSError, add.SourceError):
             for path in reversed(done):
@@ -402,6 +429,8 @@ def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approv
                              "removed what it had copied.")
     out["outcome"] = "installed"
     out["installed"] = [_short(d, home) for d in done]
+    if unsafe:
+        out["overridden"] = True
     return out
 
 
@@ -504,12 +533,12 @@ def _plugin(parsed, home, cwd, support_dir, run_dir, run_id, log_path, out, appr
                                 name=plugin_id)
     if items is None:
         return out
-    if out["verdict"] == "UNSAFE":
-        out["outcome"] = "refused"
-        out["reasons"].append("Not installed: SkillCanary judged it unsafe.")
+    unsafe = out["verdict"] == "UNSAFE"
+    answer = _ask(approve, list(argv), items, out["verdict"], _phrase(items) if unsafe else None)
+    if unsafe and answer is not True:
+        _unsafe_refusal(out, answer, "Not installed: SkillCanary judged it unsafe.")
         _record_all(items, home, support_dir, "refused")
         return out
-    answer = _ask(approve, list(argv), items, out["verdict"])
     if answer is not True:
         out["outcome"] = "declined" if answer is False else "not_installed"
         out["reasons"].append("The person declined the install." if answer is False else
@@ -538,11 +567,15 @@ def _plugin(parsed, home, cwd, support_dir, run_dir, run_id, log_path, out, appr
             "command": list(argv), "scope": scope, "package_digest": items[0]["package_digest"],
             "verdict": items[0]["verdict"], "installed": [real],
             "installed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+        if unsafe:
+            lock["plugins"][plugin_id]["overridden"] = True
         add._write_lock(home, lock)
     add._record(guestlist.record_install, home, [real], plugin_id, items[0]["verdict"],
-                support=support_dir)
+                support=support_dir, override=unsafe)
     out["outcome"] = "installed"
     out["installed"] = [_short(real, home)]
+    if unsafe:
+        out["overridden"] = True
     return out
 
 

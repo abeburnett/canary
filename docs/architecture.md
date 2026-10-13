@@ -482,8 +482,9 @@ Steps:
    `~/Library/Application Support/Canary/quarantine/<run-id>/`, is made
    read-only, and the rest is deleted.
 2. `canary check` on that snapshot.
-3. `UNSAFE`: nothing is installed and nobody is asked. Otherwise the dialog
-   asks the person. It shows Canary's verdict, the recommendation, the
+3. The dialog asks the person, after the conflict and writability checks (a
+   conflict or an unwritable folder is `not_installed` and asks nobody, for
+   every verdict). It shows Canary's verdict, the recommendation, the
    headline, `What SkillCanary found:` (each risk, and under it up to two
    lines from the snapshot that raised it as `<file> line <n>: "<text>"`,
    tagged when in a code example or on a warning line), the capabilities and
@@ -497,7 +498,15 @@ Steps:
    person's dialog only, never in a result an agent reads, and they pass
    through `scan.terminal_safe` and are clipped. `NEEDS_REVIEW` defaults to
    Cancel.
-   The dialog gives up after 300 seconds, which counts as a decline.
+   `UNSAFE` recommends `decline`, keeps Cancel as the default, and adds a
+   text field and the button `Install anyway`. The dialog ends with "SkillCanary
+   recommends you don't install this. To install it anyway, type <name> below
+   and choose Install anyway." `add.ask(..., confirm=<name>)` returns `True`
+   only when that button is chosen and the typed text, trimmed and compared
+   without regard to case, equals the name; other text is a decline. The
+   dialog gives up after 300 seconds, which counts as a decline. The same
+   override applies to `canary install`, the watcher and `canary restore`
+   (below).
 4. On approval, one install at a time (an exclusive lock beside the
    lockfile, never held while the person decides): re-read the lockfile and
    destinations, copy the snapshot to a staging folder beside each
@@ -520,17 +529,23 @@ The installed name is the frontmatter `name` if it matches
 add is refused. An existing folder of that name is never overwritten: to
 replace an installed skill, the person removes its folder and adds it again.
 
-There is no `--yes`, environment override or typed confirmation: an agent can
-type into a terminal. Approval comes only from the dialog (tests inject an
-approver through the Python API). With no GUI session the outcome is
-`not_installed`, "approve on the Mac's screen".
+There is still no `--yes`, environment override or terminal prompt, because
+an agent can type into a terminal; the only typed confirmation is in the
+dialog, which an agent cannot reach. Approval comes only from the dialog
+(tests inject an approver through the Python API). With no GUI session the
+outcome is `not_installed`, "approve on the Mac's screen". The limit: anyone
+at the Mac's keyboard can type the name. SkillCanary records an override
+(`overridden` in the lock record and result, `override: true` on the ledger's
+`approved` event) but cannot judge it.
 
 Errors from unpacking never quote file-system messages, which can contain
 package file names; the agent sees a fixed sentence.
 
 Exit codes: 0 installed; 10 not installed and waiting on the person (declined,
-dialog unavailable or timed out); 20 refused because `UNSAFE`; 2 usage, link
-or fetch error; 3 internal error.
+dialog unavailable or timed out); 20 refused because `UNSAFE` and the person
+did not type the name or did not answer; 2 usage, link or fetch error; 3
+internal error. An `UNSAFE` skill installed anyway exits 0 with
+`"overridden": true` and `"verdict": "UNSAFE"`.
 
 Output (schema `canary.add/1`, all the agent receives):
 
@@ -544,10 +559,12 @@ Output (schema `canary.add/1`, all the agent receives):
   "installed": ["~/.claude/skills/<name>"],
   "reasons": ["Canary's own reasons, no package text"],
   "headline": "…",
-  "next_steps": ["…"]
+  "next_steps": ["…"],
+  "overridden": true
 }
 ```
 
+`overridden` appears only when the person installed an `UNSAFE` skill anyway.
 `owner` and `repo` are GitHub's validated identifiers (letters, digits, `-`,
 `_`, `.`), so they carry no markup.
 
@@ -732,8 +749,12 @@ installer made between those skills (for example `.claude/skills/<name>` to
 record each skill. Nothing else the installer wrote is copied, including its
 own record (so `npx skills list` does not show these skills). A failed
 installer, a skill that already exists, two different skills with one name,
-a skill folder whose name is not a usable skill name, or an unsafe verdict
-installs nothing.
+or a skill folder whose name is not a usable skill name installs nothing. An
+unsafe verdict is asked about like any other, with the person typing the
+skill's name (or `install <n> unsafe skills` when several are unsafe, or the
+plugin id for a plugin) and choosing `Install anyway`; without that, the
+outcome is `refused` (exit 20) and nothing is installed. Each unsafe skill's
+lock record carries `overridden: true`, and so does the result.
 
 **Plugins** (owner decision 7). The plugin is installed into a staging
 Claude Code folder (`CLAUDE_CONFIG_DIR`), after adding its marketplace there
@@ -769,8 +790,8 @@ every later change or removal (`canary/guestlist.py`). The record is an
 append-only ledger, `ledger.jsonl` in `~/Library/Application Support/Canary`,
 one JSON event per line, written under a file lock: `first_look`,
 `baseline`, `arrived` (with `how`), `checked`, `approved` (with `how: canary
-add`), `declined`, `refused` or `not_installed`, `changed`, `removed` and
-`trusted`. A damaged line is skipped. Each skill is keyed by its resolved
+add`, and `override: true` when the person installed an unsafe skill anyway),
+`declined`, `refused` or `not_installed`, `changed`, `removed` and `trusted`. A damaged line is skipped. Each skill is keyed by its resolved
 path; a skill reached under several names is listed under each. Its
 fingerprint covers every file's bytes, path and program bit, without `.git`.
 Links inside a skill are recorded and followed (each folder once), so a
@@ -788,7 +809,9 @@ Every skill has one status:
   the first look, once per ledger: without a ledger, every skill counts as
   unchecked until setup runs again or the person trusts it.
 - **checked**: installed by `canary add`. A change after approval is
-  reported as **changed since approval**.
+  reported as **changed since approval**. One the person installed despite an
+  unsafe verdict shows as **installed anyway** (its status stays `checked`;
+  `canary list --json` adds `"override": true`) until it changes.
 - **unchecked**: arrived any other way. Reported until the person trusts it
   or removes it.
 
@@ -803,7 +826,7 @@ repository's skills are what this report is for.
 
 - `canary list` prints each skill, its status and path; `--json` prints
   `{"schema": "canary.list/1", "skills": [{"name", "path", "status",
-  "changed_since_approval", "since"}], "unchecked": [...], "changed": [...]}`.
+  "changed_since_approval", "since", "override"}], "unchecked": [...], "changed": [...]}`.
   Listing scans first, so it also records what changed.
 - `canary trust <folder>` marks one skill, or every skill in a skills
   folder, as the person's.
@@ -857,8 +880,12 @@ two seconds for folders that appear later. When a new entry appears:
    copy, as `canary add` does. Install puts it back only if it still
    matches the checked copy, recording the approval first. Cancel, no
    answer, no screen, a change since the check, or something new in its
-   place keeps it held. An unsafe verdict keeps it held with a notification
-   and no question.
+   place keeps it held. An unsafe verdict gets the same dialog with a text
+   field: the person types the skill's name and chooses `Install anyway` to
+   put it back, and anything else keeps it held. A held entry that could not
+   be copied (links or special files) has no checked copy to put back, so it
+   stays held with a notification and no question. `canary restore` prints
+   why a skill stays held, as one `Still held: …` line.
 
 Nothing is deleted. What is held comes from the quarantine folder itself,
 not the ledger, and a hold whose origin is not directly in a watched folder

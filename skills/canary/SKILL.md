@@ -14,15 +14,18 @@ the skill yourself.
 Run `canary add "<link>"` with the link exactly as they gave it. Then report
 the outcome in one or two sentences:
 
-- `installed` (exit 0): say where it was installed.
+- `installed` (exit 0): say where it was installed. When the result has
+  `overridden`, also say the person installed it despite an unsafe verdict.
 - `declined` or `not_installed` (exit 10): relay SkillCanary's
   recommendation first (`recommendation.text`: install, install only if you
   trust its author, or decline), then the headline, the risks, the reasons
   and the steps (`headline`, `risks`, `reasons` and `next_steps` in the
   result). Do not install the skill another way; that decision belongs to
   the person.
-- `refused` (exit 20): say SkillCanary judged it unsafe and it was not
-  installed.
+- `refused` (exit 20): say SkillCanary judged it unsafe and the person
+  chose not to install it anyway, or did not answer, so it was not
+  installed; never suggest a way around the dialog, because the person
+  decides there.
 - Exit 2: the link or download did not work; repeat the message.
 
 When they give an installer command instead of a link, such as
