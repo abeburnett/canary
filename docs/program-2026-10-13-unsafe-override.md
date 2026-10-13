@@ -134,6 +134,85 @@ override, the typed name, and the record. `docs/architecture.md` states the
 limit: anyone at the Mac's keyboard can type the name; SkillCanary records
 the override but cannot judge it.
 
+## Refutation round 1 rulings (Spark 1.3 Contributor, 2026-10-13)
+
+These rulings are senior to the design text above wherever they differ.
+
+1. **Restore outcome type.** `Watcher.review(held_id)` returns `(back,
+   reason)`: `(True, None)` when the skill went back, else `(False,
+   "<reason line>")`. `watcher.restore` returns the same tuple.
+   `cli._restore` prints `Put back where it was.` and exits 0 on success, or
+   prints the reason line and exits 10. `Watcher._review_loop` ignores the
+   return as now. `put_back` returns `(back, reason)` as well and still
+   sends its notifications only when `self.notify` is the daemon's (the CLI
+   path passes a `notify` that does nothing, so restore prints but does not
+   also notify). Reason lines cover every restore failure, whatever the
+   verdict, including the `h is None` race (`Still held: SkillCanary is no
+   longer holding it.`).
+2. **The watcher's question.** `review` calls `self.ask(text, verdict,
+   confirm=h["name"])` for `UNSAFE` and `self.ask(text, verdict)` otherwise.
+   Every test double of `ask` (`tests/test_watcher.py`, and any other) gains
+   `confirm=None`.
+3. **The record reaches `canary list`.** The stored status stays `CHECKED`,
+   so `watcher._approved` still recognizes overridden installs and never
+   re-holds them. `_state` carries an `override` boolean from the latest
+   `approved` event to `scan()`; `render_text` shows `installed anyway`
+   instead of `checked` for it; JSON carries `"override": true` beside
+   `"status": "checked"` (not a new status value).
+4. **Architecture line 523** ("There is no `--yes`, environment override or
+   typed confirmation: an agent can type into a terminal") is rewritten:
+   there is still no `--yes`, environment override or terminal prompt,
+   because an agent can type into a terminal; the only typed confirmation is
+   in the dialog, which an agent cannot reach. The other doc anchors are
+   `architecture.md` 485, 523, 736 and 861 and the result schema at 540-541.
+5. **Every `record_install` call site passes `override=(verdict ==
+   "UNSAFE")`:** `watcher.py` `put_back`, `add.py` (the install commit),
+   `install.py` skills (per item, its own verdict) and plugins.
+6. **The real path threads `confirm`.** Build order: `add.ask` and
+   `DIALOG_SCRIPT` first; then `add.macos_dialog(summary)` passes
+   `confirm=summary.get("confirm")`; `install._ask(approve, command, items,
+   verdict, confirm=None)` passes it to `add.ask` or includes it in the
+   injected approver's dict; `install.dialog_text` marks `UNSAFE` items
+   `  (judged unsafe)`; the closing sentence goes into `add.dialog_text`,
+   `install.dialog_text` and `watcher.dialog_text` whenever the verdict is
+   `UNSAFE`.
+7. **Tests granted ownership** (expected outcome only, never weakened):
+   `tests/test_add.py` `test_unsafe_is_refused_without_asking`,
+   `tests/test_install.py` `test_an_unsafe_skill_is_refused_without_asking`,
+   `tests/test_watcher.py` `test_an_unsafe_skill_stays_held_without_a_question`,
+   and `tests/test_guestlist.py` `test_a_refused_install_is_recorded`
+   (switch its approver to `Approver(False)` so it still records `refused`).
+   Any other test whose only conflict is the `review` return type or the
+   `confirm` keyword on doubles, found by grep.
+8. **Copy-failed entry:** `review` branches on `result is None` before the
+   `UNSAFE` question: refused, notification, `(False, "Still held: it holds
+   links or special files SkillCanary will not copy. …")`.
+9. **Pre-checks for an `UNSAFE` add or install:** a conflict or unwritable
+   folder gives the same `not_installed` outcome (exit 10) and reason as for
+   any other verdict; the person is not asked. Only the person's answer to
+   the confirm dialog produces `refused` (exit 20) for an `UNSAFE` skill.
+10. **Ledger outcome:** a cancelled, wrong-text or unanswered `UNSAFE`
+    question records `refused`, in every flow, so `canary add`, `canary
+    install` and the watcher log it the same way.
+11. **Phrases and marks.** A single-skill `canary install` uses that skill's
+    name. In a mixed install, each overridden item's lock record carries
+    `overridden: true` only if its own verdict is `UNSAFE`; the result's
+    top-level `overridden` is true when any item was. The plugin lock record
+    (`install.py` plugin record) gets `overridden` too.
+12. **Doc assertions (bullet 8):** a test asserts `frontdoor.SKILL_TEXT`
+    contains `installed it despite an unsafe verdict` and `never suggest a way
+    around the dialog`, and that `README.md` and `docs/architecture.md`
+    contain `type` and `Install anyway`.
+13. **No migration.** Old readers ignore the new keys. Skills held as
+    `UNSAFE` before the upgrade are asked about when the watcher restarts
+    (its loop re-reviews held entries), which is the owner's decision 2.
+    Manifest: `python3 scripts/update-manifest.py <base commit>` before each
+    commit that changes `bin/` or `canary/`.
+14. **Proof scope.** Counterfactual logs for bullet 2 (the comparator) and
+    bullets 1, 5 and 6, as the owner's standing rule requires a named red
+    test per key behavior. Bullet 7 stays: it is the security property
+    (the real path always asks with `confirm`), not a duplicate of bullet 1.
+
 ## Not in scope
 
 - The benchmark (slice D, branch `bench/2026-10-02-malicious`) is paused and
