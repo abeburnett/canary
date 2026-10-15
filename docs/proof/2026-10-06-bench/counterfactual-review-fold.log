@@ -1,0 +1,84 @@
+== counterfactual: path-shape check disabled in canary/bench.py load() (base commit e08f67d) ==
+== temporary diff ==
+diff --git a/canary/bench.py b/canary/bench.py
+index 4f9feb2..3a25f60 100644
+--- a/canary/bench.py
++++ b/canary/bench.py
+@@ -52,7 +52,7 @@ def load(root):
+                 or ".." in s["path"].split("/")):
+             raise BenchError(f"bad sample in {root}/manifest.json: {s!r:.200}")
+         seen.add(s["id"])
+-        if not SAMPLE_PATH.fullmatch(s["path"]):
++        if False and not SAMPLE_PATH.fullmatch(s["path"]):
+             raise BenchError(f"sample {s['id']} must name one folder as "
+                              f"(benign|malicious)/<repo>/<sample>, not {s['path']!r}")
+         folder = os.path.join(root, s["path"])
+
+== run 1, check disabled: python3 -m unittest -v tests.test_bench.TheCorpusStaysInsideBench ==
+test_a_sample_folder_that_leads_outside_the_corpus_is_refused (tests.test_bench.TheCorpusStaysInsideBench) ... ok
+test_a_sample_path_must_name_one_sample_folder (tests.test_bench.TheCorpusStaysInsideBench) ... test_only_layers_one_and_two_run (tests.test_bench.TheCorpusStaysInsideBench) ... ok
+
+======================================================================
+FAIL: test_a_sample_path_must_name_one_sample_folder (tests.test_bench.TheCorpusStaysInsideBench) (path='')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a35391e8a7efb55f3/tests/test_bench.py", line 77, in test_a_sample_path_must_name_one_sample_folder
+    with self.assertRaises(bench.BenchError):
+AssertionError: BenchError not raised
+
+======================================================================
+FAIL: test_a_sample_path_must_name_one_sample_folder (tests.test_bench.TheCorpusStaysInsideBench) (path='.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a35391e8a7efb55f3/tests/test_bench.py", line 77, in test_a_sample_path_must_name_one_sample_folder
+    with self.assertRaises(bench.BenchError):
+AssertionError: BenchError not raised
+
+======================================================================
+FAIL: test_a_sample_path_must_name_one_sample_folder (tests.test_bench.TheCorpusStaysInsideBench) (path='benign')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a35391e8a7efb55f3/tests/test_bench.py", line 77, in test_a_sample_path_must_name_one_sample_folder
+    with self.assertRaises(bench.BenchError):
+AssertionError: BenchError not raised
+
+======================================================================
+FAIL: test_a_sample_path_must_name_one_sample_folder (tests.test_bench.TheCorpusStaysInsideBench) (path='benign/repo')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a35391e8a7efb55f3/tests/test_bench.py", line 77, in test_a_sample_path_must_name_one_sample_folder
+    with self.assertRaises(bench.BenchError):
+AssertionError: BenchError not raised
+
+======================================================================
+FAIL: test_a_sample_path_must_name_one_sample_folder (tests.test_bench.TheCorpusStaysInsideBench) (path='benign/repo/x/extra')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a35391e8a7efb55f3/tests/test_bench.py", line 77, in test_a_sample_path_must_name_one_sample_folder
+    with self.assertRaises(bench.BenchError):
+AssertionError: BenchError not raised
+
+======================================================================
+FAIL: test_a_sample_path_must_name_one_sample_folder (tests.test_bench.TheCorpusStaysInsideBench) (path='other/repo/x')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a35391e8a7efb55f3/tests/test_bench.py", line 77, in test_a_sample_path_must_name_one_sample_folder
+    with self.assertRaises(bench.BenchError):
+AssertionError: BenchError not raised
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.006s
+
+FAILED (failures=6)
+exit: 1
+== restore: checkout of canary/bench.py from the commit, exit 0 ==
+== run 2, restored: python3 -m unittest -v tests.test_bench.TheCorpusStaysInsideBench ==
+test_a_sample_folder_that_leads_outside_the_corpus_is_refused (tests.test_bench.TheCorpusStaysInsideBench) ... ok
+test_a_sample_path_must_name_one_sample_folder (tests.test_bench.TheCorpusStaysInsideBench) ... ok
+test_only_layers_one_and_two_run (tests.test_bench.TheCorpusStaysInsideBench) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.005s
+
+OK
+exit: 0
