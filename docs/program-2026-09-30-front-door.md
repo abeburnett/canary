@@ -567,6 +567,22 @@ regenerated rather than picked from either side.
     agent's prompt rather than overriding its instructions. Moving it to
     another category changes the per-category counts and needs a new
     baseline in the same commit.
+- **Pre-merge review** (GPT-6.1 Sol, high, `main...3068285` without
+  `bench/benign` and `bench/malicious`, which Spark had reviewed; the whole
+  diff is 4.6 MB): MERGE-AFTER-FIXES, both folded in `a97e9fa`:
+  - Security: a corpus passed with `--corpus` could put terminal controls or
+    instruction text into the output through sample ids and categories.
+    `bench.load` now requires the id to equal the path, the path to use only
+    letters, digits, dots, dashes and underscores, and a category of 1 to 40
+    lowercase letters, digits or dashes; its errors name the sample's
+    position and field, never its value.
+  - Semantic: layer 2 counted a sample as caught when the classifier never
+    ran. Results now list `classifier_not_ok`, the text output says how many
+    samples the AI review did not judge, layer 2 refuses to run when no
+    classifier is available, and `--layer 2 --backend none` is a usage
+    error.
+- **Gate** at `8b7cbd6`: 323 tests OK on Python 3.10 and `/usr/bin/python3`
+  (`gate-8b7cbd6-py310.log`, `gate-8b7cbd6-py39.log`).
 - **Not changed:** an automated security review flagged two XSS patterns in
   `bench/benign/anthropics--skills/skill-creator/eval-viewer/`. Those files
   are verbatim upstream copies kept as test data, which `canary bench` reads
