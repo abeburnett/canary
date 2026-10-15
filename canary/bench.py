@@ -23,7 +23,8 @@ from canary import classify, scan
 
 SCHEMA = "canary.bench/1"
 FLAGGED = ("NEEDS_REVIEW", "UNSAFE")
-SAMPLE_PATH = re.compile(r"(benign|malicious)/[^/]+/[^/]+")
+SAMPLE_PATH = re.compile(r"(benign|malicious)/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+")
+CATEGORY = re.compile(r"[a-z0-9-]{1,40}")
 
 
 class BenchError(Exception):
@@ -45,16 +46,25 @@ def load(root):
     if manifest.get("schema") != SCHEMA or not isinstance(manifest.get("samples"), list):
         raise BenchError(f"{root}/manifest.json is not a {SCHEMA} manifest")
     seen = set()
-    for s in manifest["samples"]:
+    for index, s in enumerate(manifest["samples"], 1):
+        # Messages name the sample by position and field, never by value: a
+        # corpus can carry terminal controls or instruction text.
         if (not isinstance(s, dict) or s.get("label") not in ("malicious", "benign")
-                or not isinstance(s.get("id"), str) or s["id"] in seen
-                or not isinstance(s.get("path"), str) or os.path.isabs(s["path"])
-                or ".." in s["path"].split("/")):
-            raise BenchError(f"bad sample in {root}/manifest.json: {s!r:.200}")
-        seen.add(s["id"])
+                or not isinstance(s.get("id"), str) or not isinstance(s.get("path"), str)
+                or os.path.isabs(s["path"]) or ".." in s["path"].split("/")):
+            raise BenchError(f"sample {index} in {root}/manifest.json is malformed")
         if not SAMPLE_PATH.fullmatch(s["path"]):
-            raise BenchError(f"sample {s['id']} must name one folder as "
-                             f"(benign|malicious)/<repo>/<sample>, not {s['path']!r}")
+            raise BenchError(f"sample {index}: path must be (benign|malicious)/<repo>/<sample> "
+                             "using letters, digits, dots, dashes and underscores")
+        if s["id"] != s["path"]:
+            raise BenchError(f"sample {index}: id must equal its path")
+        if s["id"] in seen:
+            raise BenchError(f"sample {index}: id repeats an earlier sample")
+        if "category" in s and not (isinstance(s["category"], str)
+                                    and CATEGORY.fullmatch(s["category"])):
+            raise BenchError(f"sample {index}: category must be 1 to 40 lowercase letters, "
+                             "digits or dashes")
+        seen.add(s["id"])
         folder = os.path.join(root, s["path"])
         if not os.path.isdir(folder):
             raise BenchError(f"sample {s['id']} has no folder at {s['path']}")
@@ -76,10 +86,15 @@ def run(root, layer=1, backend="auto", model=None, timeout_s=classify.DEFAULT_TI
         folder = os.path.join(root, s["path"])
         if layer == 1:
             verdict = scan.scan_package(folder)["verdict"]
+            status = "ok"
         else:
-            verdict = classify.check(folder, backend=backend, model=model,
-                                     timeout_s=timeout_s)["verdict"]
-        rows.append(dict(s, verdict=verdict))
+            result = classify.check(folder, backend=backend, model=model,
+                                    timeout_s=timeout_s)
+            verdict = result["verdict"]
+            status = result["classifier"]["status"]
+        rows.append(dict(s, verdict=verdict, classifier_status=status))
+    if layer == 2 and rows and all(r["classifier_status"] == "unavailable" for r in rows):
+        raise BenchError("no classifier is available for layer 2")
     bad = [r for r in rows if r["label"] == "malicious"]
     good = [r for r in rows if r["label"] == "benign"]
     categories = {}
@@ -97,6 +112,9 @@ def run(root, layer=1, backend="auto", model=None, timeout_s=classify.DEFAULT_TI
         "by_category": categories,
         "misses": sorted(r["id"] for r in bad if r["verdict"] not in FLAGGED),
         "false_alarms_blocked": sorted(r["id"] for r in good if r["verdict"] == "UNSAFE"),
+        # Verdicts from samples whose AI review did not run come from the pattern scan alone.
+        "classifier_not_ok": sorted(r["id"] for r in rows
+                                    if layer == 2 and r["classifier_status"] != "ok"),
     }
 
 
@@ -113,4 +131,7 @@ def render_text(result):
         lines.append(f"  {name:<28} {c['caught']}/{c['samples']}")
     if result["misses"]:
         lines += ["", "Missed: " + ", ".join(result["misses"])]
+    if result.get("classifier_not_ok"):
+        lines += ["", f"AI review did not run on {len(result['classifier_not_ok'])} samples; "
+                      "their verdicts come from the pattern scan and its incomplete-check rule."]
     return "\n".join(lines)

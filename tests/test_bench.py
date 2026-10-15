@@ -91,6 +91,67 @@ class TheCorpusStaysInsideBench(unittest.TestCase):
         with self.assertRaises(bench.BenchError):
             bench.run(root, layer=0)
 
+    def test_a_category_with_terminal_controls_is_refused_without_quoting_it(self):
+        sample = {"id": "benign/repo/x", "label": "benign", "path": "benign/repo/x",
+                  "category": "x\x1b[2J"}
+        root = corpus([sample], folders=["benign/repo/x"])
+        with self.assertRaises(bench.BenchError) as ctx:
+            bench.load(root)
+        self.assertNotIn("\x1b", str(ctx.exception))
+        self.assertIn("category", str(ctx.exception))
+
+    def test_a_sample_id_must_equal_its_path(self):
+        root = corpus([{"id": "y", "label": "benign", "path": "benign/repo/x"}],
+                      folders=["benign/repo/x"])
+        with self.assertRaises(bench.BenchError):
+            bench.load(root)
+
+
+class TheLayerTwoSaysWhenTheAIReviewDidNotRun(unittest.TestCase):
+    def fake_check(self, folder, backend="auto", model=None, timeout_s=None, status=None):
+        if status is None:
+            status = "failed" if folder.endswith("/b") else "ok"
+        verdict = "UNSAFE" if "malicious" in folder else "LIKELY_SAFE"
+        return {"verdict": verdict, "classifier": {"status": status}}
+
+    def mixed_corpus(self):
+        return corpus([{"id": "malicious/repo/a", "label": "malicious", "path": "malicious/repo/a"},
+                       {"id": "malicious/repo/b", "label": "malicious", "path": "malicious/repo/b"},
+                       {"id": "benign/repo/c", "label": "benign", "path": "benign/repo/c"}],
+                      folders=["malicious/repo/a", "malicious/repo/b", "benign/repo/c"])
+
+    def test_no_classifier_at_all_is_an_error(self):
+        def unavailable(folder, **kwargs):
+            return self.fake_check(folder, status="unavailable", **kwargs)
+
+        with mock.patch.object(bench.classify, "check", side_effect=unavailable):
+            with self.assertRaises(bench.BenchError) as ctx:
+                bench.run(self.mixed_corpus(), layer=2)
+        self.assertIn("no classifier is available for layer 2", str(ctx.exception))
+
+    def test_samples_the_classifier_did_not_judge_are_named_and_said_so(self):
+        with mock.patch.object(bench.classify, "check", side_effect=self.fake_check):
+            result = bench.run(self.mixed_corpus(), layer=2)
+        self.assertEqual(result.get("classifier_not_ok"), ["malicious/repo/b"])
+        self.assertIn("AI review did not run on 1 samples; their verdicts come from "
+                      "the pattern scan and its incomplete-check rule.",
+                      bench.render_text(result).splitlines())
+
+    def test_layer_one_has_no_classifier_gaps(self):
+        result = bench.run(self.mixed_corpus(), layer=1)
+        self.assertEqual(result.get("classifier_not_ok"), [])
+
+
+class TheLayerTwoNeedsAClassifier(unittest.TestCase):
+    def test_layer_two_with_no_backend_is_a_usage_error(self):
+        with mock.patch.object(bench, "run", return_value={}) as run, \
+                mock.patch("sys.stdout", new_callable=io.StringIO), \
+                mock.patch("sys.stderr", new_callable=io.StringIO) as err:
+            code = cli.main(["bench", "--json", "--layer", "2", "--backend", "none"])
+        self.assertEqual(code, 2)
+        self.assertIn("usage:", err.getvalue())
+        run.assert_not_called()
+
 
 class TheCommandChecksItsOptions(unittest.TestCase):
     def run_bench(self, *args):

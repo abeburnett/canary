@@ -382,7 +382,8 @@ def _bench(args):
         timeout = -1
     if (flags - {"--json"} or values.get("--layer", "1") not in ("1", "2")
             or not math.isfinite(timeout) or timeout <= 0
-            or backend not in ("auto", "claude", "anthropic_api", "openai_api", "none")):
+            or backend not in ("auto", "claude", "anthropic_api", "openai_api", "none")
+            or (values.get("--layer") == "2" and backend == "none")):
         print(USAGE, file=sys.stderr)
         return EXIT_USAGE
     from canary import bench
