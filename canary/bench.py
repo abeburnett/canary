@@ -17,15 +17,23 @@ design, so false_alarm_flagged includes those.
 
 import json
 import os
+import re
 
 from canary import classify, scan
 
 SCHEMA = "canary.bench/1"
 FLAGGED = ("NEEDS_REVIEW", "UNSAFE")
+SAMPLE_PATH = re.compile(r"(benign|malicious)/[^/]+/[^/]+")
 
 
 class BenchError(Exception):
     pass
+
+
+def _inside(folder, root):
+    real_root = os.path.realpath(root)
+    real = os.path.realpath(folder)
+    return os.path.commonpath([real_root, real]) == real_root
 
 
 def load(root):
@@ -44,8 +52,14 @@ def load(root):
                 or ".." in s["path"].split("/")):
             raise BenchError(f"bad sample in {root}/manifest.json: {s!r:.200}")
         seen.add(s["id"])
-        if not os.path.isdir(os.path.join(root, s["path"])):
+        if not SAMPLE_PATH.fullmatch(s["path"]):
+            raise BenchError(f"sample {s['id']} must name one folder as "
+                             f"(benign|malicious)/<repo>/<sample>, not {s['path']!r}")
+        folder = os.path.join(root, s["path"])
+        if not os.path.isdir(folder):
             raise BenchError(f"sample {s['id']} has no folder at {s['path']}")
+        if not _inside(folder, root):
+            raise BenchError(f"sample {s['id']} leads outside {root}")
     return manifest["samples"]
 
 
@@ -54,6 +68,8 @@ def _rate(part, whole):
 
 
 def run(root, layer=1, backend="auto", model=None, timeout_s=classify.DEFAULT_TIMEOUT_S):
+    if layer not in (1, 2):
+        raise BenchError(f"layer must be 1 or 2, not {layer!r}")
     samples = load(root)
     rows = []
     for s in samples:

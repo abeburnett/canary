@@ -375,7 +375,14 @@ def _bench(args):
             continue
         flags.add(args[i])
         i += 1
-    if flags - {"--json"} or values.get("--layer", "1") not in ("1", "2"):
+    backend = values.get("--backend", "auto")
+    try:
+        timeout = float(values.get("--timeout", classify.DEFAULT_TIMEOUT_S))
+    except ValueError:
+        timeout = -1
+    if (flags - {"--json"} or values.get("--layer", "1") not in ("1", "2")
+            or not math.isfinite(timeout) or timeout <= 0
+            or backend not in ("auto", "claude", "anthropic_api", "openai_api", "none")):
         print(USAGE, file=sys.stderr)
         return EXIT_USAGE
     from canary import bench
@@ -383,7 +390,7 @@ def _bench(args):
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bench")
     try:
         result = bench.run(root, layer=int(values.get("--layer", "1")),
-                           backend=values.get("--backend", "auto"), model=values.get("--model"))
+                           backend=backend, model=values.get("--model"), timeout_s=timeout)
     except bench.BenchError as exc:
         print(f"canary: {exc}", file=sys.stderr)
         return EXIT_USAGE
