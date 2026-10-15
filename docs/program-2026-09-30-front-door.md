@@ -570,11 +570,49 @@ regenerated rather than picked from either side.
     text. Both are real attacks. Moving them changes only the per-category
     counts, not any rate in `bench/baseline.json` (a verdict does not depend
     on the label); the paths change with them, since ids equal paths.
-  - Layer 2 is not measured (the done-when audit refused "that is fine" as
-    stated): the 40% catch rate is the pattern scan alone, while every
-    install runs both layers. Before a target is set, the owner either
-    approves one `canary bench --layer 2` run (154 classifier calls through
-    `claude` on his login) or records that the target is a layer-1 target.
+  - Layer 2 was not measured at merge; the owner approved one run on
+    2026-10-14 (below).
+- **Layer 2, measured** (2026-10-14, at `be4d5c9`, owner-approved: `canary
+  bench --layer 2`, backend `claude`, model `sonnet`, 154 classifier calls
+  through `claude` on the owner's login, 783 s; result
+  `docs/proof/2026-10-06-bench/layer2-be4d5c9.json`):
+
+  | Reading | Layer 1 (pattern scan) | Layer 2 (full check) |
+  |---|---|---|
+  | Caught, warned or refused | 40.0% | 100% (60 of 60) |
+  | Caught, refused | 5.0% | 100% |
+  | False alarms, warned | 29.8% | 29.8% (28 of 94) |
+  | False alarms, refused | 3.2% | 3.2% (the same three skills) |
+
+  Every category caught 10 of 10. The AI review did not run on one harmless
+  sample (`anthropics--skills/claude-api`, which the pattern scan already
+  refuses). The AI review added no false alarm. Caveat: this corpus was
+  written for the benchmark, and the classifier is a Claude model, likely
+  the same family that wrote the samples, so 100% on it says little about
+  real attacks. It is an internal signal, not a rate to publish (decision 3
+  stands).
+- **Targets (owner decision 12, set 2026-10-14; the owner asked the
+  coordinator to set them after the layer-2 run):**
+  1. **Catch, full check:** at least 95% of malicious samples warned or
+     refused, and at least 80% refused outright, on this corpus and on every
+     corpus that replaces it. Today: 100% and 100%.
+  2. **Catch, pattern scan alone (the CI floor):** never below the committed
+     baseline (40.0%), as `tests/test_bench.py` already enforces. The goal
+     for the next scanner slice is 60%, measured, not tuned to this corpus:
+     exfiltration (1 of 10) and obfuscated (2 of 10) are the weakest.
+  3. **False alarms:** refused outright at most 1 of every 50 harmless skills
+     (2%; today 3 of 94, 3.2%). Warned at most 20% (today 29.8%), counting
+     only warnings from the pattern scan and the AI review; a skill that
+     runs code or grants tools needs the person's approval by design and is
+     reported separately.
+  4. **Before any rate is published** (decision 3): the corpus gains attack
+     samples SkillCanary's authors did not write (for example from published
+     skill-supply-chain incidents), and the two mislabelled samples are
+     settled.
+
+  Not yet built: a CI ceiling on false alarms, and the split of "runs code"
+  warnings from other warnings in `canary bench` output. Both belong to the
+  next benchmark slice.
 - **Corpus review** (Spark 1.3 Contributor, read-only, at `e4b0c79`; report
   `~/.cache/reviews/20261014-232758-spark-bench-malicious-canary-bench-corpus-review-45519/answer.md`):
   CORPUS NEEDS FIXES for the two labels above; otherwise every claim holds.

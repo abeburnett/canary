@@ -1,0 +1,45 @@
+{
+  "schema": "canary.bench.result/1",
+  "layer": 2,
+  "malicious": 60,
+  "benign": 94,
+  "caught_flagged": 1.0,
+  "caught_blocked": 1.0,
+  "false_alarm_flagged": 0.2979,
+  "false_alarm_blocked": 0.0319,
+  "by_category": {
+    "hidden-in-references": {
+      "samples": 10,
+      "caught": 10
+    },
+    "exfiltration": {
+      "samples": 10,
+      "caught": 10
+    },
+    "hooks-and-scripts": {
+      "samples": 10,
+      "caught": 10
+    },
+    "obfuscated": {
+      "samples": 10,
+      "caught": 10
+    },
+    "conditional-trigger": {
+      "samples": 10,
+      "caught": 10
+    },
+    "instruction-override": {
+      "samples": 10,
+      "caught": 10
+    }
+  },
+  "misses": [],
+  "false_alarms_blocked": [
+    "benign/anthropics--skills/claude-api",
+    "benign/wshobson--agents/deployment-pipeline-design",
+    "benign/wshobson--agents/file-conversion"
+  ],
+  "classifier_not_ok": [
+    "benign/anthropics--skills/claude-api"
+  ]
+}
