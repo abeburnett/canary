@@ -1,0 +1,14 @@
+head: be4d5c993626ea7ff6637ccec24715b4e3caac33
+command: /usr/bin/python3 -m unittest discover -s tests
+interpreter: Python 3.9.6
+....................................................................................................................................../Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/unittest/case.py:550: ResourceWarning: unclosed file <_io.TextIOWrapper name=6 encoding='UTF-8'>
+  method()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+.................................................................................................................................canary: skipped /private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-unlock-4t4rxkzq/home/.claude/skills: it is reached through a link
+.....................................................canary watch: OSError: disk trouble
+.......
+----------------------------------------------------------------------
+Ran 323 tests in 117.665s
+
+OK
+exit: 0
