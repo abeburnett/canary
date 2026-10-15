@@ -1,0 +1,1 @@
+echo CANARY_BENCH_MARKER

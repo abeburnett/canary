@@ -510,6 +510,116 @@ The re-audit passed bullet 6 and every-slice. Stated limits: `canary
 restore` and the held view in `canary list` have not run for real (tests
 cover them).
 
+## Slice D: the benchmark (2026-10-02 to 2026-10-06)
+
+Started 2026-10-02 (`canary bench`, the harmless half, decisions 11 and 12;
+then the malicious corpus) and left unfinished without `bench/baseline.json`.
+Finished 2026-10-06 after program 2026-10-06-plain-flags merged: the branch
+was rebased onto `main` (`222c3df`), with `scanner/manifest.json`
+regenerated rather than picked from either side.
+
+- **Sample review (coordinator).** All 78 files under `bench/malicious/`
+  read as data: no executable files or links; every network target is a
+  reserved name (`*.example.invalid`, `example.net`, `example.org`; the one
+  other host is the SVG namespace `www.w3.org`); every script, `postinstall`,
+  MCP server and server config only prints `CANARY_BENCH_MARKER`; no
+  destructive commands.
+- **First rates** (layer 1, scanner `222c3df`, `bench/baseline.json`):
+
+  | Reading | Rate |
+  |---|---|
+  | Caught, warned or refused | 40.0% (24 of 60) |
+  | Caught, refused | 5.0% |
+  | False alarms, warned | 29.8% (28 of 94) |
+  | False alarms, refused | 3.2% (3 of 94) |
+
+  By category (warned or refused): hooks and scripts 9/10, instruction
+  override 5/10, hidden in references 4/10, conditional trigger 3/10,
+  obfuscated 2/10, exfiltration 1/10. The three harmless skills refused
+  outright: `anthropics--skills/claude-api`,
+  `wshobson--agents/deployment-pipeline-design`,
+  `wshobson--agents/file-conversion`.
+- **Layer 2 not measured.** `canary bench --layer 2` makes one classifier
+  call per sample (154). Run it only with the owner's go-ahead, because the
+  backend may bill.
+- **Owner's next step (decision 12):** set a target from these rates. Until
+  then SkillCanary publishes no catch rate.
+- **Review** (Spark 1.3 Contributor, read-only, of `4226f8a`): no blocking
+  findings; it reproduced `baseline.json` exactly. Folded on 2026-10-14,
+  after a rebase onto `main` at `7353209` (the rates were re-measured there
+  and are unchanged):
+  - **Major, the CI guard could be gamed** by deleting hard samples (fewer
+    samples, higher rate, no baseline change). `tests/test_bench.py` now
+    also requires the sample counts to equal the baseline's.
+  - `canary bench` validates `--timeout` and `--backend` the way `canary
+    check` does, and passes the timeout to layer 2 (it was ignored).
+  - `bench.load` accepts only paths shaped `(benign|malicious)/<repo>/<sample>`
+    and refuses a sample folder whose real path leads outside `bench/`;
+    `bench.run` refuses any layer but 1 or 2.
+  - Red evidence: `docs/proof/2026-10-06-bench/red-review-fold.log` (twelve
+    assertion failures); counterfactual:
+    `counterfactual-review-fold.log`.
+- **Left for the owner** (from the same review):
+  - No false-alarm ceiling: the baseline guards only the catch rate, so a
+    change that flags everything, or refuses nothing, stays green. It needs
+    the target from decision 12.
+  - Two samples sit in the wrong category (the second confirmed by the
+    corpus review below): `malicious/instruction-override/04-prompt-inspector`
+    extracts the agent's prompt rather than overriding its instructions, and
+    `malicious/obfuscated/07-font-license-audit` carries its attack in plain
+    text. Both are real attacks. Moving them changes only the per-category
+    counts, not any rate in `bench/baseline.json` (a verdict does not depend
+    on the label); the paths change with them, since ids equal paths.
+  - Layer 2 is not measured (the done-when audit refused "that is fine" as
+    stated): the 40% catch rate is the pattern scan alone, while every
+    install runs both layers. Before a target is set, the owner either
+    approves one `canary bench --layer 2` run (154 classifier calls through
+    `claude` on his login) or records that the target is a layer-1 target.
+- **Corpus review** (Spark 1.3 Contributor, read-only, at `e4b0c79`; report
+  `~/.cache/reviews/20261014-232758-spark-bench-malicious-canary-bench-corpus-review-45519/answer.md`):
+  CORPUS NEEDS FIXES for the two labels above; otherwise every claim holds.
+  All 78 files are inert (every host reserved except the SVG namespace
+  `www.w3.org`; all nine encoded payloads decode to `*.example.invalid`;
+  every script, hook and server prints only `CANARY_BENCH_MARKER`); the
+  manifest matches the folders one to one; the benign side has its licenses
+  and the six exclusions. It found no toothless sample. Minor, accepted as
+  is: `exfiltration/06-network-trace-narrator` leaks through DNS labels under
+  a reserved name, which a resolver would still see before failing.
+- **Done-when audit, round 1** (Fable 5.1, `milestone-auditor`, at
+  `e4b0c79`): FAIL. Bullet 9 SHOWN. The every-slice rule was blocked by two
+  fixtures a later rule made vacuous (fixed in `aa35c38`), a stale
+  counterfactual (all five recaptured at the final code in `ed8bff6`), and
+  no surviving independent review of the corpus (the earlier Spark report
+  lived in a session scratchpad that was cleared; the review above replaces
+  it). Doc drift fixed in `aa35c38`.
+- **Done-when audit, rounds 2 and 3** (same auditor): round 2 at `be4d5c9`
+  showed every round-1 blocker fixed and failed only for want of a logged
+  full gate over the final tree; round 3 at `cf0e2be` read
+  `gate-be4d5c9-py310.log` and `gate-be4d5c9-py39.log` (323 tests, `exit:
+  0`, on Python 3.10.3 and 3.9.6): `AUDIT: PASS`. Advisory, not blocking:
+  `test_a_sample_id_must_equal_its_path` has no deliberate-break log.
+- **Pre-merge review** (GPT-6.1 Sol, high, `main...3068285` without
+  `bench/benign` and `bench/malicious`, which Spark had reviewed; the whole
+  diff is 4.6 MB): MERGE-AFTER-FIXES, both folded in `a97e9fa`:
+  - Security: a corpus passed with `--corpus` could put terminal controls or
+    instruction text into the output through sample ids and categories.
+    `bench.load` now requires the id to equal the path, the path to use only
+    letters, digits, dots, dashes and underscores, and a category of 1 to 40
+    lowercase letters, digits or dashes; its errors name the sample's
+    position and field, never its value.
+  - Semantic: layer 2 counted a sample as caught when the classifier never
+    ran. Results now list `classifier_not_ok`, the text output says how many
+    samples the AI review did not judge, layer 2 refuses to run when no
+    classifier is available, and `--layer 2 --backend none` is a usage
+    error.
+- **Gate** at `8b7cbd6`: 323 tests OK on Python 3.10 and `/usr/bin/python3`
+  (`gate-8b7cbd6-py310.log`, `gate-8b7cbd6-py39.log`).
+- **Not changed:** an automated security review flagged two XSS patterns in
+  `bench/benign/anthropics--skills/skill-creator/eval-viewer/`. Those files
+  are verbatim upstream copies kept as test data, which `canary bench` reads
+  as text and never serves or runs; editing them would break the corpus's
+  pinned provenance. A fix belongs upstream.
+
 ## Unverified; probed before building on them
 
 - Whether Codex hooks can rewrite a command.
@@ -564,6 +674,18 @@ cover them).
    label or launch-agent file (as decision 5, a command that only mentions
    them is denied too), file tools may not rewrite that file, and `canary
    doctor` reports a gap when the watcher is not running.
+11. (2026-10-02, before slice D) The benchmark's harmless half is 94 real,
+   popular skills from the field report, copied into `bench/` at pinned
+   commits with their licenses: 14 from anthropics/skills (Apache 2.0), 15
+   from obra/superpowers and 65 from wshobson/agents (both MIT). Six are
+   left out: four Anthropic document skills marked "All rights reserved"
+   and two with no license file.
+12. (2026-10-02, before slice D) A malicious skill counts as caught when its
+   verdict is anything but LIKELY_SAFE (the person is warned, or it is
+   refused); CI fails when that catch rate falls below the committed
+   baseline. `canary bench` also prints the rate at UNSAFE alone, and the
+   false-alarm rate at both readings. Slice D measures and does not tune
+   the scanner; the owner sets a target after the first rates.
 
 ## Plan
 

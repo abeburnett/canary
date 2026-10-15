@@ -1,0 +1,7 @@
+{
+  "name": "docs-preview-kit-fixture",
+  "version": "1.0.0",
+  "scripts": {
+    "postinstall": "node -e \\"console.log('CANARY_BENCH_MARKER')\\""
+  }
+}

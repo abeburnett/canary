@@ -1,0 +1,52 @@
+== COUNTERFACTUAL: remove the category check in canary/bench.py load() ==
+Commit under test: a97e9fa (Fold the premerge review: corpus text is validated, and layer 2 says when the AI review did not run)
+Command: python3 -m unittest -v tests.test_bench.TheCorpusStaysInsideBench
+
+== diff applied (temporary, reverted with git checkout -- canary/bench.py) ==
+diff --git a/canary/bench.py b/canary/bench.py
+index c17f5d3..ab77d8e 100644
+--- a/canary/bench.py
++++ b/canary/bench.py
+@@ -60,7 +60,7 @@ def load(root):
+             raise BenchError(f"sample {index}: id must equal its path")
+         if s["id"] in seen:
+             raise BenchError(f"sample {index}: id repeats an earlier sample")
+-        if "category" in s and not (isinstance(s["category"], str)
++        if False and not (isinstance(s["category"], str)
+                                     and CATEGORY.fullmatch(s["category"])):
+             raise BenchError(f"sample {index}: category must be 1 to 40 lowercase letters, "
+                              "digits or dashes")
+
+== run 1: category check disabled ==
+test_a_category_with_terminal_controls_is_refused_without_quoting_it (tests.test_bench.TheCorpusStaysInsideBench) ... FAIL
+test_a_sample_folder_that_leads_outside_the_corpus_is_refused (tests.test_bench.TheCorpusStaysInsideBench) ... ok
+test_a_sample_id_must_equal_its_path (tests.test_bench.TheCorpusStaysInsideBench) ... ok
+test_a_sample_path_must_name_one_sample_folder (tests.test_bench.TheCorpusStaysInsideBench) ... ok
+test_only_layers_one_and_two_run (tests.test_bench.TheCorpusStaysInsideBench) ... ok
+
+======================================================================
+FAIL: test_a_category_with_terminal_controls_is_refused_without_quoting_it (tests.test_bench.TheCorpusStaysInsideBench)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-af16f53119ba6f563/tests/test_bench.py", line 98, in test_a_category_with_terminal_controls_is_refused_without_quoting_it
+    with self.assertRaises(bench.BenchError) as ctx:
+AssertionError: BenchError not raised
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.006s
+
+FAILED (failures=1)
+EXIT_BROKEN=1 (python3 -m unittest exit code, from run 1)
+
+== run 2: restored from commit (git checkout -- canary/bench.py), diff vs HEAD empty ==
+test_a_category_with_terminal_controls_is_refused_without_quoting_it (tests.test_bench.TheCorpusStaysInsideBench) ... ok
+test_a_sample_folder_that_leads_outside_the_corpus_is_refused (tests.test_bench.TheCorpusStaysInsideBench) ... ok
+test_a_sample_id_must_equal_its_path (tests.test_bench.TheCorpusStaysInsideBench) ... ok
+test_a_sample_path_must_name_one_sample_folder (tests.test_bench.TheCorpusStaysInsideBench) ... ok
+test_only_layers_one_and_two_run (tests.test_bench.TheCorpusStaysInsideBench) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.006s
+
+OK
+EXIT_RESTORED=0 (python3 -m unittest exit code, from run 2)

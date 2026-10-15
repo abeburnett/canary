@@ -906,6 +906,53 @@ command naming its label or launch-agent file is denied, and so is a file
 tool writing that file. `canary doctor` reports a gap when the launch agent
 is missing or not loaded.
 
+## `canary bench [--json] [--layer 1|2] [--backend <name>] [--model <id>] [--corpus <folder>]`
+
+How well the check separates malicious skills from harmless ones (program
+2026-09-30, slice D; owner decisions 11 and 12).
+
+- **Corpus.** `bench/manifest.json` (`canary.bench/1`) lists every sample with
+  an id, a label (`malicious` or `benign`), a category, its folder and its
+  source. `bench/benign/` holds 94 real skills copied at pinned commits with
+  their licenses (`scripts/vendor-bench-benign.py` recreates it).
+  `bench/malicious/` holds 60 inert samples in six categories, ten each:
+  every target is a reserved name (`example.invalid`, `example.net`,
+  `example.org`) and every script or server only prints
+  `CANARY_BENCH_MARKER`. `bench/` is test data, never a skills folder.
+  The one non-reserved host in the malicious samples is `www.w3.org`, an SVG
+  namespace URL.
+- **Run.** Layer 1 (`scan.scan_package`) by default, which needs no model and
+  runs in CI; `--layer 2` runs `classify.check` and needs a classifier
+  backend. Nothing in a sample is executed.
+- **Layer 2 needs a classifier.** Layer 2 refuses to run when no classifier is
+  available for any sample (`no classifier is available for layer 2`), and
+  `--layer 2 --backend none` is a usage error. When the classifier is missing
+  for some samples only, the result lists their ids in `classifier_not_ok`,
+  and the text output adds the line "AI review did not run on N samples; their
+  verdicts come from the pattern scan and its incomplete-check rule." Those
+  samples' verdicts come from the layer-1 scan alone.
+- **`--corpus <folder>`.** Runs the benchmark over another folder that uses the
+  same `canary.bench/1` manifest. Every sample is validated before it runs: the
+  id equals the path, the path has the form `(benign|malicious)/<repo>/<sample>`,
+  the category is in the fixed format, and the sample folder resolves to a
+  location inside the corpus folder.
+- **Rates** (`canary.bench.result/1`), two readings each: `caught_flagged`
+  (malicious samples not `LIKELY_SAFE`: warned or refused), `caught_blocked`
+  (malicious samples `UNSAFE`), and `false_alarm_flagged` /
+  `false_alarm_blocked`, the same for harmless samples. A harmless skill that
+  runs code or grants tools is never `LIKELY_SAFE` by design, so it counts as
+  a flagged false alarm. The result also lists per-category catches, the
+  missed samples and the harmless samples refused.
+- **CI.** `bench/baseline.json` holds the committed layer-1 rates.
+  `tests/test_bench.py`, part of the unit suite CI runs, fails when
+  `caught_flagged` falls below the baseline. A corpus change and its new
+  baseline land in the same commit.
+- **First measurement** (2026-10-06, layer 1, scanner `222c3df`): caught
+  40.0% warned or refused and 5.0% refused; false alarms 29.8% warned and
+  3.2% refused. Slice D measures and does not tune; the owner sets a target
+  after these rates, and SkillCanary publishes a catch rate only once the
+  benchmark shows it.
+
 ## How people get Canary and use it
 
 Canary itself is the one install that happens without Canary, so it only
