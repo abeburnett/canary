@@ -592,6 +592,12 @@ regenerated rather than picked from either side.
   no surviving independent review of the corpus (the earlier Spark report
   lived in a session scratchpad that was cleared; the review above replaces
   it). Doc drift fixed in `aa35c38`.
+- **Done-when audit, rounds 2 and 3** (same auditor): round 2 at `be4d5c9`
+  showed every round-1 blocker fixed and failed only for want of a logged
+  full gate over the final tree; round 3 at `cf0e2be` read
+  `gate-be4d5c9-py310.log` and `gate-be4d5c9-py39.log` (323 tests, `exit:
+  0`, on Python 3.10.3 and 3.9.6): `AUDIT: PASS`. Advisory, not blocking:
+  `test_a_sample_id_must_equal_its_path` has no deliberate-break log.
 - **Pre-merge review** (GPT-6.1 Sol, high, `main...3068285` without
   `bench/benign` and `bench/malicious`, which Spark had reviewed; the whole
   diff is 4.6 MB): MERGE-AFTER-FIXES, both folded in `a97e9fa`:
