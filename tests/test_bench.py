@@ -72,14 +72,14 @@ class TheCorpusStaysInsideBench(unittest.TestCase):
     def test_a_sample_path_must_name_one_sample_folder(self):
         for path in ("", ".", "benign", "benign/repo", "benign/repo/x/extra", "other/repo/x"):
             with self.subTest(path=path):
-                root = corpus([{"id": "x", "label": "benign", "path": path}],
+                root = corpus([{"id": path, "label": "benign", "path": path}],
                               folders=["benign/repo/x/extra", "other/repo/x"])
                 with self.assertRaises(bench.BenchError):
                     bench.load(root)
 
     def test_a_sample_folder_that_leads_outside_the_corpus_is_refused(self):
         outside = tempfile.mkdtemp(prefix="canary-outside-")
-        root = corpus([{"id": "x", "label": "benign", "path": "benign/repo/x"}],
+        root = corpus([{"id": "benign/repo/x", "label": "benign", "path": "benign/repo/x"}],
                       folders=["benign/repo"])
         os.symlink(outside, os.path.join(root, "benign", "repo", "x"))
         with self.assertRaises(bench.BenchError):
