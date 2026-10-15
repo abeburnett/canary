@@ -1,0 +1,70 @@
+== counterfactual: layer-2 no-classifier raise removed in canary/bench.py run() ==
+== commit under test: aa35c38 ==
+
+== break applied to canary/bench.py (reverted below with git checkout) ==
+diff --git a/canary/bench.py b/canary/bench.py
+index c17f5d3..7b90fdc 100644
+--- a/canary/bench.py
++++ b/canary/bench.py
+@@ -94,7 +94,7 @@ def run(root, layer=1, backend="auto", model=None, timeout_s=classify.DEFAULT_TI
+             status = result["classifier"]["status"]
+         rows.append(dict(s, verdict=verdict, classifier_status=status))
+     if layer == 2 and rows and all(r["classifier_status"] == "unavailable" for r in rows):
+-        raise BenchError("no classifier is available for layer 2")
++        pass
+     bad = [r for r in rows if r["label"] == "malicious"]
+     good = [r for r in rows if r["label"] == "benign"]
+     categories = {}
+
+== run with break: python3 -m unittest -v tests.test_bench.TheLayerTwoSaysWhenTheAIReviewDidNotRun.test_no_classifier_at_all_is_an_error ==
+test_no_classifier_at_all_is_an_error (tests.test_bench.TheLayerTwoSaysWhenTheAIReviewDidNotRun) ... FAIL
+
+======================================================================
+FAIL: test_no_classifier_at_all_is_an_error (tests.test_bench.TheLayerTwoSaysWhenTheAIReviewDidNotRun)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-adf5f2341d3932294/tests/test_bench.py", line 128, in test_no_classifier_at_all_is_an_error
+    with self.assertRaises(bench.BenchError) as ctx:
+AssertionError: BenchError not raised
+
+----------------------------------------------------------------------
+Ran 1 test in 0.002s
+
+FAILED (failures=1)
+
+exit: 1
+
+== class run with break: python3 -m unittest -v tests.test_bench.TheLayerTwoSaysWhenTheAIReviewDidNotRun ==
+test_layer_one_has_no_classifier_gaps (tests.test_bench.TheLayerTwoSaysWhenTheAIReviewDidNotRun) ... ok
+test_no_classifier_at_all_is_an_error (tests.test_bench.TheLayerTwoSaysWhenTheAIReviewDidNotRun) ... FAIL
+test_samples_the_classifier_did_not_judge_are_named_and_said_so (tests.test_bench.TheLayerTwoSaysWhenTheAIReviewDidNotRun) ... ok
+
+======================================================================
+FAIL: test_no_classifier_at_all_is_an_error (tests.test_bench.TheLayerTwoSaysWhenTheAIReviewDidNotRun)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-adf5f2341d3932294/tests/test_bench.py", line 128, in test_no_classifier_at_all_is_an_error
+    with self.assertRaises(bench.BenchError) as ctx:
+AssertionError: BenchError not raised
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.005s
+
+FAILED (failures=1)
+
+exit: 1
+
+== revert: git checkout -- canary/bench.py, exit 0 ==
+== git diff --stat -- canary/bench.py after revert (empty means clean) ==
+
+== class re-run restored: python3 -m unittest -v tests.test_bench.TheLayerTwoSaysWhenTheAIReviewDidNotRun ==
+test_layer_one_has_no_classifier_gaps (tests.test_bench.TheLayerTwoSaysWhenTheAIReviewDidNotRun) ... ok
+test_no_classifier_at_all_is_an_error (tests.test_bench.TheLayerTwoSaysWhenTheAIReviewDidNotRun) ... ok
+test_samples_the_classifier_did_not_judge_are_named_and_said_so (tests.test_bench.TheLayerTwoSaysWhenTheAIReviewDidNotRun) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.004s
+
+OK
+
+exit: 0

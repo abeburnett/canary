@@ -1,0 +1,94 @@
+== counterfactual: bench/baseline.json "malicious" changed from 60 to 61 ==
+== commit under test: aa35c38 ==
+
+== break applied to bench/baseline.json (reverted below with git checkout) ==
+diff --git a/bench/baseline.json b/bench/baseline.json
+index 87d9644..a9df7c2 100644
+--- a/bench/baseline.json
++++ b/bench/baseline.json
+@@ -4,7 +4,7 @@
+   "measured": "2026-10-06",
+   "remeasured": "2026-10-14",
+   "scanner": "7353209",
+-  "malicious": 60,
++  "malicious": 61,
+   "benign": 94,
+   "caught_flagged": 0.4,
+   "caught_blocked": 0.05,
+
+== run with break: python3 -m unittest -v tests.test_bench.TheBenchmark.test_the_corpus_is_the_one_the_baseline_measured ==
+test_the_corpus_is_the_one_the_baseline_measured (tests.test_bench.TheBenchmark) ... FAIL
+
+======================================================================
+FAIL: test_the_corpus_is_the_one_the_baseline_measured (tests.test_bench.TheBenchmark)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-adf5f2341d3932294/tests/test_bench.py", line 58, in test_the_corpus_is_the_one_the_baseline_measured
+    self.assertEqual((self.result["malicious"], self.result["benign"]),
+AssertionError: Tuples differ: (60, 94) != (61, 94)
+
+First differing element 0:
+60
+61
+
+- (60, 94)
+?   ^
+
++ (61, 94)
+?   ^
+
+
+----------------------------------------------------------------------
+Ran 1 test in 6.158s
+
+FAILED (failures=1)
+
+exit: 1
+
+== class run with break: python3 -m unittest -v tests.test_bench.TheBenchmark ==
+test_it_prints_both_readings_of_both_rates (tests.test_bench.TheBenchmark) ... ok
+test_it_runs_over_at_least_fifty_of_each (tests.test_bench.TheBenchmark) ... ok
+test_the_catch_rate_does_not_fall_below_the_baseline (tests.test_bench.TheBenchmark) ... ok
+test_the_corpus_is_the_one_the_baseline_measured (tests.test_bench.TheBenchmark) ... FAIL
+
+======================================================================
+FAIL: test_the_corpus_is_the_one_the_baseline_measured (tests.test_bench.TheBenchmark)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-adf5f2341d3932294/tests/test_bench.py", line 58, in test_the_corpus_is_the_one_the_baseline_measured
+    self.assertEqual((self.result["malicious"], self.result["benign"]),
+AssertionError: Tuples differ: (60, 94) != (61, 94)
+
+First differing element 0:
+60
+61
+
+- (60, 94)
+?   ^
+
++ (61, 94)
+?   ^
+
+
+----------------------------------------------------------------------
+Ran 4 tests in 6.068s
+
+FAILED (failures=1)
+
+exit: 1
+
+== revert: git checkout -- bench/baseline.json, exit 0 ==
+== git diff --stat -- bench/baseline.json after revert (empty means clean) ==
+
+== class re-run restored: python3 -m unittest -v tests.test_bench.TheBenchmark ==
+test_it_prints_both_readings_of_both_rates (tests.test_bench.TheBenchmark) ... ok
+test_it_runs_over_at_least_fifty_of_each (tests.test_bench.TheBenchmark) ... ok
+test_the_catch_rate_does_not_fall_below_the_baseline (tests.test_bench.TheBenchmark) ... ok
+test_the_corpus_is_the_one_the_baseline_measured (tests.test_bench.TheBenchmark) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 6.044s
+
+OK
+
+exit: 0
