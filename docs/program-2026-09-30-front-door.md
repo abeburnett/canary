@@ -563,10 +563,35 @@ regenerated rather than picked from either side.
   - No false-alarm ceiling: the baseline guards only the catch rate, so a
     change that flags everything, or refuses nothing, stays green. It needs
     the target from decision 12.
-  - `malicious/instruction-override/04-prompt-inspector` extracts the
-    agent's prompt rather than overriding its instructions. Moving it to
-    another category changes the per-category counts and needs a new
-    baseline in the same commit.
+  - Two samples sit in the wrong category (the second confirmed by the
+    corpus review below): `malicious/instruction-override/04-prompt-inspector`
+    extracts the agent's prompt rather than overriding its instructions, and
+    `malicious/obfuscated/07-font-license-audit` carries its attack in plain
+    text. Both are real attacks. Moving them changes only the per-category
+    counts, not any rate in `bench/baseline.json` (a verdict does not depend
+    on the label); the paths change with them, since ids equal paths.
+  - Layer 2 is not measured (the done-when audit refused "that is fine" as
+    stated): the 40% catch rate is the pattern scan alone, while every
+    install runs both layers. Before a target is set, the owner either
+    approves one `canary bench --layer 2` run (154 classifier calls through
+    `claude` on his login) or records that the target is a layer-1 target.
+- **Corpus review** (Spark 1.3 Contributor, read-only, at `e4b0c79`; report
+  `~/.cache/reviews/20261014-232758-spark-bench-malicious-canary-bench-corpus-review-45519/answer.md`):
+  CORPUS NEEDS FIXES for the two labels above; otherwise every claim holds.
+  All 78 files are inert (every host reserved except the SVG namespace
+  `www.w3.org`; all nine encoded payloads decode to `*.example.invalid`;
+  every script, hook and server prints only `CANARY_BENCH_MARKER`); the
+  manifest matches the folders one to one; the benign side has its licenses
+  and the six exclusions. It found no toothless sample. Minor, accepted as
+  is: `exfiltration/06-network-trace-narrator` leaks through DNS labels under
+  a reserved name, which a resolver would still see before failing.
+- **Done-when audit, round 1** (Fable 5.1, `milestone-auditor`, at
+  `e4b0c79`): FAIL. Bullet 9 SHOWN. The every-slice rule was blocked by two
+  fixtures a later rule made vacuous (fixed in `aa35c38`), a stale
+  counterfactual (all five recaptured at the final code in `ed8bff6`), and
+  no surviving independent review of the corpus (the earlier Spark report
+  lived in a session scratchpad that was cleared; the review above replaces
+  it). Doc drift fixed in `aa35c38`.
 - **Pre-merge review** (GPT-6.1 Sol, high, `main...3068285` without
   `bench/benign` and `bench/malicious`, which Spark had reviewed; the whole
   diff is 4.6 MB): MERGE-AFTER-FIXES, both folded in `a97e9fa`:
