@@ -544,6 +544,34 @@ regenerated rather than picked from either side.
   backend may bill.
 - **Owner's next step (decision 12):** set a target from these rates. Until
   then SkillCanary publishes no catch rate.
+- **Review** (Spark 1.3 Contributor, read-only, of `4226f8a`): no blocking
+  findings; it reproduced `baseline.json` exactly. Folded on 2026-10-14,
+  after a rebase onto `main` at `7353209` (the rates were re-measured there
+  and are unchanged):
+  - **Major, the CI guard could be gamed** by deleting hard samples (fewer
+    samples, higher rate, no baseline change). `tests/test_bench.py` now
+    also requires the sample counts to equal the baseline's.
+  - `canary bench` validates `--timeout` and `--backend` the way `canary
+    check` does, and passes the timeout to layer 2 (it was ignored).
+  - `bench.load` accepts only paths shaped `(benign|malicious)/<repo>/<sample>`
+    and refuses a sample folder whose real path leads outside `bench/`;
+    `bench.run` refuses any layer but 1 or 2.
+  - Red evidence: `docs/proof/2026-10-06-bench/red-review-fold.log` (twelve
+    assertion failures); counterfactual:
+    `counterfactual-review-fold.log`.
+- **Left for the owner** (from the same review):
+  - No false-alarm ceiling: the baseline guards only the catch rate, so a
+    change that flags everything, or refuses nothing, stays green. It needs
+    the target from decision 12.
+  - `malicious/instruction-override/04-prompt-inspector` extracts the
+    agent's prompt rather than overriding its instructions. Moving it to
+    another category changes the per-category counts and needs a new
+    baseline in the same commit.
+- **Not changed:** an automated security review flagged two XSS patterns in
+  `bench/benign/anthropics--skills/skill-creator/eval-viewer/`. Those files
+  are verbatim upstream copies kept as test data, which `canary bench` reads
+  as text and never serves or runs; editing them would break the corpus's
+  pinned provenance. A fix belongs upstream.
 
 ## Unverified; probed before building on them
 
