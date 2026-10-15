@@ -20,7 +20,7 @@ CANARY = os.path.join(ROOT, "bin", "canary")
 BENCH = os.path.join(ROOT, "bench")
 
 
-def bench():
+def run_bench_cli():
     proc = subprocess.run([sys.executable, CANARY, "bench", "--json"], capture_output=True,
                           text=True, timeout=900, cwd=ROOT)
     return proc, (json.loads(proc.stdout) if proc.returncode == 0 else None)
@@ -29,7 +29,7 @@ def bench():
 class TheBenchmark(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.proc, cls.result = bench()
+        cls.proc, cls.result = run_bench_cli()
 
     def test_it_runs_over_at_least_fifty_of_each(self):
         self.assertEqual(self.proc.returncode, 0, self.proc.stderr[-500:])
