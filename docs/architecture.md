@@ -310,10 +310,18 @@ the system prompt and the fenced text and nothing else, and has no tools.
   --system-prompt-file`, skill text on stdin, and an environment reduced to
   `HOME`, `USER`, `LOGNAME`, `PATH`, `LANG`, `LC_ALL` and `TMPDIR` (an
   exported `ANTHROPIC_API_KEY` would otherwise switch billing to that key;
-  subscription login still works without it). Verified 2026-09-26 on the
+  subscription login still works without it), plus the constant
+  `CANARY_CLASSIFIER=1`, never copied from the parent. Verified 2026-09-26 on the
   user's subscription login, with a positive control: no tools, MCP servers,
   skills, hooks, advisor or `CLAUDE.md` (the same question without
-  `--setting-sources ""` found the global `CLAUDE.md`). The model still sees
+  `--setting-sources ""` found the global `CLAUDE.md`). That check predates
+  Guard. Hooks from macOS managed settings run under every flag tried,
+  including `--settings '{"disableAllHooks":true}'` (Claude Code 2.1.296,
+  2026-10-15), so Guard's own SessionStart hook reached the classifier with
+  skill folder names outside the fence. Those hooks inherit the child's
+  environment (probed the same day), and `canary session-start` stays silent
+  when `CANARY_CLASSIFIER=1`. Residual: another vendor's managed hook would
+  still reach the classifier. The model still sees
   Claude Code's environment block (working directory, date) and the account's
   email address. With no tools it cannot send either anywhere; the output
   validator keeps model text out of agent-facing output. Default model
@@ -833,7 +841,9 @@ repository's skills are what this report is for.
 - `canary session-start --host claude|codex` is the SessionStart hook that
   setup installs at Guard in both hosts (Claude Code matcher
   `startup|resume|clear`, Codex `startup|resume`). It prints nothing when
-  nothing is unchecked or changed. Otherwise it prints one notice as
+  nothing is unchecked or changed, and prints nothing and scans nothing when
+  `CANARY_CLASSIFIER=1` (the AI review's own session; the variable only
+  silences this notice, and the PreToolUse gate never reads it). Otherwise it prints one notice as
   `{"systemMessage": …, "hookSpecificOutput": {"hookEventName":
   "SessionStart", "additionalContext": …}}`, so the person and the agent
   both see it. It always exits 0, and any error is silence: the guest list

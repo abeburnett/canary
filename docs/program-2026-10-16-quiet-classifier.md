@@ -48,7 +48,22 @@ Two harms:
    there would let any process that sets it switch the gate off. The
    classifier has no tools, so the gate never fires in that session anyway.
    A test pins this.
-4. Version 0.1.4, `scanner/manifest.json` regenerated, release notes.
+4. Version 0.1.4 and `scanner/manifest.json` regenerated. The release
+   notes are the GitHub release body, written at publish time.
+5. `docs/architecture.md` updated first (done in this branch before the
+   build): the child env list, managed hooks running despite the flags, the
+   session-start silence condition, and the residual.
+
+Migration and rollback: the hook command strings do not change, so nobody
+reruns `canary setup`. Mixed versions are harmless either way: a 0.1.3
+binary ignores the variable, and a 0.1.3 classifier never sets it. Rollback
+is reinstalling 0.1.3.
+
+Two side effects, both named in the docstring: the early return also skips
+`guestlist.scan`, which today writes ledger events from inside classifier
+sessions (`canary/guestlist.py:301-302`), so "before any scan" is
+load-bearing. And a `CANARY_CLASSIFIER=1` left in a shell profile would
+silence every session notice; `canary list` and the watcher are unaffected.
 
 Why the variable is safe in `session-start`: setting it suppresses only an
 informational notice; holds, the watcher and the gate are unchanged. A
@@ -66,25 +81,50 @@ residual.
   existing test still sees the notice. (`Mac.run` gains an `env` argument.)
 - `tests/test_classify.py` `ClaudeBackendRunsIsolated`: the child env
   carries `CANARY_CLASSIFIER == "1"`, even when the parent environment sets
-  it to something else, and otherwise only `ENV_KEYS`.
-- The gate ignores the variable: a hook test that a denied write is still
-  denied with `CANARY_CLASSIFIER=1` set.
+  it to something else, and otherwise only `ENV_KEYS`. The existing
+  assertion at line 250 becomes `set(ENV_KEYS) | {"CANARY_CLASSIFIER"}` in
+  the same change.
+- The gate ignores the variable: in `tests/test_gate.py`, call
+  `Home.hook(..., env={"CANARY_CLASSIFIER": "1"})` (it already takes `env`)
+  for a write the gate denies, and assert the same deny shape.
 
 Counterfactual: remove the check in `_session_start`; the new session-start
 test goes red and its neighbours stay green. Remove the env line in
 `claude_cli`; the classify test goes red.
 
-## Done when
+## Probe before build (finding 1, done 2026-10-15)
+
+A `--settings` SessionStart hook that prints `$CANARY_CLASSIFIER`, run under
+the classifier's exact flags with `env -i HOME USER PATH CANARY_CLASSIFIER=1`,
+reported `MARKER=[1]` to the model. Hooks inherit the child's environment,
+so the fix can work. (Managed hooks are launched by the same CLI; the flag
+hook stands in because adding a managed hook needs root.)
+
+## Done when (merge gate)
 
 1. The three tests above exist, were red before the change (logged), and
    the full gate passes on python3.10 and /usr/bin/python3 at the merge
-   commit, logs under `docs/proof/2026-10-16-quiet-classifier/`.
+   commit, logs under `docs/proof/2026-10-16-quiet-classifier/`. CI does not
+   run on this branch (`action-check.yml` lists other branches); the logs
+   are the gate.
 2. Counterfactual runs logged in the same folder.
 3. Spark refutation and Sol pre-merge review ran; findings folded or
    answered in this doc.
-4. After the owner installs 0.1.4, the 2026-10-15 probe (same flags plus
-   `CANARY_CLASSIFIER=1`) shows no SkillCanary text in the session, and one
-   real `canary check` of `create-viral-content` returns a layer-2 status of
-   `ok`. Recorded here.
-5. 0.1.4 tagged, signed, notarized and published as Latest; the tap formula
-   points at v0.1.4.
+
+## Release checklist (after merge, owner-approved publish)
+
+1. Tag v0.1.4; build signed, notarize, staple; publish as Latest with the
+   release body; bump the tap formula.
+2. After the owner installs 0.1.4: rerun the 2026-10-15 probe with
+   `CANARY_CLASSIFIER=1` and confirm no SkillCanary text reaches the
+   session (the deterministic check). Record one real `canary check` of
+   `create-viral-content` and its layer-2 status as evidence, retrying on
+   network or model failures; a single `ok` is not the gate.
+
+## Refutation (Spark 1.3 Contributor, max, 2026-10-15)
+
+Verdict PROCEED-WITH-FIXES, `~/.cache/reviews/20261015-183333-refute-program-2026-10-16-quiet-classifier/verdict.md`.
+All nine findings folded: 1 probe above; 2 architecture.md edited first;
+3 test line 250 named; 4 and 5 merge gate split from the release checklist;
+6 migration lines; 7 side effects named; 8 gate-test harness named; 9 CI
+note.
