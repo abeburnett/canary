@@ -432,6 +432,10 @@ def _session_start(args):
     """A host's SessionStart hook: one notice when a skill needs a look,
     nothing otherwise. Never fails the session: any error is silence."""
     try:
+        # The AI review's own session: silent, and no scan (the scan writes
+        # ledger events). A leftover variable only silences this notice.
+        if os.environ.get("CANARY_CLASSIFIER") == "1":
+            return 0
         from canary import guestlist
         host = args[1] if len(args) == 2 and args[0] == "--host" else None
         try:

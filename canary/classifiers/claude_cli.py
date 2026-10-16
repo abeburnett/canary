@@ -3,6 +3,11 @@
 Isolation verified 2026-09-26 (docs/architecture.md): from a fresh empty
 directory with these flags the model gets no tools, MCP servers, skills,
 hooks or CLAUDE.md. `--bare` is not used because it drops subscription login.
+
+Managed-settings hooks (Guard's SessionStart) still run under these flags.
+They inherit this child's environment, so CANARY_CLASSIFIER=1 reaches them
+and `canary session-start` stays silent. Another vendor's managed hook is a
+residual: this variable does not silence it.
 """
 import json
 import os
@@ -36,6 +41,7 @@ def classify(system_prompt: str, fenced_skill_text: str, timeout_s: int, *, mode
                     "--system-prompt-file", prompt_file]
             try:
                 env = {k: os.environ[k] for k in ENV_KEYS if k in os.environ}
+                env["CANARY_CLASSIFIER"] = "1"
                 proc = subprocess.run(argv, cwd=workdir, input=fenced_skill_text, env=env,
                                       capture_output=True, text=True, timeout=timeout_s)
             except Exception:

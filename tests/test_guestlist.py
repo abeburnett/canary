@@ -55,8 +55,9 @@ class Mac:
     def status(self, report, name):
         return {s["name"]: s for s in report["skills"]}[name]
 
-    def run(self, *args, stdin=""):
-        env = {"HOME": self.home, "PATH": os.environ.get("PATH", "")}
+    def run(self, *args, stdin="", env=None):
+        base = {"HOME": self.home, "PATH": os.environ.get("PATH", "")}
+        env = {**base, **(env or {})}
         return subprocess.run([sys.executable, CANARY, *args], input=stdin, capture_output=True,
                               text=True, env=env, timeout=60)
 
@@ -279,6 +280,15 @@ class TheSessionStartLine(unittest.TestCase):
                 self.assertIn("dropped-in", out["systemMessage"])
                 self.assertEqual(out["hookSpecificOutput"]["hookEventName"], "SessionStart")
                 self.assertIn("dropped-in", out["hookSpecificOutput"]["additionalContext"])
+
+    def test_silent_inside_the_classifier_session_even_with_a_dropped_in_skill(self):
+        mac = Mac()
+        mac.scan(first_look=True)
+        mac.skill(mac.claude, "dropped-in")
+        proc = mac.run("session-start", "--host", "claude",
+                       stdin=json.dumps({"hook_event_name": "SessionStart", "cwd": mac.home}),
+                       env={"CANARY_CLASSIFIER": "1"})
+        self.assertEqual((proc.returncode, proc.stdout, proc.stderr), (0, "", ""))
 
     def test_never_fails_the_session(self):
         mac = Mac()
