@@ -162,3 +162,24 @@ If Sol disagrees, the cheaper hardening is to also require the hook's
   noted two gaps, neither disqualifying: the red and counterfactual logs
   carry no commit stamp, and the counterfactual logs don't name the removed
   line. Future logs from this repo's workers get a `commit` line first.
+
+## Release (2026-10-15, owner: "release 0.1.4")
+
+- Tag `v0.1.4` at e46207e. Installer signed with Developer ID, notarized
+  through the App Store Connect key route (submission
+  `e5ce373d-1a3e-4fdb-8b81-48b86c0b99e7`, Accepted), stapled; Gatekeeper
+  `accepted`, `source=Notarized Developer ID`; sha256
+  `023d5251c23ccdaec8b995866a17adc59f354b683b34b33dc0f6a82e9e948c9c`.
+- GitHub release v0.1.4 published as Latest; the website's
+  `releases/latest/download/SkillCanary.pkg` returns that file.
+- Tap formula at v0.1.4 (`abeburnett/homebrew-tap` bff4c31), tarball sha256
+  `c7838ff4…f945d9`.
+- The owner installed 0.1.4 (`canary --version` and the Guard hook's copy
+  both report 0.1.4).
+- Probe, classifier flags, Claude Code 2.1.296: without the marker the
+  session still receives "SkillCanary: 11 skill(s) arrived…" (positive
+  control); with `CANARY_CLASSIFIER=1` the model answers `NONE`.
+- Real check of `create-viral-content` at 5148302 (fresh clone): layer 2
+  `ok`, SAFE 0.88, log `0e9bcef2c669` with no remark about hook text. The
+  overall verdict stays NEEDS_REVIEW because the scan finds code and tool
+  grants, which is correct.
