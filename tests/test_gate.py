@@ -40,8 +40,8 @@ class Home:
                               input=payload, capture_output=True, text=True, env=env,
                               timeout=60)
 
-    def denied(self, host, tool, tool_input, raw=None):
-        proc = self.hook(host, tool, tool_input, raw)
+    def denied(self, host, tool, tool_input, raw=None, env=None):
+        proc = self.hook(host, tool, tool_input, raw, env)
         if host == "claude":
             blocked = proc.returncode == 2 and proc.stderr.strip()
         else:
@@ -157,6 +157,14 @@ class TheSkillsOwnTextIsForThePerson(unittest.TestCase):
             for command in ("canary explain ./notes", "canary check ./notes --excerpts"):
                 with self.subTest(host=host, command=command):
                     self.assertTrue(h.denied(host, "Bash", {"command": command}))
+
+    def test_the_classifier_variable_does_not_switch_the_gate_off(self):
+        h = Home()
+        for host in ("claude", "codex"):
+            for command in ("canary explain ./notes", "canary check ./notes --excerpts"):
+                with self.subTest(host=host, command=command):
+                    self.assertTrue(h.denied(host, "Bash", {"command": command},
+                                             env={"CANARY_CLASSIFIER": "1"}))
 
 
 class TheHookNeverFailsOpen(unittest.TestCase):

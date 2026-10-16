@@ -247,7 +247,15 @@ class ClaudeBackendRunsIsolated(unittest.TestCase):
         self.assertEqual(seen["kw"]["input"], "FENCED")
         self.assertEqual(seen["system"], "SYSTEM")
         self.assertEqual(seen["kw"]["timeout"], 30)
-        self.assertLessEqual(set(seen["kw"]["env"]), set(claude_cli.ENV_KEYS))
+        self.assertLessEqual(set(seen["kw"]["env"]),
+                             set(claude_cli.ENV_KEYS) | {"CANARY_CLASSIFIER"})
+        self.assertEqual(seen["kw"]["env"].get("CANARY_CLASSIFIER"), "1")
+
+    def test_the_classifier_marker_is_fixed_whatever_the_parent_says(self):
+        ok = mock.Mock(returncode=0, stdout=json.dumps({"is_error": False, "result": "RAW"}))
+        with mock.patch.dict(os.environ, {"CANARY_CLASSIFIER": "0"}):
+            seen, _ = self.run_backend(ok)
+        self.assertEqual(seen["kw"]["env"].get("CANARY_CLASSIFIER"), "1")
 
     def test_errors_raise_without_output(self):
         for completed in (mock.Mock(returncode=1, stdout="secret-ish"),
