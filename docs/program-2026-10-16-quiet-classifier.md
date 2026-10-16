@@ -150,3 +150,15 @@ on the session's working folder. Answer, kept as built:
 
 If Sol disagrees, the cheaper hardening is to also require the hook's
 `cwd` to be a `canary-classify-` folder in the temp directory.
+
+## Pre-merge review and audit (2026-10-15)
+
+- Sol (GPT-6.1 Sol, high) on the code at 67eda7b: no security or semantic
+  findings, MERGE (`docs/proof/2026-10-16-quiet-classifier/sol-review.md`).
+- Full gate at 67eda7b, stamped: 326 tests OK, exit 0, on Python 3.10.3 and
+  /usr/bin/python3 3.9.6 (`gate-67eda7b-py310.log`, `gate-67eda7b-py39.log`).
+- Done-when audit (milestone-auditor, Fable 5.1, high), range
+  35d2d85..f69c545: bullets 1 to 3 SHOWN, AUDIT: PASS, none refused. It
+  noted two gaps, neither disqualifying: the red and counterfactual logs
+  carry no commit stamp, and the counterfactual logs don't name the removed
+  line. Future logs from this repo's workers get a `commit` line first.
