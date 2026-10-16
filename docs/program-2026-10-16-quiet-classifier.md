@@ -128,3 +128,25 @@ All nine findings folded: 1 probe above; 2 architecture.md edited first;
 3 test line 250 named; 4 and 5 merge gate split from the release checklist;
 6 migration lines; 7 side effects named; 8 gate-test harness named; 9 CI
 note.
+
+## Who can set the variable (automated security review, 2026-10-15)
+
+The security-guidance plugin flagged `_session_start` honoring a guessable
+variable as a control bypass and suggested a per-run nonce file or a check
+on the session's working folder. Answer, kept as built:
+
+- What it bypasses is the session notice only. The PreToolUse gate never
+  reads the variable (pinned by
+  `test_the_classifier_variable_does_not_switch_the_gate_off`), and the
+  watcher, holds, `canary list` and `canary restore` do not either.
+- Who could set it for an agent session: the person's own shell, or a
+  project's `.claude/settings.json` `env`. A project settings file that
+  Claude Code loads can already declare its own hooks, which run arbitrary
+  commands as the person, so the variable grants nothing new. A skill
+  cannot set it: skills are text read by the agent, not settings.
+- A nonce file adds a write into the support folder from every classifier
+  run and a race to clean up, for the same outcome against a party that
+  already runs code. Not worth it for an informational notice.
+
+If Sol disagrees, the cheaper hardening is to also require the hook's
+`cwd` to be a `canary-classify-` folder in the temp directory.
