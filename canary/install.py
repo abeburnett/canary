@@ -26,7 +26,7 @@ import stat
 import subprocess
 import time
 
-from canary import add, classify, explain, guestlist, installers
+from canary import add, classify, explain, guestlist, installers, replace as replacing
 
 INSTALLER_SECONDS = 600
 CHECK_WORKERS = 4
@@ -257,6 +257,8 @@ def dialog_text(command, items, verdict, confirm=None):
                      for it in items if it.get("destination")})
     if places:
         lines += ["", "Into: " + ", ".join(places)]
+    if items[0].get("replacing"):
+        lines += [""] + add.replacing_lines(items[0]["name"], items[0]["replacing"])
     lines += ["", f"Command: {' '.join(command)[:300]}", "",
               "Names come from the packages, and the command from the agent, "
               "not from SkillCanary."
@@ -299,13 +301,21 @@ def _unsafe_refusal(out, answer, reason):
 
 
 def install(argv, *, home=None, cwd=None, support_dir=None, approve=None, backend="auto",
-            model=None, timeout_s=classify.DEFAULT_TIMEOUT_S):
-    """Run the whole install flow and return a canary.install/1 result.
-    Raises InstallError (exit 2) or add.LockError (exit 3)."""
+            model=None, timeout_s=classify.DEFAULT_TIMEOUT_S, replace=False):
+    """Run the whole install flow and return a canary.install/1 result. With
+    `replace`, one skill already installed under the same name is set aside
+    first (canary/replace.py). Raises InstallError (exit 2) or add.LockError
+    (exit 3)."""
     parsed = installers.kind(list(argv))
     if parsed is None:
         raise InstallError("canary install runs skill and plugin installers only: "
                            "npx skills add …, or claude plugin install <name>@<marketplace>.")
+    if replace and parsed[0] == "plugin":
+        raise InstallError("--replace applies to skills only. To update a plugin, run: canary "
+                           f"install -- claude plugin update {parsed[2]}")
+    if replace and parsed[0] == "marketplace":
+        raise InstallError("--replace applies to skills only; a marketplace add has nothing "
+                           "to replace.")
     home = home or os.path.expanduser("~")
     cwd = os.path.realpath(cwd or os.getcwd())
     support_dir = support_dir or add.SUPPORT_DIR
@@ -335,7 +345,7 @@ def install(argv, *, home=None, cwd=None, support_dir=None, approve=None, backen
     try:
         if parsed[0] == "skills":
             return _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out,
-                           approve, backend, model, timeout_s)
+                           approve, backend, model, timeout_s, replace)
         return _plugin(parsed, home, cwd, support_dir, run_dir, run_id, log_path, out,
                        approve, backend, model, timeout_s)
     finally:
@@ -396,7 +406,7 @@ def _snapshot_and_check(folders, run_dir, out, backend, model, timeout_s, suppor
 
 
 def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approve, backend,
-            model, timeout_s):
+            model, timeout_s, replace=False):
     stage_home, stage_project = _stage(run_dir, home)
     before = _real_listing(home, cwd)
     code, run = _run_output(list(argv), stage_project, _env(stage_home, home), log_path)
@@ -434,8 +444,14 @@ def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approv
     taken = [d for _, d in plan] + [d for d, _ in link_plan]
     places = add.places_of(taken)
     # Names are not known yet (the checked name can differ from the folder's),
-    # so this first look is only at destinations that already exist.
-    reason = add.conflict_reason(add._read_lock(home), [], places, taken, home)
+    # so this first look is only at destinations that already exist. With
+    # --replace it is the replace plan's filesystem rules, before any
+    # classifier call.
+    roots = guestlist.user_roots(home)
+    if replace:
+        reason = replacing.plan(add._read_lock(home), None, taken, roots, home, support_dir)[0]
+    else:
+        reason = add.conflict_reason(add._read_lock(home), [], places, taken, home)
     if reason:
         return _not(out, reason)
     items = _snapshot_and_check([f for f, _ in plan], run_dir, out, backend, model, timeout_s,
@@ -448,9 +464,22 @@ def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approv
     for it in items:
         if names.setdefault(it["name"], it["digest"]) != it["digest"]:
             return _not(out, f"Two different skills are both named {it['name']}; nothing was installed.")
-    reason = add.conflict_reason(add._read_lock(home), list(names), places, taken, home)
-    if reason:
-        return _not(out, reason)
+    rplan = None
+    if replace:
+        # Nothing is recorded for these refusals, and the installer is not run again.
+        if len(names) > 1:
+            return _not(out, f"This install would add {len(names)} skills; --replace works for "
+                             "one skill at a time. Nothing was installed.")
+        reason, rplan = replacing.plan(add._read_lock(home), list(names)[0], taken, roots, home,
+                                       support_dir)
+        if reason:
+            return _not(out, reason)
+        if rplan["existing"]:
+            items[0]["replacing"] = replacing.summary(rplan, home)
+    else:
+        reason = add.conflict_reason(add._read_lock(home), list(names), places, taken, home)
+        if reason:
+            return _not(out, reason)
     unsafe = out["verdict"] == "UNSAFE"
     answer = _ask(approve, list(argv), items, out["verdict"], _phrase(items) if unsafe else None)
     if unsafe and answer is not True:
@@ -464,16 +493,48 @@ def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approv
                               "run it again and answer the SkillCanary dialog.")
         _record_all(items, home, support_dir, out["outcome"])
         return out
+    group, states = None, {}
     with add._Commit(home):
         lock = add._read_lock(home)
-        reason = add.conflict_reason(lock, list(names), places, taken, home)
-        if reason:
-            return _not(out, reason)
-        # Chosen now: once the files exist, a dead record of the same name
-        # would look live.
-        keys = {name: add.choose_key(lock, name, places) for name in names}
-        if None in keys.values():
-            return _not(out, "Another install got there first; nothing was installed.")
+        if replace:
+            [name] = names
+            reason, plan = replacing.plan(lock, name, taken, roots, home, support_dir)
+            if reason is None and (plan["paths"] != rplan["paths"]
+                                   or sorted(plan["records"]) != sorted(rplan["records"])):
+                reason = replacing.changed_sentence(name)
+            if reason:
+                return _not(out, reason)
+            states = replacing.ledger_states(support_dir, [d for d, kind in plan["existing"]
+                                                           if kind == "folder"])
+            try:
+                group = replacing.set_aside(support_dir, name, "canary install", plan, states)
+            except replacing.SetAsideError as exc:
+                _not(out, replacing.set_aside_sentence(name))
+                if exc.left:
+                    out["reasons"].append(replacing.undo_incomplete(name, exc.left, exc.group_id,
+                                                                    home))
+                return out
+            for key in plan["records"]:
+                del lock["skills"][key]
+            keys = {name: next(iter(plan["records"])) if len(plan["records"]) == 1
+                    else add.choose_key(lock, name, places)}
+            if None in keys.values():
+                # No approval is recorded yet: the files go back, no ledger write.
+                left = replacing.put_back_files(support_dir, group) if group else []
+                _not(out, "Another install got there first; nothing was installed.")
+                if left:
+                    out["reasons"].append(replacing.undo_incomplete(name, left, group["id"],
+                                                                    home))
+                return out
+        else:
+            reason = add.conflict_reason(lock, list(names), places, taken, home)
+            if reason:
+                return _not(out, reason)
+            # Chosen now: once the files exist, a dead record of the same name
+            # would look live.
+            keys = {name: add.choose_key(lock, name, places) for name in names}
+            if None in keys.values():
+                return _not(out, "Another install got there first; nothing was installed.")
         # Recorded before the files appear, so the watcher leaves them alone;
         # the links resolve to these folders.
         for name in names:
@@ -509,6 +570,8 @@ def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approv
                     "installed": installed, "installed_at": stamp}
                 if worst == "UNSAFE":
                     lock["skills"][keys[name]]["overridden"] = True
+                if group:
+                    lock["skills"][keys[name]]["replaced"] = group["id"]
             add._write_lock(home, lock)
         except (OSError, add.SourceError):
             for path in reversed(done):
@@ -517,8 +580,17 @@ def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approv
                 else:
                     add._remove(path)
             out["reasons"] = [r for r in out["reasons"] if not r.startswith("The package changed")]
-            return _not(out, "SkillCanary could not put the checked files in place, so it "
-                             "removed what it had copied.")
+            _not(out, "SkillCanary could not put the checked files in place, so it "
+                      "removed what it had copied.")
+            if group:
+                left = replacing.undo(home, support_dir, group, states, name)
+                out["reasons"].append(replacing.undo_incomplete(name, left, group["id"], home)
+                                      if left else replacing.BACK)
+            return out
+        if group:
+            add._record(replacing.record_replaced, support_dir, group, "canary install")
+            out["replaced"] = {"id": group["id"],
+                               "paths": [_short(m["origin"], home) for m in group["members"]]}
     out["outcome"] = "installed"
     out["installed"] = [_short(d, home) for d in done]
     if unsafe:
@@ -692,4 +764,8 @@ def render_text(out):
                      f"{', '.join(err['codes']) or 'no known error code'}")
         lines += [f"  {HINTS[code]}" for code in err["codes"]]
     lines += [f"  Installed: {p}" for p in out["installed"]]
+    if out.get("replaced"):
+        gid = out["replaced"]["id"]
+        lines.append(f"  Replaced: {add._join(out['replaced']['paths'])} (set aside as {gid}; "
+                     f"canary restore {gid} puts it back)")
     return "\n".join(lines)

@@ -178,8 +178,9 @@ def _add(args):
         timeout = float(values.get("--timeout", classify.DEFAULT_TIMEOUT_S))
     except ValueError:
         timeout = -1
-    # No flag approves an install: only the person, in the dialog.
-    if (len(sources) != 1 or flags - {"--json", "--text"}
+    # No flag approves an install: only the person, in the dialog. --replace
+    # only changes what happens to a copy already there.
+    if (len(sources) != 1 or flags - {"--json", "--text", "--replace"}
             or not math.isfinite(timeout) or timeout <= 0
             or set(hosts) - set(add.HOSTS)
             or backend not in ("auto", "claude", "anthropic_api", "openai_api", "none")):
@@ -187,7 +188,7 @@ def _add(args):
         return EXIT_USAGE
     try:
         out = add.add(sources[0], backend=backend, model=values.get("--model"),
-                      timeout_s=timeout, hosts=hosts or None)
+                      timeout_s=timeout, hosts=hosts or None, replace="--replace" in flags)
     except add.SourceError as exc:
         print(f"canary: {exc}", file=sys.stderr)
         return EXIT_USAGE
@@ -219,7 +220,7 @@ def _install(args):
     except ValueError:
         timeout = -1
     # No flag approves an install: only the person, in the dialog.
-    if (not command or flags - {"--json", "--text"} or not math.isfinite(timeout)
+    if (not command or flags - {"--json", "--text", "--replace"} or not math.isfinite(timeout)
             or timeout <= 0
             or backend not in ("auto", "claude", "anthropic_api", "openai_api", "none")):
         print(USAGE, file=sys.stderr)
@@ -227,7 +228,7 @@ def _install(args):
     from canary import install
     try:
         out = install.install(command, backend=backend, model=values.get("--model"),
-                              timeout_s=timeout)
+                              timeout_s=timeout, replace="--replace" in flags)
     except install.InstallError as exc:
         print(f"canary: {exc}", file=sys.stderr)
         return EXIT_USAGE
@@ -414,7 +415,7 @@ def _restore(args):
     except OSError as exc:
         print(f"canary: {exc.strerror or exc}; it stays held.", file=sys.stderr)
         return 1
-    print("Put back where it was." if back else reason)
+    print((reason or "Put back where it was.") if back else reason)
     return 0 if back else 10
 
 

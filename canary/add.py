@@ -405,9 +405,8 @@ def _blocked_sentence(name, rec, home):
         return None
     stamp = rec.get("installed_at")
     date = f" (recorded {stamp[:10]})" if isinstance(stamp, str) and DATE.match(stamp) else ""
-    them = "that folder" if len(paths) == 1 else "those folders"
     return (f"A skill named {name} is already installed at {_join(paths)}{date}. "
-            f"Nothing was installed. To replace it, remove {them} and run this again.")
+            "Nothing was installed. To replace it, run this again with --replace.")
 
 
 def choose_key(lock, name, places):
@@ -434,7 +433,7 @@ def conflict_reason(lock, names, places, destinations, home):
                 if sentence:
                     return sentence
         return (f"{_short(existing[0], home)} already exists. Nothing was installed. "
-                "To replace it, remove it and run this again.")
+                "To replace it, run this again with --replace.")
     return None
 
 
@@ -507,11 +506,26 @@ def dialog_text(summary):
         blocks.append(["What you can do:"] + [f"- {s}" for s in summary["next_steps"]])
     blocks.append([f"From the link: {source}", f"Installs as: {summary['name']}",
                    f"Into: {hosts}"])
+    if summary.get("replacing"):
+        blocks.append(replacing_lines(summary["name"], summary["replacing"]))
     blocks.append(["The source and name, and any file names and quoted lines, come from the "
                    "link and package, not from SkillCanary."])
     if summary["verdict"] == "UNSAFE":
         blocks.append([override_sentence(summary.get("confirm") or summary["name"])])
     return "\n\n".join("\n".join(b) for b in blocks)
+
+
+def replacing_lines(name, replacing):
+    """The dialog's block for a replace (program 2026-10-17): what it replaces,
+    and that the copy there now is set aside, not deleted."""
+    if replacing.get("recorded"):
+        when = f" (recorded {replacing['recorded']})"
+    elif replacing.get("tracked"):
+        when = ""
+    else:
+        when = " (not installed by SkillCanary)"
+    return [f"This replaces the installed {name} at {_join(replacing['paths'])}{when}.",
+            "The copy there now is set aside, not deleted; canary restore puts it back."]
 
 
 def override_sentence(phrase):
@@ -627,9 +641,10 @@ def _unpack(kind, rest, fetch, work, quarantine):
 
 def add(source, *, home=None, support_dir=None, approve=None, fetch=None,
         backend="auto", model=None, timeout_s=classify.DEFAULT_TIMEOUT_S, hosts=None,
-        prefix="/"):
-    """Run the whole add flow and return a canary.add/1 result.
-    Raises SourceError (exit 2) or LockError (exit 3)."""
+        prefix="/", replace=False):
+    """Run the whole add flow and return a canary.add/1 result. With
+    `replace`, a copy already at the destinations is set aside first
+    (canary/replace.py). Raises SourceError (exit 2) or LockError (exit 3)."""
     home = home or os.path.expanduser("~")
     support_dir = support_dir or SUPPORT_DIR
     approve = approve or macos_dialog
@@ -663,7 +678,13 @@ def add(source, *, home=None, support_dir=None, approve=None, fetch=None,
                "recommendation": result["recommendation"], "risks": result["risks"]}
         destinations = [os.path.join(HOSTS[h][1].install_root(home), name) for h in hosts]
         places = places_of(destinations)
-        reason = conflict_reason(lock, [name], places, destinations, home)
+        replacing = None
+        if replace:
+            from canary import replace as replacing
+            reason, plan = replacing.plan(lock, name, destinations, guestlist.user_roots(home),
+                                          home, support_dir)
+        else:
+            reason = conflict_reason(lock, [name], places, destinations, home)
         if reason:
             out["outcome"] = "not_installed"
             out["reasons"].append(reason)
@@ -688,6 +709,8 @@ def add(source, *, home=None, support_dir=None, approve=None, fetch=None,
                    "repo": repo, "commit": commit, "hosts": hosts, "_snapshot": snapshot,
                    "headline": result["headline"], "next_steps": result["next_steps"],
                    "recommendation": result["recommendation"], "risks": result["risks"]}
+        if replacing and plan["existing"]:
+            summary["replacing"] = replacing.summary(plan, home)
         unsafe = verdict == "UNSAFE"
         if unsafe:
             summary["confirm"] = name
@@ -711,8 +734,14 @@ def add(source, *, home=None, support_dir=None, approve=None, fetch=None,
 
         fields = {"source": source if kind == "github" else "local", "owner": owner,
                   "repo": repo, "ref": ref, "commit": commit, "path": path}
+        origin = ({"kind": "github", "owner": owner, "repo": repo, "commit": commit}
+                  if kind == "github" else {"kind": "local"})
         with _Commit(home):
             lock = _read_lock(home)
+            if replacing:
+                return _replace_committed(
+                    replacing, out, lock, plan, home, support_dir, snapshot, snapshot_digest,
+                    run_id, name, verdict, result, fields, places, destinations, unsafe, origin)
             reason = conflict_reason(lock, [name], places, destinations, home)
             if reason:
                 out["outcome"] = "not_installed"
@@ -727,9 +756,7 @@ def add(source, *, home=None, support_dir=None, approve=None, fetch=None,
                 return out
             # Recorded before the files appear, so the watcher leaves them alone.
             _record(guestlist.record_install, home, destinations, name, verdict,
-                    support=support_dir, source=snapshot, override=unsafe,
-                    origin=({"kind": "github", "owner": owner, "repo": repo, "commit": commit}
-                            if kind == "github" else {"kind": "local"}))
+                    support=support_dir, source=snapshot, override=unsafe, origin=origin)
             done = _install(snapshot, destinations, snapshot_digest, run_id, name, out)
             if done is None:
                 return out
@@ -748,6 +775,79 @@ def add(source, *, home=None, support_dir=None, approve=None, fetch=None,
         if work:
             _remove(work)
         _remove(quarantine)
+
+
+def _replace_committed(replacing, out, lock, before, home, support, snapshot, digest, run_id,
+                       name, verdict, result, fields, places, destinations, unsafe, origin):
+    """`canary add --replace` under the commit lock (program 2026-10-17,
+    section 1.1, steps 7 to 14): re-plan, set the old copies aside, then the
+    fresh-install path; the old copies go back on any failure."""
+    reason, plan = replacing.plan(lock, name, destinations, guestlist.user_roots(home), home,
+                                  support)
+    if reason is None and (plan["paths"] != before["paths"]
+                           or sorted(plan["records"]) != sorted(before["records"])):
+        reason = replacing.changed_sentence(name)
+    if reason:
+        out["outcome"] = "not_installed"
+        out["reasons"].append(reason)
+        return out
+    states = replacing.ledger_states(support, [d for d, kind in plan["existing"]
+                                               if kind == "folder"])
+    try:
+        group = replacing.set_aside(support, name, "canary add", plan, states)
+    except replacing.SetAsideError as exc:
+        out["outcome"] = "not_installed"
+        out["reasons"].append(replacing.set_aside_sentence(name))
+        if exc.left:
+            out["reasons"].append(replacing.undo_incomplete(name, exc.left, exc.group_id, home))
+        return out
+    # The new record takes the one old record's key; with none or several,
+    # the existing rule picks one, with the old keys gone.
+    for key in plan["records"]:
+        del lock["skills"][key]
+    key = (next(iter(plan["records"])) if len(plan["records"]) == 1
+           else choose_key(lock, name, places))
+    if key is None:
+        # No approval is recorded yet, so the files go back with no ledger write.
+        left = replacing.put_back_files(support, group) if group else []
+        out["outcome"] = "not_installed"
+        out["reasons"].append("Another install got there first; nothing was installed.")
+        if left:
+            out["reasons"].append(replacing.undo_incomplete(name, left, group["id"], home))
+        return out
+    # Recorded before the files appear, so the watcher leaves them alone.
+    _record(guestlist.record_install, home, destinations, name, verdict,
+            support=support, source=snapshot, override=unsafe, origin=origin)
+    done = _install(snapshot, destinations, digest, run_id, name, out)
+    if done is None:
+        _undo_replace(replacing, out, home, support, group, states, name)
+        return out
+    try:
+        _finish(out, lock, home, key, name, verdict, result, done, fields, overridden=unsafe,
+                replaced=group["id"] if group else None)
+    except OSError:
+        for dest in done:
+            _remove(dest)
+        out["outcome"] = "not_installed"
+        out["installed"] = []
+        out["reasons"].append("SkillCanary could not record the install, so it "
+                              "removed it again.")
+        _undo_replace(replacing, out, home, support, group, states, name)
+        return out
+    if group:
+        _record(replacing.record_replaced, support, group, "canary add")
+        out["replaced"] = {"id": group["id"],
+                           "paths": [_short(m["origin"], home) for m in group["members"]]}
+    return out
+
+
+def _undo_replace(replacing, out, home, support, group, states, name):
+    """Put the old copies back after a failed install or lock write, and say so."""
+    if not group:
+        return
+    left = replacing.undo(home, support, group, states, name)
+    out["reasons"].append(replacing.undo_incomplete(name, left, group["id"], home) if left
+                          else replacing.BACK)
 
 
 def _record(fn, *args, **kwargs):
@@ -794,12 +894,14 @@ def _install(snapshot, destinations, digest, run_id, name, out):
     return done
 
 
-def _finish(out, lock, home, key, name, verdict, result, done, source_fields, overridden=False):
+def _finish(out, lock, home, key, name, verdict, result, done, source_fields, overridden=False,
+            replaced=None):
     lock["skills"][key] = dict(source_fields, name=name, places=places_of(done),
                                package_digest=result["package_digest"],
                                verdict=verdict, installed=done,
                                installed_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                               **({"overridden": True} if overridden else {}))
+                               **({"overridden": True} if overridden else {}),
+                               **({"replaced": replaced} if replaced else {}))
     _write_lock(home, lock)
     out["outcome"] = "installed"
     if overridden:
@@ -814,4 +916,8 @@ def render_text(out):
         lines.append(f"Name: {out['name']}")
     lines += [f"  - {r}" for r in out["reasons"]]
     lines += [f"  Installed: {p}" for p in out["installed"]]
+    if out.get("replaced"):
+        gid = out["replaced"]["id"]
+        lines.append(f"  Replaced: {_join(out['replaced']['paths'])} (set aside as {gid}; "
+                     f"canary restore {gid} puts it back)")
     return "\n".join(lines)
