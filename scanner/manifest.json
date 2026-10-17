@@ -1,8 +1,8 @@
 {
-  "version": "5cf820d",
+  "version": "20bf51a1f314db51cf1b8a7d0ff1367dc7719d42",
   "files": {
     "bin/canary": "6be3492d4a1c5373bf1040f4a612737548593853448d95f436d5828e9545ffa9",
-    "canary/__init__.py": "5b37f94f73410df850a139e19d13474a502c1345cca9b7255c6f8cf3555ab3bd",
+    "canary/__init__.py": "acf49f5a021eab661654fc8448e030081b7cbdfb6c4e9224b8b0060c4cf24507",
     "canary/add.py": "e099451c5e8169ce048d0a8cbab5fc52ccc0031f874cc1a6eab25d112f31b886",
     "canary/bench.py": "fe922b5e3d4452079b135b0c1122a586c5c70648478e2b01cdcd6be399dfe44d",
     "canary/catalog.py": "07f51aae6a9494a47fbe27c69c03118dd15cc2f62e9df909d21a977905b71c15",
