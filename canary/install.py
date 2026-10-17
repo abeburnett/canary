@@ -466,7 +466,8 @@ def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approv
             add._record(guestlist.record_install, home, [it["destination"] for it in mine], name,
                         max((it["verdict"] for it in mine), key=WORST.get),
                         support=support_dir, source=mine[0]["snapshot"], how="canary install",
-                        override=any(it["verdict"] == "UNSAFE" for it in mine))
+                        override=any(it["verdict"] == "UNSAFE" for it in mine),
+                        origin={"kind": "installer", "command": list(argv)})
         done = []
         try:
             for it in items:
