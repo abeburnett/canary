@@ -1,5 +1,5 @@
 {
-  "version": "5c0acba",
+  "version": "948c2522fa77adb4439e08616014f6318094c57f",
   "files": {
     "bin/canary": "6be3492d4a1c5373bf1040f4a612737548593853448d95f436d5828e9545ffa9",
     "canary/__init__.py": "5b37f94f73410df850a139e19d13474a502c1345cca9b7255c6f8cf3555ab3bd",
@@ -14,11 +14,11 @@
     "canary/evidence.py": "cb4d5de6b3d4567b39706dfff8f022a59f24eca1bc6052dc8c3a99ee688c353b",
     "canary/explain.py": "e4756bae9f28f1840c2e32c5aecfa887017b4dfbafe779ea1a3003842bfc1e64",
     "canary/frontdoor.py": "709720dc9509fe68bc72e32af7835785d2bb3cecae94cd84a7be549ebd2793b0",
-    "canary/gate.py": "cfd016b6ea98100baa764c11d8aac3d5508a67498104fbcb9dd843dbb6f87d89",
+    "canary/gate.py": "e17c7974cfb6da2fd976018d4b5308eec17814f1d0521352059f3ead54003ca5",
     "canary/guestlist.py": "b2842ea7c9ef33ee67c728b9d12869ca3af4d1a20058ac72b5942e9750de1ae1",
     "canary/hosts/claude.py": "4a317a3236c23a1bf006231c0545389d670b0c0dede26a7d2b7314ac6e2c38c3",
     "canary/hosts/codex.py": "e951d4cf3d072c2e55e1a99b6b6396e1128eaca49e639683deb4729b07d11d15",
-    "canary/install.py": "0e78b501562f220484551c4d2caffd4dcda08c0877a2364060c43ff9a6dc63c6",
+    "canary/install.py": "dc37ebda75d4256d0ec34a2067e62d41a72edf52f6bcf0c80c8c2d78e9660f09",
     "canary/installers.py": "53d310ec6acfe87e837fcd7d94e8a7c464657743317e88c4c74bfe16eb135a50",
     "canary/scan.py": "68279bfdafdf3258e3ae69354fd126498284393312db4912ed26c749b70126f0",
     "canary/setup.py": "eca8c24b921de8d34658333be6bd2b5650deb0b407f0730e148e88f4a9db52bd",
