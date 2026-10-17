@@ -790,22 +790,41 @@ skills'), with `canary add`'s exit codes (`done` is 0).
 
 **Installer output on failure** (program 2026-10-16, slice B). The result
 has `"installer_output": {"lines": [...], "dropped": n}` only when a failed
-run had a package to scrub against; otherwise the key is absent and the
-reason says the output is held back. The output is that run's own bytes
-from the log (each run starts at its own offset). It is the last 20 lines,
-with ANSI and other control characters removed, each cut to 200 characters,
-4 KB in all. Before that, every line that shares a run of 24 or more
-characters with the package is dropped, and `dropped` counts those lines.
-The package is the folders the failed run landed under the staging roots
-(skills: on a failed run, the landed folders; plugins: the staged plugin
-copy, when one exists). The scrub reads files under those folders, skipping
-`.git`, `node_modules`, `.npm` and `.cache`, at most 500 files and 2 MB, as
-UTF-8 with errors ignored. The log file stays complete and quarantined.
-The marketplace add and a failure where nothing landed have no package, so
-no `installer_output`; their reason says the output is held back, because it
-can contain the package's own text, and gives the log path for the person
-to open. `render_text` prints the lines under `Installer output:` after the
-reasons, with a count of lines left out.
+run had a complete package to scrub against; otherwise the key is absent and
+the reason says the output is held back, or, for a failure before any skill
+landed, that the log is at a path the person can open. The output is that
+run's own bytes from the log (each run starts at its own offset). The
+log never goes to the agent. The `installer_output` lines are untrusted installer text, filtered
+by the allowlist and scrub, which are a narrowing, not a guarantee.
+The filter works in order:
+
+1. Allowlist: a line is a candidate only if, after trimming, it starts with
+   `Error`, `error`, `ERR!`, `npm ERR!`, `npm error`, `fatal:`, `warning:` or
+   `WARN`, or contains a fixed error code (`ENOTFOUND`, `ECONNREFUSED`,
+   `ECONNRESET`, `ETIMEDOUT`, `EACCES`, `EPERM`, `ENOENT`, `E404`, `E403`,
+   an HTTP 4xx or 5xx, `404 Not Found`, `403 Forbidden`, `unknown option`,
+   `not found`, `permission denied`). Every other line is held back.
+2. One normalisation for output lines and package text: control and ANSI
+   characters removed, tabs and CR made spaces, whitespace runs collapsed to
+   one space, casefolded.
+3. A candidate is dropped when it shares a run of 24 characters with the
+   package. When it is shorter than 24 characters once its error prefix is
+   removed, it is dropped when that remainder appears anywhere in the package.
+4. The package is the folders the failed run landed under the staging roots
+   (skills: the landed folders; plugins: the staged plugin copy). The scrub
+   reads files under those folders, skipping `.git`, `node_modules`, `.npm`
+   and `.cache`, at most 500 files and 2 MB, as UTF-8 with errors ignored. A
+   partial package is never scrubbed against: when the cap is reached, when a
+   file or folder cannot be read, or, for a plugin, when the real install
+   folder exists but cannot be read, `installer_output` is withheld and the
+   held-back sentence is used.
+
+Each shown line is cut to 200 characters, the last 20 kept, 4 KB in all. The
+JSON's `dropped` counts every line of the run that was not shown. The log
+file stays complete and quarantined. The marketplace add and a failure where
+nothing landed have no package, so no `installer_output`. `render_text` prints
+the lines under `Installer output:` after the reasons, with a count of lines
+left out.
 
 Limits: the installer runs as the person; staging changes where it writes
 by default, not where it can write. A write into a skills folder during the
