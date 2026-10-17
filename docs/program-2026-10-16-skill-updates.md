@@ -390,6 +390,5 @@ into `skills/<name>`, because README install steps say exactly that
 pattern cannot tell the skill's own name from another's. File targets
 inside another skill (`skills/<name>/<file>`) stay flagged. Residual,
 written into checks.md: a skill that copies a whole folder over another
-skill is caught at runtime, not by this pattern: the gate refuses an
-agent's shell command that creates a skill folder, and the guest list
-reports the overwritten skill as changed since approval.
+skill is not caught by this pattern; the guest list reports the
+overwritten skill as changed since approval at the next scan or session.
