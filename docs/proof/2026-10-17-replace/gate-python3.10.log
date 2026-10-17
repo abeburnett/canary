@@ -1,0 +1,14 @@
+commit 16a645f429f38836314b025b820eabb38c276012
+Python 3.10.3
+......................................................................................................................................./Users/abrahamburnett/.pyenv/versions/3.10.3/lib/python3.10/unittest/case.py:549: ResourceWarning: unclosed file <_io.TextIOWrapper name=5 encoding='UTF-8'>
+  method()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+.............................................................................................................................................................................................................................canary: skipped /private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-unlock-tqegptsy/home/.claude/skills: it is reached through a link
+......................................................canary watch: OSError: disk trouble
+.......
+----------------------------------------------------------------------
+Ran 417 tests in 84.651s
+
+OK
+duration=85s
+exit=0
