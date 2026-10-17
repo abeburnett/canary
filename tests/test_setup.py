@@ -274,6 +274,25 @@ class SetupTeachesAgentsAboutSkillCanary(unittest.TestCase):
         with open(os.path.join(root, "skills", "canary", "SKILL.md")) as fh:
             self.assertEqual(fh.read(), frontdoor.SKILL_TEXT)
 
+    def test_the_codex_plugin_skill_is_the_shared_skill_plus_its_coverage_note(self):
+        """After setup a Codex session holds two skills named canary: the
+        marketplace plugin's and the one setup installs. They must agree, so
+        the plugin's is the shared text plus one Codex-only section: the
+        hook-coverage limits the owner kept out of public claims
+        (docs/codex-facts.md)."""
+        from canary import frontdoor
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        codex_tail = (
+            "\n## What the Codex hooks cover\n"
+            "\n"
+            "Managed hooks guard supported agent calls. They do not cover every tool or\n"
+            "process, and local default discovery does not include configured external or\n"
+            "remote skill roots. Describe only protection verified by `canary doctor`.\n"
+            "This plugin does not install enforcement by itself; `canary setup` does.\n")
+        with open(os.path.join(root, "plugins", "codex", "skills", "canary", "SKILL.md"),
+                  encoding="utf-8") as fh:
+            self.assertEqual(fh.read(), frontdoor.SKILL_TEXT + codex_tail)
+
     def test_the_skill_tells_agents_to_relay_the_plain_judgment_and_keep_explain_for_the_person(self):
         from canary import frontdoor
         text = " ".join(frontdoor.SKILL_TEXT.split())
