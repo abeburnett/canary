@@ -12,12 +12,14 @@ installs nothing an agent loads, so it runs as given.
 
 The installer is the person's chosen program and runs as them; staging
 redirects where it writes by default, not where it could write. Its output
-can quote package text, so it goes to a log, never to the agent.
+can quote package text, so it goes to a log. A failed run's last lines reach
+the agent only after the package's own text is scrubbed out (`installer_output`).
 """
 
 import concurrent.futures
 import json
 import os
+import re
 import secrets
 import shutil
 import stat
@@ -30,6 +32,17 @@ INSTALLER_SECONDS = 600
 CHECK_WORKERS = 4
 SKIP_DIRS = {".git", "node_modules", ".npm", ".cache"}
 EXIT_FOR_OUTCOME = dict(add.EXIT_FOR_OUTCOME, done=0)
+# installer_output: the last lines of a failed run, scrubbed against the package.
+OUTPUT_LINES = 20
+OUTPUT_LINE_CHARS = 200
+OUTPUT_BYTES = 4096
+SHARED_RUN = 24
+CORPUS_FILES = 500
+CORPUS_BYTES = 2 * 1024 * 1024
+HELD_BACK = ("Its output is held back, because it can contain the package's own text; "
+             "you can read the log at {log} yourself.")
+CONTROL = re.compile(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-9;?]*[ -/]*[@-~]"
+                     r"|\x1b[@-_]|[\x00-\x08\x0b-\x1f\x7f]")
 
 
 class InstallError(Exception):
@@ -87,17 +100,94 @@ def _mirror_home(real_home, stage_home):
 def _run(argv, cwd, env, log_path, timeout=INSTALLER_SECONDS):
     """Run the installer; its output goes to the log. The exit code, or None
     when it could not start or ran out of time."""
+    return _run_output(argv, cwd, env, log_path, timeout)[0]
+
+
+def _run_output(argv, cwd, env, log_path, timeout=INSTALLER_SECONDS):
+    """`_run`, and the output this run wrote. The log is shared by every run in
+    one install, so the run's bytes start at the log's size after its own
+    header line."""
     os.makedirs(os.path.dirname(log_path), mode=0o700, exist_ok=True)
     fd = os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW, 0o600)
     with os.fdopen(fd, "a") as log:
         log.write(f"$ {' '.join(argv)}  (in {cwd})\n")
         log.flush()
+        start = os.fstat(log.fileno()).st_size
         try:
-            return subprocess.run(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
+            code = subprocess.run(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
                                   stdout=log, stderr=log, timeout=timeout).returncode
         except (OSError, subprocess.TimeoutExpired) as exc:
             log.write(f"canary: {type(exc).__name__}\n")
-            return None
+            code = None
+        log.flush()
+    with open(log_path, "rb") as fh:
+        fh.seek(start)
+        return code, fh.read().decode("utf-8", errors="replace")
+
+
+def _corpus(folders):
+    """The package's text: the files under `folders`, skipping SKIP_DIRS and
+    links, at most CORPUS_FILES files and CORPUS_BYTES bytes, UTF-8 with
+    errors ignored."""
+    parts, files, size = [], 0, 0
+    for folder in folders:
+        for dirpath, dirnames, filenames in os.walk(folder, followlinks=False):
+            dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)
+            for name in sorted(filenames):
+                if files >= CORPUS_FILES or size >= CORPUS_BYTES:
+                    return "\n".join(parts)
+                path = os.path.join(dirpath, name)
+                if os.path.islink(path):
+                    continue
+                try:
+                    with open(path, "rb") as fh:
+                        data = fh.read(CORPUS_BYTES - size)
+                except OSError:
+                    continue
+                files += 1
+                size += len(data)
+                parts.append(data.decode("utf-8", errors="ignore"))
+    return "\n".join(parts)
+
+
+def _shares_run(line, corpus):
+    """True when some SHARED_RUN characters of `line` appear in `corpus`."""
+    return any(line[i:i + SHARED_RUN] in corpus
+               for i in range(len(line) - SHARED_RUN + 1))
+
+
+def _installer_output(run_output, folders):
+    """`installer_output` for one run: control characters removed, lines cut
+    to OUTPUT_LINE_CHARS, every line sharing a run with the package dropped
+    (and counted), then the last OUTPUT_LINES that fit in OUTPUT_BYTES."""
+    corpus = _corpus(folders)
+    lines, dropped = [], 0
+    for raw in run_output.replace("\r", "\n").split("\n"):
+        line = CONTROL.sub("", raw.replace("\t", " "))[:OUTPUT_LINE_CHARS].rstrip()
+        if not line.strip():
+            continue
+        if _shares_run(line, corpus):
+            dropped += 1
+        else:
+            lines.append(line)
+    tail, total = [], 0
+    for line in reversed(lines[-OUTPUT_LINES:]):
+        cost = len(line.encode("utf-8")) + 1
+        if total + cost > OUTPUT_BYTES:
+            break
+        tail.insert(0, line)
+        total += cost
+    return {"lines": tail, "dropped": dropped}
+
+
+def _shown(out, run_output, folders, log_path):
+    """Attach `installer_output` when a package landed to scrub against, and
+    return the reason's sentence about the output. With no package, the output
+    is held back."""
+    if not folders:
+        return HELD_BACK.format(log=log_path)
+    out["installer_output"] = _installer_output(run_output, folders)
+    return f"Its output is in {log_path}."
 
 
 def _landed(stage_root):
@@ -241,7 +331,7 @@ def install(argv, *, home=None, cwd=None, support_dir=None, approve=None, backen
         code = _run(list(argv), cwd, _real_env(home), log_path)
         out["outcome"] = "done" if code == 0 else "not_installed"
         out["reasons"].append("Added the marketplace; nothing from it is installed yet."
-                              if code == 0 else f"The installer failed; its output is in {log_path}.")
+                              if code == 0 else "The installer failed. " + HELD_BACK.format(log=log_path))
         return out
     run_dir = os.path.join(support_dir, "quarantine", run_id)
     os.makedirs(run_dir, mode=0o700)
@@ -312,15 +402,17 @@ def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approv
             model, timeout_s):
     stage_home, stage_project = _stage(run_dir, home)
     before = _real_listing(home, cwd)
-    code = _run(list(argv), stage_project, _env(stage_home, home), log_path)
+    code, run_output = _run_output(list(argv), stage_project, _env(stage_home, home), log_path)
     appeared = _appeared(before, _real_listing(home, cwd))
     if appeared:
         return _not(out, f"While the installer ran, something new appeared in "
                          f"{_short(appeared[0], home)}, outside SkillCanary's staging folder. "
                          "SkillCanary installed nothing. Run canary list to see it.")
     if code != 0:
+        landed = [f for root in (stage_home, stage_project) for f in _landed(root)[0]]
+        shown = _shown(out, run_output, landed, log_path)
         return _not(out, f"The installer failed ({'exit ' + str(code) if code is not None else 'did not finish'}); "
-                         f"nothing was installed. Its output is in {log_path}.")
+                         f"nothing was installed. {shown}")
     roots = ((stage_home, home), (stage_project, cwd))
     plan, links = [], []  # (staged folder, destination); (link destination, target destination)
     for stage_root, real_root in roots:
@@ -332,7 +424,7 @@ def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approv
                          "letters, digits and dashes); nothing was installed.")
     if not plan:
         return _not(out, "The installer added no skills to its staging home, so there was "
-                         f"nothing to check or install. Its output is in {log_path}.")
+                         f"nothing to check or install. {HELD_BACK.format(log=log_path)}")
     by_stage = {os.path.realpath(f): dest for f, dest in plan}
     link_plan = []
     for link, real_root, stage_root in links:
@@ -524,9 +616,14 @@ def _plugin(parsed, home, cwd, support_dir, run_dir, run_id, log_path, out, appr
         return _not(out, f"SkillCanary could not find the marketplace {marketplace}. Add it "
                          "first: claude plugin marketplace add <source>.")
     if _run([argv[0], "plugin", "marketplace", "add", source], stage_project, env, log_path) != 0:
-        return _not(out, f"SkillCanary could not stage the marketplace; see {log_path}.")
-    if _run(list(argv), stage_project, env, log_path) != 0:
-        return _not(out, f"The installer failed in staging; nothing was installed. See {log_path}.")
+        return _not(out, "SkillCanary could not stage the marketplace. "
+                         + HELD_BACK.format(log=log_path))
+    code, run_output = _run_output(list(argv), stage_project, env, log_path)
+    if code != 0:
+        staged_now = _install_path(stage_config, plugin_id, scope)
+        landed = [staged_now] if staged_now and os.path.isdir(staged_now) else []
+        shown = _shown(out, run_output, landed, log_path)
+        return _not(out, f"The installer failed in staging; nothing was installed. {shown}")
     staged = _install_path(stage_config, plugin_id, scope)
     if not staged or not os.path.isdir(staged):
         return _not(out, f"The installer did not report where it put {plugin_id}; nothing was installed.")
@@ -550,12 +647,13 @@ def _plugin(parsed, home, cwd, support_dir, run_dir, run_id, log_path, out, appr
     # The real install, then proof it is what was checked. A plugin loads when
     # a session starts, so nothing uses it before this comparison.
     with add._Commit(home):
-        code = _run(list(argv), cwd, _real_env(home), log_path)
+        code, run_output = _run_output(list(argv), cwd, _real_env(home), log_path)
         real = _install_path(real_config, plugin_id, scope)
         got = _digest_of(real, os.path.join(run_dir, "installed")) if real else None
         if code != 0:
             # Nothing of ours to undo: a failed update keeps what was there.
-            return _not(out, f"The installer failed; its output is in {log_path}.")
+            shown = _shown(out, run_output, [staged], log_path)
+            return _not(out, f"The installer failed. {shown}")
         if got != items[0]["digest"]:
             removed = _run([argv[0], "plugin", "uninstall", plugin_id, "--scope", scope], cwd,
                            _real_env(home), log_path)
@@ -584,5 +682,12 @@ def render_text(out):
     lines = [f"SkillCanary install: {out['outcome']}" + (f" ({out['verdict']})" if out["verdict"] else "")]
     lines += [f"  {s['name']}: {s['verdict']}" for s in out["skills"]]
     lines += [f"  - {r}" for r in out["reasons"]]
+    if "installer_output" in out:
+        shown = out["installer_output"]
+        lines.append("  Installer output:")
+        lines += [f"    {line}" for line in shown["lines"]]
+        if shown["dropped"]:
+            lines.append(f"    ({shown['dropped']} lines left out, because they quote "
+                         "the package's own text)")
     lines += [f"  Installed: {p}" for p in out["installed"]]
     return "\n".join(lines)
