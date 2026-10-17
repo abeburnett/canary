@@ -49,6 +49,8 @@ for s in spec["skills"]:
                    os.path.join(base, ".claude", "skills", s["name"]))
 with open(os.path.join(home, ".agents", ".skill-lock.json") if os.path.isdir(os.path.join(home, ".agents")) else os.devnull, "w") as fh:
     fh.write("{}")
+for line in spec.get("print", []):
+    print(line)
 sys.exit(1 if spec.get("fail") else 0)
 """
 
@@ -333,6 +335,36 @@ class SkillsComeFromStaging(unittest.TestCase):
         out = mac.install(ADD, spec=dict(ONE, fail=True))
         self.assertEqual((out["outcome"], mac.asked), ("not_installed", []))
         self.assertEqual(os.listdir(os.path.join(mac.home, ".agents", "skills")), [])
+
+
+WIDGET = "Rotate the widget cache every night, then reload."
+REGISTRY_ERROR = "error: registry unreachable (exit code 7)"
+
+
+class FailedInstallShowsItsOutput(unittest.TestCase):
+    """Program 2026-10-16, slice B: the failed run's output, with the package's
+    own text scrubbed out."""
+
+    def test_a_failure_that_landed_a_skill_keeps_the_error_and_drops_the_skill_text(self):
+        mac = Mac()
+        out = mac.install(ADD, spec={"skills": [{"name": "helper", "body": WIDGET + "\n"}],
+                                     "fail": True, "print": [WIDGET, REGISTRY_ERROR]})
+        self.assertEqual(out["outcome"], "not_installed")
+        self.assertIn(REGISTRY_ERROR, out["installer_output"]["lines"])
+        self.assertNotIn(WIDGET, out["installer_output"]["lines"])
+        self.assertGreaterEqual(out["installer_output"]["dropped"], 1)
+        text = install.render_text(out)
+        self.assertIn("Installer output:", text)
+        self.assertIn(REGISTRY_ERROR, text)
+        self.assertNotIn(WIDGET, text)
+
+    def test_a_failure_that_landed_nothing_holds_its_output_back(self):
+        mac = Mac()
+        out = mac.install(ADD, spec={"skills": [], "fail": True, "print": [REGISTRY_ERROR]})
+        self.assertEqual(out["outcome"], "not_installed")
+        self.assertNotIn("installer_output", out)
+        self.assertIn("is held back, because it can contain the package's own text",
+                      " ".join(out["reasons"]))
 
 
 PROJECT_ADD = ["npx", "skills", "add", "someone/repo", "-y"]
