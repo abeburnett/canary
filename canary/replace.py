@@ -21,6 +21,7 @@ import os
 import re
 import secrets
 import shutil
+import stat
 import tempfile
 import time
 
@@ -92,6 +93,48 @@ def _same(a, b):
 def _date(rec):
     stamp = rec.get("installed_at") if isinstance(rec, dict) else None
     return stamp if isinstance(stamp, str) and add.DATE.match(stamp) else None
+
+
+def _tree_digest(path):
+    try:
+        return add.tree_digest(path)
+    except (add.SourceError, OSError):
+        return None
+
+
+def _readlink(path):
+    try:
+        return os.readlink(path)
+    except OSError:
+        return None
+
+
+def _place(path):
+    """A path with its parent resolved and its last part kept: where a member
+    sits, never what a link there leads to."""
+    return os.path.join(*_norm(path))
+
+
+def _copy_tree(src, dest):
+    """Copy a folder without following links, keeping `.git`, so what a restore
+    checks is every byte it compares and puts back (Sol review, finding 2).
+    Links and special files raise SourceError, as add._copy_local does."""
+    count = 0
+    for dirpath, dirnames, filenames in os.walk(src, followlinks=False):
+        rel = os.path.relpath(dirpath, src)
+        os.makedirs(os.path.join(dest, rel), exist_ok=True)
+        for name in dirnames + filenames:
+            count += 1
+            if count > add.MAX_ENTRIES:
+                raise add.SourceError("The package has too many files.")
+            path = os.path.join(dirpath, name)
+            st = os.lstat(path)
+            if stat.S_ISLNK(st.st_mode) or not (stat.S_ISDIR(st.st_mode)
+                                                or stat.S_ISREG(st.st_mode)):
+                raise add.SourceError("The folder contains links or special files.")
+            if stat.S_ISREG(st.st_mode):
+                add._copy_regular(path, os.path.join(dest, rel, name))
+    return dest
 
 
 def _folders_first(members):
@@ -275,7 +318,14 @@ def set_aside(support, name, how, plan_, states):
               "members": members,
               "states": {m["origin"]: states.get(m["origin"]) for m in members
                          if m["kind"] == "folder"},
-              "records": plan_["records"]}
+              "records": plan_["records"],
+              # What each member was when it was set aside, so a restore that
+              # died part-way can tell a member already back from anything else
+              # (Sol review, findings 3 and 4). None when it cannot be read.
+              "digests": {m["origin"]: _tree_digest(m["origin"]) for m in members
+                          if m["kind"] == "folder"},
+              "links": {m["origin"]: _readlink(m["origin"]) for m in members
+                        if m["kind"] == "link"}}
     try:
         os.makedirs(gdir, mode=0o700)
     except OSError:
@@ -412,7 +462,9 @@ def _load(support, gid, roots):
         origins.add(origin)
     states = rec.get("states") if isinstance(rec.get("states"), dict) else {}
     records = rec.get("records") if isinstance(rec.get("records"), dict) else {}
-    return dict(rec, dir=gdir, states=states, records=records,
+    digests = rec.get("digests") if isinstance(rec.get("digests"), dict) else {}
+    links = rec.get("links") if isinstance(rec.get("links"), dict) else {}
+    return dict(rec, dir=gdir, states=states, records=records, digests=digests, links=links,
                 how=rec.get("how") if isinstance(rec.get("how"), str) else None)
 
 
@@ -442,17 +494,21 @@ def groups(support, roots):
 
 # ---- canary restore <id> for a replaced group --------------------------------
 
-def current_plan(lock, origins, roots, home, support):
-    """(reason, plan) for setting aside what is at a group's origins now. Unlike
-    `plan` it has no name rule, and it finds every lock record listing an
-    origin, live or not."""
+def current_plan(lock, origins, roots, home, support, group_origins=None):
+    """(reason, plan) for setting aside what is at `origins` (the members still
+    to put back) now. Unlike `plan` it has no name rule, and it finds every
+    lock record listing an origin, live or not. Links and lock records are
+    judged against `group_origins`, the complete original group, so a member
+    already back from a restore that died part-way counts as inside it (Sol
+    review, finding 3)."""
+    group_origins = list(group_origins or origins)
     existing = []
     for o in origins:
         if not os.path.lexists(o):
             continue
         if os.path.islink(o):
             target = os.path.realpath(o)
-            if any(p != o and os.path.realpath(p) == target for p in origins):
+            if any(p != o and os.path.realpath(p) == target for p in group_origins):
                 existing.append((o, "link"))
                 continue
         elif os.path.isdir(o) and os.path.isfile(os.path.join(o, "SKILL.md")):
@@ -463,7 +519,7 @@ def current_plan(lock, origins, roots, home, support):
     records = {}
     for key, rec in lock["skills"].items():
         paths = add.record_paths(rec)
-        ours = [p for p in paths if any(_same(p, o) for o in origins)]
+        ours = [p for p in paths if any(_same(p, o) for o in group_origins)]
         if not ours:
             continue
         others = [p for p in paths if p not in ours]
@@ -513,6 +569,60 @@ def dialog_text(group, checked, home):
     return "\n".join(lines)
 
 
+def _done(group, m):
+    """True when a member that is no longer in the store is back at its
+    origin exactly as it was set aside: a folder with the same tree digest, or
+    a link with the same text. A restore that died part-way leaves these."""
+    origin = m["origin"]
+    if m["kind"] == "folder":
+        want = group["digests"].get(origin)
+        if not isinstance(want, str) or os.path.islink(origin) or not os.path.isdir(origin):
+            return False
+        return _tree_digest(origin) == want
+    want = group["links"].get(origin)
+    return isinstance(want, str) and os.path.islink(origin) and _readlink(origin) == want
+
+
+def _survey(group):
+    """(kept, done, other): members still in the store, members already back,
+    and the rest."""
+    kept = _kept(group)
+    done = [m for m in group["members"] if m not in kept and _done(group, m)]
+    other = [m for m in group["members"] if m not in kept and m not in done]
+    return kept, done, other
+
+
+def _links_reason(group, kept, done, home):
+    """Before anything moves: each saved link, resolved from where it was
+    found, must lead to a folder member of this group that was checked (one
+    still in the store) or is already back, at the place it is restored to
+    (Sol review, finding 1). The refusal, or None."""
+    allowed = {_place(m["origin"]) for m in kept + done if m["kind"] == "folder"}
+    for m in kept:
+        if m["kind"] != "link":
+            continue
+        text = _readlink(os.path.join(group["dir"], m["entry"]))
+        target = None
+        if text is not None:
+            target = os.path.realpath(text if os.path.isabs(text)
+                                      else os.path.join(os.path.dirname(m["origin"]), text))
+        if target not in allowed:
+            return (f"Still set aside: the link saved from {add._short(m['origin'], home)} no "
+                    "longer leads to a copy SkillCanary checked." + SUFFIX)
+    return None
+
+
+def _to_check(group, kept, done):
+    """(member, path to copy, put back?) for every folder the restore checks:
+    the folders still in the store, or, when only links are left, the folders
+    already back that those links lead to (Sol review, finding 4)."""
+    folders = [(m, os.path.join(group["dir"], m["entry"]), True)
+               for m in kept if m["kind"] == "folder"]
+    if folders:
+        return folders
+    return [(m, m["origin"], False) for m in done if m["kind"] == "folder"]
+
+
 def restore(group_id, home, support, ask, backend="auto", model=None):
     """Check the kept copies again and ask the person; only their yes puts them
     back. (True, line or None), or (False, the line saying why not)."""
@@ -521,27 +631,36 @@ def restore(group_id, home, support, ask, backend="auto", model=None):
     if group is None:
         raise ValueError(NOT_KEEPING)
     name = group["name"]
-    kept = _kept(group)
-    folders = [m for m in kept if m["kind"] == "folder"]
-    if not folders:
+    kept, done, other = _survey(group)
+    if not kept:
+        return False, NOTHING_LEFT
+    for m in other:
+        if os.path.lexists(m["origin"]):
+            return (False, f"Still set aside: something SkillCanary does not move is at "
+                           f"{add._short(m['origin'], home)}." + SUFFIX)
+    reason = _links_reason(group, kept, done, home)
+    if reason:
+        return False, reason
+    to_check = _to_check(group, kept, done)
+    if not to_check:
         return False, NOTHING_LEFT
     work = tempfile.mkdtemp(prefix="canary-replaced-")
     try:
         checked, checked_digests = [], {}
-        for n, m in enumerate(folders):
+        for n, (m, source, put_back) in enumerate(to_check):
             snap = os.path.join(work, str(n))
             try:
-                add._copy_local(os.path.join(group["dir"], m["entry"]), snap)
-                checked_digests[m["entry"]] = add.tree_digest(snap)
+                _copy_tree(source, snap)
+                checked_digests[source] = add.tree_digest(snap)
                 result = classify.check(snap, backend=backend, model=model,
                                         log_dir=os.path.join(support, "quarantine", "logs"))
             except (add.SourceError, OSError):
                 add._record(guestlist.record_decision, home, name, "UNSAFE", "refused",
                             support=support)
                 return False, STILL_LINKS
-            checked.append((m, snap, result))
-        verdict = max((r["verdict"] for _, _, r in checked), key=lambda v: WORST.get(v, 2))
-        text = dialog_text(group, checked, home)
+            checked.append((m, snap, result, put_back))
+        verdict = max((c[2]["verdict"] for c in checked), key=lambda v: WORST.get(v, 2))
+        text = dialog_text(group, [c[:3] for c in checked], home)
         answer = ask(text, verdict, confirm=name) if verdict == "UNSAFE" else ask(text, verdict)
         if answer is not True:
             if verdict == "UNSAFE":
@@ -549,36 +668,43 @@ def restore(group_id, home, support, ask, backend="auto", model=None):
                             support=support)
             return False, STILL_CANCELLED if answer is False else STILL_SILENT
         with add._Commit(home):
-            return _restore_committed(group, kept, checked, checked_digests, home, support,
-                                      roots)
+            return _restore_committed(group, kept, done, checked, checked_digests, home,
+                                      support, roots)
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
 
-def _unchanged(gdir, checked_digests):
-    """True when every folder member's store entry still has the tree digest
-    of the copy that was checked (the automated review's TOCTOU finding: an
-    entry could change between the check and the rename, as watcher.put_back
-    guards against)."""
+def _unchanged(checked_digests):
+    """True when every checked folder still has the tree digest of the copy that
+    was checked (the automated review's TOCTOU finding: it could change between
+    the check and the rename, as watcher.put_back guards against)."""
     try:
-        return all(add.tree_digest(os.path.join(gdir, entry)) == digest
-                   for entry, digest in checked_digests.items())
+        return all(add.tree_digest(path) == digest for path, digest in checked_digests.items())
     except (add.SourceError, OSError):
         return False
 
 
-def _restore_committed(group, kept, checked, checked_digests, home, support, roots):
+def _restore_committed(group, kept, done, checked, checked_digests, home, support, roots):
     """Section 4, step 4, under the commit lock."""
     name, gdir = group["name"], group["dir"]
     again = _load(support, group["id"], roots)
-    if again is None or any(not os.path.lexists(os.path.join(gdir, m["entry"])) for m in kept):
+    if again is None:
         return False, NOTHING_LEFT
-    # Only what was checked goes back: before anything moves or is recorded.
-    if not _unchanged(gdir, checked_digests):
+    now_kept, now_done, _ = _survey(again)
+    if now_kept != kept:
+        return False, NOTHING_LEFT
+    if now_done != done:
         return False, changed_after_check(group["id"])
+    # Only what was checked goes back: before anything moves or is recorded.
+    if not _unchanged(checked_digests):
+        return False, changed_after_check(group["id"])
+    reason = _links_reason(group, kept, done, home)
+    if reason:
+        return False, reason
     origins = [m["origin"] for m in kept]
     lock = add._read_lock(home)
-    reason, current = current_plan(lock, origins, roots, home, support)
+    reason, current = current_plan(lock, origins, roots, home, support,
+                                   group_origins=[m["origin"] for m in group["members"]])
     if reason:
         return False, reason
     for key in current["records"]:
@@ -601,9 +727,12 @@ def _restore_committed(group, kept, checked, checked_digests, home, support, roo
         if exc.left:
             return False, restore_undo_incomplete(exc.left, exc.group_id, home)
         return False, STILL_CURRENT
-    # Approval first, one call per folder member with its own verdict, so the
-    # watcher leaves each copy alone once it is back.
-    for m, snap, result in checked:
+    # Approval first, one call per folder member put back, with its own verdict,
+    # so the watcher leaves each copy alone once it is back. A folder already
+    # back had its approval recorded by the restore that put it there.
+    for m, snap, result, put_back in checked:
+        if not put_back:
+            continue
         old = group["states"].get(m["origin"])
         origin = (old["origin"] if isinstance(old, dict) and old.get("status") == guestlist.CHECKED
                   and isinstance(old.get("origin"), dict) else {"kind": "watcher"})
