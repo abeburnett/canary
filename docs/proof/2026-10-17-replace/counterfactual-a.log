@@ -1,15 +1,16 @@
-commit ce66c5fdcb2e24fae49750f9deff518220dc91f4
+commit 4949107d9a2472174b6b3adf53e3e92e1bcee950
 Python 3.10.3
-stamp: HEAD ce66c5f adds only the gate logs to 16a645f (manifest regenerated at code commit da11c9e), so the code under test is 16a645f's.
+stamp: HEAD 4949107 adds only proof logs to 058b58e (manifest regenerated at code commit 5cf820d), so the code under test is 058b58e's.
 counterfactual (a): reverted line canary/replace.py replace.undo: the compensating events are dropped (events = [] instead of _compensating(group, states, name))
-run: python3.10 -m unittest discover -s tests (full suite), duration 120s, exit=1
+run: python3.10 -m unittest discover -s tests (full suite), duration 95s, exit=1
+log rebuilt from this run's raw output and post-revert status; the diff below is the same edit, re-applied and reverted to show it (the run's own header had captured the tracked log file in its git diff).
 
---- the edit (git diff)
+--- the edit (git diff -- canary/replace.py)
 diff --git a/canary/replace.py b/canary/replace.py
-index 569197e..d70f1e5 100644
+index 3e8c411..258e553 100644
 --- a/canary/replace.py
 +++ b/canary/replace.py
-@@ -367,7 +367,7 @@ def undo(home, support, group, states, name):
+@@ -417,7 +417,7 @@ def undo(home, support, group, states, name):
      first, then the files back. Returns the origins left in the store."""
      if not group:
          return []
@@ -36,22 +37,22 @@ FAIL: test_20_a_failed_move_back_returns_the_current_copies (test_replace.Restor
 FAIL: test_09_a_failed_rename_in_puts_the_old_copies_back (test_replace.UnderTheCommitLock)
 FAIL: test_09_an_untracked_old_copy_comes_back_as_arrived (test_replace.UnderTheCommitLock)
 FAIL: test_11_a_failed_lock_write_puts_the_old_copies_back (test_replace.UnderTheCommitLock)
-Ran 417 tests in 118.556s
+Ran 421 tests in 94.330s
 FAILED (failures=16)
 exit=1
 
 --- explained
-Target reds: test 9 (both variants: the compensating approved/arrived events are missing; the checked variant's watcher step also asserts it holds nothing, and its ledger tail assertion fails first) and test 11 (no compensating events). Also red: test 20 (both subtests), because a restore that cannot move the old copy back uses the same undo, and the test asserts its compensating events for the current copies.
-Collateral, the same in every log: 11 FAIL lines from tests/test_action.py CanaryActionTests. Any edit under canary/ changes a file that scanner/manifest.json hashes, so scripts/action.py scanner_manifest() exits 2 with "the bundled scanner failed its integrity check" (quoted in each traceback below). Re-verified in this log (counterfactual a): the class has six test methods; five go red (test_verdicts_and_fail_thresholds_follow_the_public_contract: 5 subtests plus the method; test_invalid_escaping_and_incomplete_inputs_are_rejected: 2 subtests; test_each_skill_folder_is_one_package_and_the_strictest_wins; test_files_outside_skill_folders_are_still_scanned; test_private_repository_requires_token_presence_without_disclosure), 11 FAIL lines in all. The sixth, test_an_unlisted_module_in_a_subfolder_is_refused, stays green: it already expects exit 2. The contract's "6" counts the class's methods; five of them go red.
+Target reds: test 9 (both variants) and test 11: the compensating approved/arrived events are missing. Also red: test 20 (both subtests), because a restore that cannot move the old copy back uses the same undo, and the test asserts its compensating events for the current copies.
+Collateral, in every log: 11 FAIL lines from tests/test_action.py CanaryActionTests. Any edit under canary/ changes a file scanner/manifest.json hashes, so scripts/action.py scanner_manifest() exits 2 with "the bundled scanner failed its integrity check" (quoted in the tracebacks below). Five of the class's six methods go red (11 FAIL lines with subtests); the sixth, test_an_unlisted_module_in_a_subfolder_is_refused, expects exit 2 and stays green.
 
 --- after the revert: git status --porcelain (only the untracked proof logs may be listed; no source file)
-?? docs/proof/2026-10-17-replace/counterfactual-a.log
+ M docs/proof/2026-10-17-replace/counterfactual-a.log
 
 --- full unittest output
 .FFFF................................................................................................................................./Users/abrahamburnett/.pyenv/versions/3.10.3/lib/python3.10/unittest/case.py:549: ResourceWarning: unclosed file <_io.TextIOWrapper name=5 encoding='UTF-8'>
   method()
 ResourceWarning: Enable tracemalloc to get the object allocation traceback
-................................................................................................................................FF.F........................................................................................canary: skipped /private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-unlock-fg_427ht/home/.claude/skills: it is reached through a link
+....................................................................................................................................FF.F........................................................................................canary: skipped /private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-unlock-u5uyun46/home/.claude/skills: it is reached through a link
 ......................................................canary watch: OSError: disk trouble
 .......
 ======================================================================
@@ -205,13 +206,13 @@ First differing element 0:
   [('approved',
 -   'canary add',
 +   'replace undo',
-    '/private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-home-vvmc_sbd/.claude/skills/notes',
+    '/private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-home-qfye3s3v/.claude/skills/notes',
 -   'sha256:e6be541337f4c3b55edce28948e369f916174dc5554582fce8474fba96d1cca6'),
 +   'sha256:a5b73b29d4d46a1fb96c9bf17fe8efc8e6fb5f5b700ac6e8530c71f5d1d48689'),
    ('approved',
 -   'canary add',
 +   'replace undo',
-    '/private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-home-vvmc_sbd/.agents/skills/notes',
+    '/private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-home-qfye3s3v/.agents/skills/notes',
 -   'sha256:e6be541337f4c3b55edce28948e369f916174dc5554582fce8474fba96d1cca6')]
 +   'sha256:a5b73b29d4d46a1fb96c9bf17fe8efc8e6fb5f5b700ac6e8530c71f5d1d48689')]
 
@@ -255,6 +256,6 @@ First differing element 0:
 +   'sha256:a5b73b29d4d46a1fb96c9bf17fe8efc8e6fb5f5b700ac6e8530c71f5d1d48689')]
 
 ----------------------------------------------------------------------
-Ran 417 tests in 118.556s
+Ran 421 tests in 94.330s
 
 FAILED (failures=16)

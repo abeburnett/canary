@@ -1,15 +1,16 @@
-commit ce66c5fdcb2e24fae49750f9deff518220dc91f4
+commit 4949107d9a2472174b6b3adf53e3e92e1bcee950
 Python 3.10.3
-stamp: HEAD ce66c5f adds only the gate logs to 16a645f (manifest regenerated at code commit da11c9e), so the code under test is 16a645f's.
+stamp: HEAD 4949107 adds only proof logs to 058b58e (manifest regenerated at code commit 5cf820d), so the code under test is 058b58e's.
 counterfactual (n): reverted line canary/replace.py replace._existing: a link's target may be any destination, empty or not (for f in folders becomes for f in destinations)
-run: python3.10 -m unittest discover -s tests (full suite), duration 79s, exit=1
+run: python3.10 -m unittest discover -s tests (full suite), duration 88s, exit=1
+log rebuilt from this run's raw output and post-revert status; the diff below is the same edit, re-applied and reverted to show it (the run's own header had captured the tracked log file in its git diff).
 
---- the edit (git diff)
+--- the edit (git diff -- canary/replace.py)
 diff --git a/canary/replace.py b/canary/replace.py
-index 569197e..92542e8 100644
+index 3e8c411..bf82b12 100644
 --- a/canary/replace.py
 +++ b/canary/replace.py
-@@ -157,7 +157,7 @@ def _existing(destinations, home):
+@@ -200,7 +200,7 @@ def _existing(destinations, home):
              continue
          if os.path.islink(d):
              target = os.path.realpath(d)
@@ -32,35 +33,35 @@ FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.
 FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='never')
 FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests)
 FAIL: test_06_a_link_to_the_other_destination_while_it_is_empty (test_replace.RefusalsBeforeTheDialog)
-Ran 417 tests in 78.237s
+Ran 421 tests in 87.818s
 FAILED (failures=12)
 exit=1
 
 --- explained
 Target red: test 6, the link-only case. No other red.
-Collateral: the 11 tests/test_action.py CanaryActionTests FAIL lines from the manifest integrity check (mechanism and count re-verified in counterfactual-a.log).
+Collateral, in every log: 11 FAIL lines from tests/test_action.py CanaryActionTests. Any edit under canary/ changes a file scanner/manifest.json hashes, so scripts/action.py scanner_manifest() exits 2 with "the bundled scanner failed its integrity check" (quoted in the tracebacks below). Five of the class's six methods go red (11 FAIL lines with subtests); the sixth, test_an_unlisted_module_in_a_subfolder_is_refused, expects exit 2 and stays green.
 
 --- after the revert: git status --porcelain (only the untracked proof logs may be listed; no source file)
-?? docs/proof/2026-10-17-replace/counterfactual-a.log
-?? docs/proof/2026-10-17-replace/counterfactual-b.log
-?? docs/proof/2026-10-17-replace/counterfactual-c.log
-?? docs/proof/2026-10-17-replace/counterfactual-d.log
-?? docs/proof/2026-10-17-replace/counterfactual-e.log
-?? docs/proof/2026-10-17-replace/counterfactual-f.log
-?? docs/proof/2026-10-17-replace/counterfactual-g.log
-?? docs/proof/2026-10-17-replace/counterfactual-h.log
-?? docs/proof/2026-10-17-replace/counterfactual-i.log
-?? docs/proof/2026-10-17-replace/counterfactual-j.log
-?? docs/proof/2026-10-17-replace/counterfactual-k.log
-?? docs/proof/2026-10-17-replace/counterfactual-l.log
-?? docs/proof/2026-10-17-replace/counterfactual-m.log
-?? docs/proof/2026-10-17-replace/counterfactual-n.log
+ M docs/proof/2026-10-17-replace/counterfactual-a.log
+ M docs/proof/2026-10-17-replace/counterfactual-b.log
+ M docs/proof/2026-10-17-replace/counterfactual-c.log
+ M docs/proof/2026-10-17-replace/counterfactual-d.log
+ M docs/proof/2026-10-17-replace/counterfactual-e.log
+ M docs/proof/2026-10-17-replace/counterfactual-f.log
+ M docs/proof/2026-10-17-replace/counterfactual-g.log
+ M docs/proof/2026-10-17-replace/counterfactual-h.log
+ M docs/proof/2026-10-17-replace/counterfactual-i.log
+ M docs/proof/2026-10-17-replace/counterfactual-j.log
+ M docs/proof/2026-10-17-replace/counterfactual-k.log
+ M docs/proof/2026-10-17-replace/counterfactual-l.log
+ M docs/proof/2026-10-17-replace/counterfactual-m.log
+ M docs/proof/2026-10-17-replace/counterfactual-n.log
 
 --- full unittest output
 .FFFF................................................................................................................................./Users/abrahamburnett/.pyenv/versions/3.10.3/lib/python3.10/unittest/case.py:549: ResourceWarning: unclosed file <_io.TextIOWrapper name=5 encoding='UTF-8'>
   method()
 ResourceWarning: Enable tracemalloc to get the object allocation traceback
-..............................................................................................................F..............................................................................................................canary: skipped /private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-unlock-17utfgaw/home/.claude/skills: it is reached through a link
+..............................................................................................................F..................................................................................................................canary: skipped /private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-unlock-zecz30fd/home/.claude/skills: it is reached through a link
 ......................................................canary watch: OSError: disk trouble
 .......
 ======================================================================
@@ -178,6 +179,6 @@ AssertionError: 'installed' != 'not_installed'
 
 
 ----------------------------------------------------------------------
-Ran 417 tests in 78.237s
+Ran 421 tests in 87.818s
 
 FAILED (failures=12)

@@ -1,10 +1,11 @@
-commit ce66c5fdcb2e24fae49750f9deff518220dc91f4
+commit 4949107d9a2472174b6b3adf53e3e92e1bcee950
 Python 3.10.3
-stamp: HEAD ce66c5f adds only the gate logs to 16a645f (manifest regenerated at code commit da11c9e), so the code under test is 16a645f's.
+stamp: HEAD 4949107 adds only proof logs to 058b58e (manifest regenerated at code commit 5cf820d), so the code under test is 058b58e's.
 counterfactual (k): reverted line canary/add.py add._blocked_sentence and add.conflict_reason: the old sentences ("remove that folder|those folders|it and run this again") are restored
-run: python3.10 -m unittest discover -s tests (full suite), duration 101s, exit=1
+run: python3.10 -m unittest discover -s tests (full suite), duration 112s, exit=1
+log rebuilt from this run's raw output and post-revert status; the diff below is the same edit, re-applied and reverted to show it (the run's own header had captured the tracked log file in its git diff).
 
---- the edit (git diff)
+--- the edit (git diff -- canary/add.py)
 diff --git a/canary/add.py b/canary/add.py
 index ecbbea4..30911b2 100644
 --- a/canary/add.py
@@ -27,8 +28,6 @@ index ecbbea4..30911b2 100644
 -                "To replace it, run this again with --replace.")
 +                "To replace it, remove it and run this again.")
      return None
- 
- 
 
 --- every red
 FAIL: test_each_skill_folder_is_one_package_and_the_strictest_wins (test_action.CanaryActionTests)
@@ -48,32 +47,32 @@ FAIL: test_a_record_that_turns_up_during_the_dialog_is_refused_in_the_same_words
 FAIL: test_a_folder_with_no_record_is_named (test_install.RecordsKnowWhereTheyAre)
 FAIL: test_a_live_record_blocks_with_a_refusal_that_names_what_is_in_the_way (test_install.RecordsKnowWhereTheyAre)
 FAIL: test_a_record_that_turns_up_during_the_dialog_is_refused_in_the_same_words (test_install.RecordsKnowWhereTheyAre)
-Ran 417 tests in 100.118s
+Ran 421 tests in 110.774s
 FAILED (failures=17)
 exit=1
 
 --- explained
-Target reds: test 1, the six sentence pins in tests/test_add.py and tests/test_install.py. No other red.
-Collateral: the 11 tests/test_action.py CanaryActionTests FAIL lines from the manifest integrity check (mechanism and count re-verified in counterfactual-a.log).
+Target reds: test 1's six sentence pins in tests/test_add.py and tests/test_install.py. No other red.
+Collateral, in every log: 11 FAIL lines from tests/test_action.py CanaryActionTests. Any edit under canary/ changes a file scanner/manifest.json hashes, so scripts/action.py scanner_manifest() exits 2 with "the bundled scanner failed its integrity check" (quoted in the tracebacks below). Five of the class's six methods go red (11 FAIL lines with subtests); the sixth, test_an_unlisted_module_in_a_subfolder_is_refused, expects exit 2 and stays green.
 
 --- after the revert: git status --porcelain (only the untracked proof logs may be listed; no source file)
-?? docs/proof/2026-10-17-replace/counterfactual-a.log
-?? docs/proof/2026-10-17-replace/counterfactual-b.log
-?? docs/proof/2026-10-17-replace/counterfactual-c.log
-?? docs/proof/2026-10-17-replace/counterfactual-d.log
-?? docs/proof/2026-10-17-replace/counterfactual-e.log
-?? docs/proof/2026-10-17-replace/counterfactual-f.log
-?? docs/proof/2026-10-17-replace/counterfactual-g.log
-?? docs/proof/2026-10-17-replace/counterfactual-h.log
-?? docs/proof/2026-10-17-replace/counterfactual-i.log
-?? docs/proof/2026-10-17-replace/counterfactual-j.log
-?? docs/proof/2026-10-17-replace/counterfactual-k.log
+ M docs/proof/2026-10-17-replace/counterfactual-a.log
+ M docs/proof/2026-10-17-replace/counterfactual-b.log
+ M docs/proof/2026-10-17-replace/counterfactual-c.log
+ M docs/proof/2026-10-17-replace/counterfactual-d.log
+ M docs/proof/2026-10-17-replace/counterfactual-e.log
+ M docs/proof/2026-10-17-replace/counterfactual-f.log
+ M docs/proof/2026-10-17-replace/counterfactual-g.log
+ M docs/proof/2026-10-17-replace/counterfactual-h.log
+ M docs/proof/2026-10-17-replace/counterfactual-i.log
+ M docs/proof/2026-10-17-replace/counterfactual-j.log
+ M docs/proof/2026-10-17-replace/counterfactual-k.log
 
 --- full unittest output
 .FFFF....................FFF........................................................................................................../Users/abrahamburnett/.pyenv/versions/3.10.3/lib/python3.10/unittest/case.py:549: ResourceWarning: unclosed file <_io.TextIOWrapper name=5 encoding='UTF-8'>
   method()
 ResourceWarning: Enable tracemalloc to get the object allocation traceback
-....................................................................FF.F.....................................................................................................................................................canary: skipped /private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-unlock-g_f_o_c9/home/.claude/skills: it is reached through a link
+....................................................................FF.F.........................................................................................................................................................canary: skipped /private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-unlock-nm30t4eh/home/.claude/skills: it is reached through a link
 ......................................................canary watch: OSError: disk trouble
 .......
 ======================================================================
@@ -224,6 +223,6 @@ Traceback (most recent call last):
 AssertionError: 'A skill named helper is already installed at ~/.agents/skills/other (recorded 2026-10-06). Nothing was installed. To replace it, run this again with --replace.' not found in ['A skill named helper is already installed at ~/.agents/skills/other (recorded 2026-10-06). Nothing was installed. To replace it, remove that folder and run this again.']
 
 ----------------------------------------------------------------------
-Ran 417 tests in 100.118s
+Ran 421 tests in 110.774s
 
 FAILED (failures=17)

@@ -1,15 +1,16 @@
-commit ce66c5fdcb2e24fae49750f9deff518220dc91f4
+commit 4949107d9a2472174b6b3adf53e3e92e1bcee950
 Python 3.10.3
-stamp: HEAD ce66c5f adds only the gate logs to 16a645f (manifest regenerated at code commit da11c9e), so the code under test is 16a645f's.
+stamp: HEAD 4949107 adds only proof logs to 058b58e (manifest regenerated at code commit 5cf820d), so the code under test is 058b58e's.
 counterfactual (b): reverted line canary/replace.py replace.set_aside: replaced.json is written after the renames, not before
-run: python3.10 -m unittest discover -s tests (full suite), duration 92s, exit=1
+run: python3.10 -m unittest discover -s tests (full suite), duration 77s, exit=1
+log rebuilt from this run's raw output and post-revert status; the diff below is the same edit, re-applied and reverted to show it (the run's own header had captured the tracked log file in its git diff).
 
---- the edit (git diff)
+--- the edit (git diff -- canary/replace.py)
 diff --git a/canary/replace.py b/canary/replace.py
-index 569197e..0b703d8 100644
+index 3e8c411..a20d09d 100644
 --- a/canary/replace.py
 +++ b/canary/replace.py
-@@ -280,15 +280,6 @@ def set_aside(support, name, how, plan_, states):
+@@ -330,15 +330,6 @@ def set_aside(support, name, how, plan_, states):
          os.makedirs(gdir, mode=0o700)
      except OSError:
          raise SetAsideError() from None
@@ -25,7 +26,7 @@ index 569197e..0b703d8 100644
      moved = []
      try:
          for m in members:
-@@ -305,6 +296,15 @@ def set_aside(support, name, how, plan_, states):
+@@ -355,6 +346,15 @@ def set_aside(support, name, how, plan_, states):
              _remove_group(gdir)
          raise SetAsideError(gid if left else None,
                              [m["origin"] for m in members if m["origin"] in left]) from None
@@ -39,8 +40,6 @@ index 569197e..0b703d8 100644
 +        _remove_group(gdir)
 +        raise SetAsideError() from None
      return dict(record, dir=gdir)
- 
- 
 
 --- every red
 FAIL: test_each_skill_folder_is_one_package_and_the_strictest_wins (test_action.CanaryActionTests)
@@ -55,23 +54,23 @@ FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.
 FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='never')
 FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests)
 FAIL: test_28_a_death_between_the_record_and_the_first_rename (test_replace.RestoringAReplacedGroup)
-Ran 417 tests in 91.770s
+Ran 421 tests in 76.820s
 FAILED (failures=12)
 exit=1
 
 --- explained
-Target red: test 28 (the group folder has entries but no replaced.json at the death point, so the group is not listed with kept []). No other red.
-Collateral: the 11 tests/test_action.py CanaryActionTests FAIL lines from the manifest integrity check (mechanism and count re-verified in counterfactual-a.log).
+Target red: test 28 (at the death point the group folder has no replaced.json, so it is not listed with kept []). No other red.
+Collateral, in every log: 11 FAIL lines from tests/test_action.py CanaryActionTests. Any edit under canary/ changes a file scanner/manifest.json hashes, so scripts/action.py scanner_manifest() exits 2 with "the bundled scanner failed its integrity check" (quoted in the tracebacks below). Five of the class's six methods go red (11 FAIL lines with subtests); the sixth, test_an_unlisted_module_in_a_subfolder_is_refused, expects exit 2 and stays green.
 
 --- after the revert: git status --porcelain (only the untracked proof logs may be listed; no source file)
-?? docs/proof/2026-10-17-replace/counterfactual-a.log
-?? docs/proof/2026-10-17-replace/counterfactual-b.log
+ M docs/proof/2026-10-17-replace/counterfactual-a.log
+ M docs/proof/2026-10-17-replace/counterfactual-b.log
 
 --- full unittest output
 .FFFF................................................................................................................................./Users/abrahamburnett/.pyenv/versions/3.10.3/lib/python3.10/unittest/case.py:549: ResourceWarning: unclosed file <_io.TextIOWrapper name=5 encoding='UTF-8'>
   method()
 ResourceWarning: Enable tracemalloc to get the object allocation traceback
-.......................................................................................................................F.....................................................................................................canary: skipped /private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-unlock-qbhcvd2v/home/.claude/skills: it is reached through a link
+.......................................................................................................................F.........................................................................................................canary: skipped /private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-unlock-4vjd0ewx/home/.claude/skills: it is reached through a link
 ......................................................canary watch: OSError: disk trouble
 .......
 ======================================================================
@@ -178,7 +177,7 @@ FAIL: test_28_a_death_between_the_record_and_the_first_rename (test_replace.Rest
 Seam: patch.object(replace, "_rename", side_effect=RuntimeError).
 ----------------------------------------------------------------------
 Traceback (most recent call last):
-  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 915, in test_28_a_death_between_the_record_and_the_first_rename
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 1014, in test_28_a_death_between_the_record_and_the_first_rename
     self.assertEqual(os.listdir(os.path.join(h.store, gid)), ["replaced.json"])
 AssertionError: Lists differ: [] != ['replaced.json']
 
@@ -190,6 +189,6 @@ First extra element 0:
 + ['replaced.json']
 
 ----------------------------------------------------------------------
-Ran 417 tests in 91.770s
+Ran 421 tests in 76.820s
 
 FAILED (failures=12)
