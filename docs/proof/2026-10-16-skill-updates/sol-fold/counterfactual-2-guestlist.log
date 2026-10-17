@@ -1,0 +1,20 @@
+counterfactual fix2: reverted canary/guestlist.py
+reverted line text: return origin
+commit 1bcfcb50cfa4555d3f22c83a20b38f1622d560d5
+interpreter python3: Python 3.10.3
+......................................................................F...............................................................
+======================================================================
+FAIL: test_a_token_in_the_installer_source_never_reaches_the_list (tests.test_install.InstallerOriginKeepsNoCommand)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a5767720b2ee22059/tests/test_install.py", line 780, in test_a_token_in_the_installer_source_never_reaches_the_list
+    self.assertNotIn("TOKEN", json.dumps(report))
+AssertionError: 'TOKEN' unexpectedly found in '{"schema": "canary.list/1", "skills": [{"name": "helper", "names": ["helper"], "path": "/private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-install-ob_jmz49/home/.agents/skills/helper", "status": "checked", "changed_since_approval": false, "since": "2026-10-17T01:00:12Z", "override": false, "installed_from": {"command": ["npx", "skills", "add", "https://user:TOKEN@example.invalid/repo.git", "-g", "-y"], "kind": "installer"}}], "unchecked": [], "changed": [], "held": []}'
+
+----------------------------------------------------------------------
+Ran 134 tests in 20.659s
+
+FAILED (failures=1)
+duration=20s
+exit=1
+restored canary/guestlist.py: byte-identical to pre-counterfactual copy=True

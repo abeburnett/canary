@@ -49,6 +49,8 @@ for s in spec["skills"]:
                    os.path.join(base, ".claude", "skills", s["name"]))
 with open(os.path.join(home, ".agents", ".skill-lock.json") if os.path.isdir(os.path.join(home, ".agents")) else os.devnull, "w") as fh:
     fh.write("{}")
+for _ in range(spec.get("filler", 0)):
+    print("x" * 999)
 for line in spec.get("print", []):
     print(line)
 sys.exit(1 if spec.get("fail") else 0)
@@ -728,6 +730,56 @@ class TheCommand(unittest.TestCase):
                 proc = subprocess.run([sys.executable, CANARY, "install", "--", *argv],
                                       capture_output=True, text=True, env=env, timeout=60)
                 self.assertEqual(proc.returncode, 2)
+
+
+class FailedRunScansItsLogInChunks(unittest.TestCase):
+    """Sol fold, fix 3: a failed run's output is scanned in fixed chunks with a
+    carried tail; a successful run's log is never read back."""
+
+    def test_an_error_code_after_over_a_megabyte_of_output_is_reported(self):
+        mac = Mac()
+        out = mac.install(ADD, spec={"skills": [], "fail": True, "filler": 1100,
+                                     "print": [E404]})
+        self.assertEqual(out["installer_error"], {"exit": 1, "codes": ["E404"]})
+
+    def test_a_code_split_across_two_chunks_is_still_found(self):
+        mac = Mac()
+        # "npm ERR! code E404" starts at byte 48, so E404 spans bytes 62 to 65,
+        # across the 64-byte chunk boundary.
+        with unittest.mock.patch.object(install, "ERROR_SCAN_CHUNK", 64, create=True):
+            out = mac.install(ADD, spec={"skills": [], "fail": True,
+                                         "print": ["x" * 47, E404]})
+        self.assertEqual(out["installer_error"], {"exit": 1, "codes": ["E404"]})
+
+    def test_a_successful_run_does_not_read_its_log_back(self):
+        mac = Mac()
+        opened = []
+        real_open = open
+
+        def spy(path, mode="r", *args, **kwargs):
+            if str(path).endswith(".log") and "r" in mode and "+" not in mode:
+                opened.append(str(path))
+            return real_open(path, mode, *args, **kwargs)
+
+        with unittest.mock.patch("builtins.open", side_effect=spy):
+            out = mac.install(ADD, spec=ONE)
+        self.assertEqual(out["outcome"], "installed")
+        self.assertEqual(opened, [])
+
+
+class InstallerOriginKeepsNoCommand(unittest.TestCase):
+    """Sol fold, fix 2: an installer origin lists only its kind, because the
+    command can carry a token in its source argument."""
+
+    def test_a_token_in_the_installer_source_never_reaches_the_list(self):
+        mac = Mac()
+        out = mac.install(["npx", "skills", "add", "https://user:TOKEN@example.invalid/repo.git",
+                           "-g", "-y"], spec=ONE)
+        self.assertEqual(out["outcome"], "installed")
+        report = guestlist.scan(mac.home, support=mac.support, cwd=mac.project)
+        self.assertNotIn("TOKEN", json.dumps(report))
+        [skill] = [s for s in report["skills"] if s["name"] == "helper"]
+        self.assertEqual(skill["installed_from"], {"kind": "installer"})
 
 
 if __name__ == "__main__":

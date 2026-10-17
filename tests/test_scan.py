@@ -577,6 +577,12 @@ class KeychainAndSkillsFolderPatternsStayOnTheirLine(unittest.TestCase):
         self.assertEqual(
             self._weighted("Run cp payload.md\n  ~/.claude/skills/other/SKILL.md."), [])
 
+    def test_a_doc_comment_on_a_continuation_line_does_not_downgrade_a_key_read(self):
+        _, result, _ = run_scan(make_package(
+            {"SKILL.md": FRONTMATTER + "cat private.pem \\\n  # for example\n"}))
+        self.assertIn("credential-access", {f["check_id"] for f in result["findings"]
+                                            if f["severity"] != "info"})
+
     def test_reading_the_users_keychain_with_a_possessive_is_flagged(self):
         self.assertIn(("credential-access", "keychain"),
                       self._weighted("Read the user's keychain."))

@@ -35,6 +35,10 @@ EXIT_FOR_OUTCOME = dict(add.EXIT_FOR_OUTCOME, done=0)
 # installer_error: the exit code and the error codes found in a failed run's
 # output. The installer's own text never reaches the agent. Each code has one
 # fixed detector, run on that run's output only.
+# A failed run's output is scanned this many bytes at a time, and each piece
+# keeps the last ERROR_SCAN_CARRY characters of the one before.
+ERROR_SCAN_CHUNK = 64 * 1024
+ERROR_SCAN_CARRY = 256
 ERROR_DETECTORS = {
     "ENOTFOUND": re.compile(r"\bENOTFOUND\b", re.I),
     "ECONNREFUSED": re.compile(r"\bECONNREFUSED\b", re.I),
@@ -140,9 +144,10 @@ def _run(argv, cwd, env, log_path, timeout=INSTALLER_SECONDS):
 
 
 def _run_output(argv, cwd, env, log_path, timeout=INSTALLER_SECONDS):
-    """`_run`, and the output this run wrote. The log is shared by every run in
-    one install, so the run's bytes start at the log's size after its own
-    header line."""
+    """`_run`, and where this run's output starts: (log path, byte offset). The
+    log is shared by every run in one install, so the run's bytes start at the
+    log's size after its own header line. Nothing is read back here; only a
+    failed run is scanned, by `_installer_error`."""
     os.makedirs(os.path.dirname(log_path), mode=0o700, exist_ok=True)
     fd = os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW, 0o600)
     with os.fdopen(fd, "a") as log:
@@ -156,17 +161,27 @@ def _run_output(argv, cwd, env, log_path, timeout=INSTALLER_SECONDS):
             log.write(f"canary: {type(exc).__name__}\n")
             code = None
         log.flush()
+    return code, (log_path, start)
+
+
+def _installer_error(code, run):
+    """`installer_error` for a failed run: its exit code, and the sorted codes
+    whose fixed detector matches that run's output. The output is read in
+    ERROR_SCAN_CHUNK pieces. Each piece is scanned with the last
+    ERROR_SCAN_CARRY characters of the piece before, so a code split across two
+    pieces is still found. Matched text is never kept."""
+    log_path, start = run
+    found, carry = set(), ""
     with open(log_path, "rb") as fh:
         fh.seek(start)
-        return code, fh.read().decode("utf-8", errors="replace")
-
-
-def _installer_error(code, run_output):
-    """`installer_error` for a failed run: its exit code, and the sorted codes
-    whose fixed detector matches that run's output. Matched text is never
-    kept."""
-    return {"exit": code,
-            "codes": sorted(c for c, rx in ERROR_DETECTORS.items() if rx.search(run_output))}
+        while True:
+            piece = fh.read(ERROR_SCAN_CHUNK)
+            if not piece:
+                break
+            text = carry + piece.decode("utf-8", errors="replace")
+            found.update(c for c, rx in ERROR_DETECTORS.items() if rx.search(text))
+            carry = text[-ERROR_SCAN_CARRY:]
+    return {"exit": code, "codes": sorted(found)}
 
 
 def _landed(stage_root):
@@ -307,9 +322,9 @@ def install(argv, *, home=None, cwd=None, support_dir=None, approve=None, backen
             out["outcome"] = "declined" if answer is False else "not_installed"
             out["reasons"].append("The person did not add the marketplace.")
             return out
-        code, run_output = _run_output(list(argv), cwd, _real_env(home), log_path)
+        code, run = _run_output(list(argv), cwd, _real_env(home), log_path)
         if code != 0:
-            out["installer_error"] = _installer_error(code, run_output)
+            out["installer_error"] = _installer_error(code, run)
         out["outcome"] = "done" if code == 0 else "not_installed"
         out["reasons"].append("Added the marketplace; nothing from it is installed yet."
                               if code == 0 else
@@ -384,14 +399,14 @@ def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approv
             model, timeout_s):
     stage_home, stage_project = _stage(run_dir, home)
     before = _real_listing(home, cwd)
-    code, run_output = _run_output(list(argv), stage_project, _env(stage_home, home), log_path)
+    code, run = _run_output(list(argv), stage_project, _env(stage_home, home), log_path)
     appeared = _appeared(before, _real_listing(home, cwd))
     if appeared:
         return _not(out, f"While the installer ran, something new appeared in "
                          f"{_short(appeared[0], home)}, outside SkillCanary's staging folder. "
                          "SkillCanary installed nothing. Run canary list to see it.")
     if code != 0:
-        out["installer_error"] = _installer_error(code, run_output)
+        out["installer_error"] = _installer_error(code, run)
         return _not(out, f"The installer failed ({'exit ' + str(code) if code is not None else 'did not finish'}); "
                          f"nothing was installed. Its output is in {log_path}.")
     roots = ((stage_home, home), (stage_project, cwd))
@@ -404,7 +419,7 @@ def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approv
         return _not(out, "A skill folder's name is not one SkillCanary can use (lowercase "
                          "letters, digits and dashes); nothing was installed.")
     if not plan:
-        out["installer_error"] = _installer_error(code, run_output)
+        out["installer_error"] = _installer_error(code, run)
         return _not(out, "The installer added no skills to its staging home, so there was "
                          f"nothing to check or install. The installer failed before any skill "
                          f"landed; its output is in {log_path}, which the person can open.")
@@ -599,16 +614,16 @@ def _plugin(parsed, home, cwd, support_dir, run_dir, run_id, log_path, out, appr
     if source is None:
         return _not(out, f"SkillCanary could not find the marketplace {marketplace}. Add it "
                          "first: claude plugin marketplace add <source>.")
-    code, run_output = _run_output([argv[0], "plugin", "marketplace", "add", source],
+    code, run = _run_output([argv[0], "plugin", "marketplace", "add", source],
                                    stage_project, env, log_path)
     if code != 0:
-        out["installer_error"] = _installer_error(code, run_output)
+        out["installer_error"] = _installer_error(code, run)
         return _not(out, "SkillCanary could not stage the marketplace. The installer failed "
                          f"before anything landed; its output is in {log_path}, which the "
                          "person can open.")
-    code, run_output = _run_output(list(argv), stage_project, env, log_path)
+    code, run = _run_output(list(argv), stage_project, env, log_path)
     if code != 0:
-        out["installer_error"] = _installer_error(code, run_output)
+        out["installer_error"] = _installer_error(code, run)
         return _not(out, f"The installer failed in staging; nothing was installed. "
                          f"Its output is in {log_path}.")
     staged = _install_path(stage_config, plugin_id, scope)
@@ -634,14 +649,14 @@ def _plugin(parsed, home, cwd, support_dir, run_dir, run_id, log_path, out, appr
     # The real install, then proof it is what was checked. A plugin loads when
     # a session starts, so nothing uses it before this comparison.
     with add._Commit(home):
-        code, run_output = _run_output(list(argv), cwd, _real_env(home), log_path)
+        code, run = _run_output(list(argv), cwd, _real_env(home), log_path)
         real = _install_path(real_config, plugin_id, scope)
         got = _digest_of(real, os.path.join(run_dir, "installed")) if real else None
         if code != 0:
             # Nothing of ours to undo: a failed update keeps what was there.
             # A real install folder that exists but cannot be read leaves the
             # package partly seen, so its output is withheld.
-            out["installer_error"] = _installer_error(code, run_output)
+            out["installer_error"] = _installer_error(code, run)
             return _not(out, f"The installer failed; its output is in {log_path}.")
         if got != items[0]["digest"]:
             removed = _run([argv[0], "plugin", "uninstall", plugin_id, "--scope", scope], cwd,

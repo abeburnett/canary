@@ -312,7 +312,7 @@ def scan(home=None, support=None, cwd=None, first_look=False):
                            "status": s.get("status", UNCHECKED),
                            "changed_since_approval": changed, "since": s.get("since"),
                            "override": s.get("status") == CHECKED and bool(s.get("override")),
-                           **({"installed_from": s["origin"]}
+                           **({"installed_from": _listed_origin(s["origin"])}
                               if s.get("status") == CHECKED and s.get("origin") else {})})
     from canary import watcher
     held = [{"id": h["id"], "name": h["name"], "origin": h["origin"], "since": h["at"],
@@ -401,6 +401,14 @@ def session_line(report):
         return None
     return ("SkillCanary: " + "; ".join(parts) + ". Run canary list to see them; canary trust "
             "<folder> marks a skill as yours.")
+
+
+def _listed_origin(origin):
+    """The origin as `canary list --json` shows it. An installer's command can
+    carry a token in its source argument, so only its kind is listed."""
+    if isinstance(origin, dict) and origin.get("kind") == "installer":
+        return {"kind": "installer"}
+    return origin
 
 
 def _came_from(origin):

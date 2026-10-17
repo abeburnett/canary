@@ -534,13 +534,23 @@ def _findings(rel, text):
     raw_lines = text.splitlines()
     lines = [normalize(l) for l in raw_lines]
     logical = list(_logical_lines(lines, raw_lines))
-    # Every rule sees each logical line (a backslash continuation joined), and is
-    # reported at the logical line's first physical line.
-    for first, last, line, raw in logical:
+    # Every physical line is matched on its own, as it was before backslash
+    # joins. Each logical line of two or more physical lines is also matched
+    # joined, and reported at its first physical line. Where both forms report a
+    # check at the same line, the stricter severity wins: the joined form can
+    # add a finding, but a doc word on a continuation line cannot downgrade one.
+    entries = [(n, n, lines[n - 1], raw_lines[n - 1]) for n in range(1, len(lines) + 1)]
+    entries += [entry for entry in logical if entry[1] > entry[0]]
+    best = {}
+    for first, last, line, raw in entries:
         for f in catalog.match_line(rel, first, line, raw):
             if f["severity"] != "info":
                 seen.update((f["check_id"], n) for n in range(first, last + 1))
-            findings.append(f)
+            key = (f["check_id"], first)
+            if key not in best or (SEVERITY_WEIGHT[f["severity"]]
+                                   > SEVERITY_WEIGHT[best[key]["severity"]]):
+                best[key] = f
+    findings.extend(best.values())
     # Second pass over paragraphs, so a phrase split across lines still matches.
     for start, end, joined, raw in _paragraphs(logical):
         for f in catalog.match_paragraph(rel, start, joined, raw):

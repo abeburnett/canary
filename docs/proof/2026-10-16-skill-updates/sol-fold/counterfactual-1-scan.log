@@ -1,0 +1,20 @@
+counterfactual fix1: reverted canary/scan.py
+reverted line text: if True or (SEVERITY_WEIGHT[f["severity"]]
+commit 1bcfcb50cfa4555d3f22c83a20b38f1622d560d5
+interpreter python3: Python 3.10.3
+.....................F................................................................................................................
+======================================================================
+FAIL: test_a_doc_comment_on_a_continuation_line_does_not_downgrade_a_key_read (tests.test_scan.KeychainAndSkillsFolderPatternsStayOnTheirLine)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a5767720b2ee22059/tests/test_scan.py", line 583, in test_a_doc_comment_on_a_continuation_line_does_not_downgrade_a_key_read
+    self.assertIn("credential-access", {f["check_id"] for f in result["findings"]
+AssertionError: 'credential-access' not found in set()
+
+----------------------------------------------------------------------
+Ran 134 tests in 18.981s
+
+FAILED (failures=1)
+duration=19s
+exit=1
+restored canary/scan.py: byte-identical to pre-counterfactual copy=True
