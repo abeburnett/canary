@@ -1145,3 +1145,21 @@ record that this run would only partly replace; a restore whose current
 copy is also recorded elsewhere. Not done: pruning the store; a `doctor`
 check for a lock left stale by a death between the file moves and the
 lock write.
+
+## Done-when audit and merge (2026-10-17)
+
+milestone-auditor (Fable 5.1, high), branch tip 00e6203, final code 058b58e:
+bullets 1 to 5 SHOWN (bullet 1 caveat: tests 33 to 37 had no run against
+the base source; now `red-33-37-base.log`, five `TypeError` errors on the
+missing `replace` keyword). The rebuilt a to p counterfactual logs were
+judged acceptable: their diffs carry 058b58e's blob ids, the runs report
+421 tests with 34 to 37 green, and the earlier runs at fcb4222 show the
+same target reds. Bullet 6 (merge) was blocked because main had gained
+3f57aa0, whose test pins `plugins/codex/skills/canary/SKILL.md` to
+`frontdoor.SKILL_TEXT` plus a Codex tail; this branch added the
+`--replace` sentence to the shared text. Closed on
+`wip/2026-10-17-replace-merge`: main merged with this program (clean),
+the pin shown red (`red-merge.log`), the Codex file rebuilt byte for byte
+from the shared text and the test's tail, and the full gate on the merged
+tree passed on python3.10 and /usr/bin/python3 (422 tests,
+`gate-merged-*.log`).
