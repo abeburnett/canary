@@ -1163,3 +1163,16 @@ the pin shown red (`red-merge.log`), the Codex file rebuilt byte for byte
 from the shared text and the test's tail, and the full gate on the merged
 tree passed on python3.10 and /usr/bin/python3 (422 tests,
 `gate-merged-*.log`).
+
+## Release 0.1.5 (2026-10-17, owner: "Yes, please.")
+
+Ships program 2026-10-16 slices A to C and this program. `Version 0.1.5`
+at 20bf51a, manifest a55073b; full gate at a55073b: 422 tests OK on
+python3.10 and /usr/bin/python3. Tag `v0.1.5`. Installer signed with
+Developer ID, notarized through the App Store Connect key route
+(submission `aba8523d-f59d-4fd4-a901-0f998cf38b23`, Accepted), stapled,
+Gatekeeper `source=Notarized Developer ID`, sha256 `f7049cc7…0252`.
+GitHub release v0.1.5 published as Latest; the website's latest-download
+link returns that file. Tap formula at v0.1.5 (`homebrew-tap` bb6b917),
+tarball sha256 `9b21838f…290a`. The release notes make no catch-rate
+claim (decision 12).
