@@ -208,7 +208,10 @@ Decision rules (`canary/gate.py`, `decide`), in order:
    denied; the Write tool writes such a file, and `git commit -F` takes such
    a message. A single, plain command (no `;`, `&`, `|`, `$`, quotes of
    commands, brackets or line breaks) asking only for help or a listing
-   (`-h`, `--help`, `-l`, `--list`) is allowed. Only the shell tool's command
+   (`-h`, `--help`, `-l`, `--list`) is allowed. The same help request with a
+   pipe, redirect or other shell syntax is still denied, and its message adds
+   "To read an installer's help, run it on its own, without pipes or
+   redirects." Only the shell tool's command
    is read; words in other tools' input (a message, a question) are not an
    install. A command assembled from pieces (`npx $X add`) and a program
    that starts an installer itself are out of the hook's reach; the watcher
@@ -784,6 +787,25 @@ Result: `{"schema": "canary.install/1", "outcome": "installed" | "declined" |
 "recommendation": {...}}` (`next_steps` is the union of the skills'
 install-flow steps, in order; `recommendation` is the strictest of the
 skills'), with `canary add`'s exit codes (`done` is 0).
+
+**Installer output on failure** (program 2026-10-16, slice B). The result
+has `"installer_output": {"lines": [...], "dropped": n}` only when a failed
+run had a package to scrub against; otherwise the key is absent and the
+reason says the output is held back. The output is that run's own bytes
+from the log (each run starts at its own offset). It is the last 20 lines,
+with ANSI and other control characters removed, each cut to 200 characters,
+4 KB in all. Before that, every line that shares a run of 24 or more
+characters with the package is dropped, and `dropped` counts those lines.
+The package is the folders the failed run landed under the staging roots
+(skills: on a failed run, the landed folders; plugins: the staged plugin
+copy, when one exists). The scrub reads files under those folders, skipping
+`.git`, `node_modules`, `.npm` and `.cache`, at most 500 files and 2 MB, as
+UTF-8 with errors ignored. The log file stays complete and quarantined.
+The marketplace add and a failure where nothing landed have no package, so
+no `installer_output`; their reason says the output is held back, because it
+can contain the package's own text, and gives the log path for the person
+to open. `render_text` prints the lines under `Installer output:` after the
+reasons, with a count of lines left out.
 
 Limits: the installer runs as the person; staging changes where it writes
 by default, not where it can write. A write into a skills folder during the
