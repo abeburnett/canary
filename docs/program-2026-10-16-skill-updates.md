@@ -378,3 +378,18 @@ D gets its own refutation before it is built):
 
 **Order.** A and B merge one after the other; whichever merges second
 reruns the full gate on its rebased tree before merging.
+
+## Slice A, second automated review (2026-10-16)
+
+The plugin noted that `cp -r evil ~/.claude/skills/other` (a folder copied
+over another skill's folder) is not flagged, and that `tee` with long
+options or several file operands slips past. Adopted: `tee` matches
+`\btee\b[^\n|;&]{0,200}?ROOT/skills`. Not adopted: flagging a folder copy
+into `skills/<name>`, because README install steps say exactly that
+(`cp -r taste-skill ~/.claude/skills/design-taste-frontend`) and the
+pattern cannot tell the skill's own name from another's. File targets
+inside another skill (`skills/<name>/<file>`) stay flagged. Residual,
+written into checks.md: a skill that copies a whole folder over another
+skill is caught at runtime, not by this pattern: the gate refuses an
+agent's shell command that creates a skill folder, and the guest list
+reports the overwritten skill as changed since approval.
