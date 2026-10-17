@@ -117,6 +117,11 @@ def changed_sentence(name):
             "changed. Run this again.")
 
 
+def changed_after_check(group_id):
+    return (f"Still set aside: it changed after its check; it stays set aside as {group_id}."
+            + SUFFIX)
+
+
 def set_aside_sentence(name):
     return f"SkillCanary could not set the earlier copy of {name} aside, so nothing was changed."
 
@@ -522,11 +527,12 @@ def restore(group_id, home, support, ask, backend="auto", model=None):
         return False, NOTHING_LEFT
     work = tempfile.mkdtemp(prefix="canary-replaced-")
     try:
-        checked = []
+        checked, checked_digests = [], {}
         for n, m in enumerate(folders):
             snap = os.path.join(work, str(n))
             try:
                 add._copy_local(os.path.join(group["dir"], m["entry"]), snap)
+                checked_digests[m["entry"]] = add.tree_digest(snap)
                 result = classify.check(snap, backend=backend, model=model,
                                         log_dir=os.path.join(support, "quarantine", "logs"))
             except (add.SourceError, OSError):
@@ -543,17 +549,33 @@ def restore(group_id, home, support, ask, backend="auto", model=None):
                             support=support)
             return False, STILL_CANCELLED if answer is False else STILL_SILENT
         with add._Commit(home):
-            return _restore_committed(group, kept, checked, home, support, roots)
+            return _restore_committed(group, kept, checked, checked_digests, home, support,
+                                      roots)
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
 
-def _restore_committed(group, kept, checked, home, support, roots):
+def _unchanged(gdir, checked_digests):
+    """True when every folder member's store entry still has the tree digest
+    of the copy that was checked (the automated review's TOCTOU finding: an
+    entry could change between the check and the rename, as watcher.put_back
+    guards against)."""
+    try:
+        return all(add.tree_digest(os.path.join(gdir, entry)) == digest
+                   for entry, digest in checked_digests.items())
+    except (add.SourceError, OSError):
+        return False
+
+
+def _restore_committed(group, kept, checked, checked_digests, home, support, roots):
     """Section 4, step 4, under the commit lock."""
     name, gdir = group["name"], group["dir"]
     again = _load(support, group["id"], roots)
     if again is None or any(not os.path.lexists(os.path.join(gdir, m["entry"])) for m in kept):
         return False, NOTHING_LEFT
+    # Only what was checked goes back: before anything moves or is recorded.
+    if not _unchanged(gdir, checked_digests):
+        return False, changed_after_check(group["id"])
     origins = [m["origin"] for m in kept]
     lock = add._read_lock(home)
     reason, current = current_plan(lock, origins, roots, home, support)

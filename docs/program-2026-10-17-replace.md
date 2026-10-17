@@ -504,7 +504,12 @@ Steps:
    Cancel: `(False, "Still set aside: you chose not to put it back. canary list shows where it is.")`; no answer: `(False, "Still set aside: nobody answered the SkillCanary dialog. canary list shows where it is.")`; `UNSAFE` without the typed name: the same two, and `record_decision(... "refused")`.
 4. Under `add._Commit`:
    1. Re-load the group; refuse if a kept entry vanished (step 1's
-      sentence).
+      sentence). Then (automated security review, TOCTOU; section 9)
+      compare `add.tree_digest` of each folder member's store entry with
+      the `tree_digest` of the copy step 2 checked; on any difference or a
+      `SourceError`, `(False, "Still set aside: it changed after its check; it stays set aside as <id>. canary list shows where it is.")`,
+      before anything moves or is recorded. Approval (4.5) follows only
+      when every member matches, as `watcher.put_back` does.
    2. `replace.current_plan(lock, origins, roots, home, support)` →
       `(reason, plan)`, a separate function from `replace.plan` with no
       name rule: `existing` is each origin that `lexists`, which must be a
@@ -870,6 +875,13 @@ Each test names the seam it uses to inject a fault. New tests live in
     clock 0, 5, 10) and recording what it held; with approval recorded
     first (4.5 before 4.6) it holds nothing; the test asserts `[]`.
 
+33. Automated security review (TOCTOU): a store entry changed between the
+    restore's check and its commit (seam: the person's answer modifies
+    `entry-1` and returns yes) is refused with the changed-after-check
+    sentence; both origins keep the current copies, the group keeps both
+    entries, no `G2`, no `approved` event. Red at the implementation commit
+    before the fix: `docs/proof/2026-10-17-replace/red-toctou.log`.
+
 Red first: tests 2–23, 25, 26 and 28–32 fail at `1465c3b` with the tests applied, on an
 assertion or on the missing interface (`TypeError` for `replace=`,
 `AttributeError` for `canary.replace`); test 1 fails on its assertion;
@@ -918,7 +930,9 @@ first line is `commit <full sha>` and its second the interpreter's
    m. `current_plan` matches live records only → test 30;
    n. the link target may be an empty destination → test 6's link-only
       case;
-   o. `cli._restore` ignores the returned line → test 23.
+   o. `cli._restore` ignores the returned line → test 23;
+   p. the restore's tree-digest comparison is removed → test 33 (the
+      automated review's TOCTOU fix).
 4. A Sol pre-merge review (`~/workspace/scripts/premerge-review`) before
    the full gate, findings folded or answered here.
 5. The done-when audit (milestone-auditor, Fable 5.1, `high`, done-when-
@@ -1067,6 +1081,14 @@ filesystem refusals before the classifier (1.1 step 3, 1.2 step 2). 12
 "no group folder" defined (test 4). 13 test 31 (`_write_lock` → `OSError`
 on restore); `rmdir` failure swallowed and invisible to the listing
 (4.9); temp copies under `canary-replaced-` removed in a `finally` (4.2).
+
+**Automated security review** (during the build, relayed by the
+coordinator). TOCTOU in `replace.restore`: the checked temp copy and the
+store entry renamed back were different files, so the entry could change
+between the check and the rename. Answered in 4.1: under `_Commit`, before
+any move or approval, each folder member's entry must have the
+`tree_digest` of its checked copy, else the changed-after-check refusal;
+test 33, counterfactual (p).
 
 ## 10. Scope cuts, in one place
 
