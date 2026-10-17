@@ -40,6 +40,8 @@ is green, reviewed and audited; 0.1.5 ships after slice D.
 
 ## Slice A: the two scan rules (Tier 1)
 
+(History: superseded by the two Slice A amendments below and Sol's fixes.)
+
 The new alternatives match within one line only. `match_paragraph`
 (`catalog.py:180`) also tries every non-doc pattern on space-joined
 paragraphs, which would let the windows below span line breaks; add a
@@ -79,6 +81,8 @@ every new alternative. Matching stays case-insensitive.
   (decision 12).
 
 ## Slice B: failed-install output and the help hint (Tier 1)
+
+(History: superseded by "Slice B, final design: codes, not text" below.)
 
 - `_run` records the log file's size before each installer run; on
   failure, the bytes that run wrote are its output.
@@ -135,118 +139,142 @@ every new alternative. Matching stays case-insensitive.
   restore render their words; a pre-0.1.5 ledger lists cleanly; the
   origin survives a `changed` event.
 
-## Slice D: updating an installed skill (Tier 2 on Opus, fail-closed)
+## Slice D: updating an installed skill (Opus worker, fail-closed)
 
-This section is the whole contract for D; it folds the third refutation's
-"Slice D, rescoped" notes, which are kept below only as history.
+This section is the whole contract for D. Line numbers drift as slices
+merge; the builder finds each site by name, not by number.
 
 **Command line.** `--replace` joins USAGE and the allowed flags of `_add`
-and `_install` (`canary/cli.py`) and is passed as `replace=` to `add.add`
-and `install.install`. It is refused, with a sentence saying why and
-nothing changed, when: the command installs a plugin (point to `claude
-plugin update`, `install.py:520`); the install would place more than one
-skill name; or any destination is outside the user's skill roots (a
-project folder).
+and `_install` and is passed as `replace=` to `add.add` and
+`install.install`. USAGE also documents `canary restore <id>` for a
+replaced copy. With a plugin command it is refused at once, pointing to
+`claude plugin update`.
+
+**Refusals once the facts are known.** After the new package is checked
+and its names and destinations are known, and before any dialog, `--replace`
+is refused, with nothing recorded and nothing moved, when: it would place
+more than one skill name; any destination is outside the user's skill
+roots; a destination holds a record or folder of a different name; or a
+destination is a symlink whose real path is not another destination of
+this same install. The installer is not run again.
 
 **Without the flag.** `_blocked_sentence` and `conflict_reason` end "To
 update it, run this again with --replace." in place of the "remove …"
-sentence. Tests that pin the old wording (`tests/test_add.py:518,527,532,
-576`, `tests/test_install.py:387,404,423`) and `docs/architecture.md:
-622-627` change in this slice, docs first.
+sentence. Tests that pin the old wording (find them by the text "To
+replace it") and the matching lines in `docs/architecture.md` change in
+this slice, docs first.
 
-**What can be replaced.** Only a skill with the same name, in the same
-places: a lock record whose name equals the new skill's name (any key form
-`plan_key` gives that name), or an untracked folder at the destination
-named that name. Refused as today: a record for a different name; a
-`name@hash` key of a different package name; an unlisted symlink at a
-destination; anything `add.tree_digest` refuses (`SourceError`).
-Destinations the lock record lists as links move with the unit without a
-digest, and only when their target is another destination in the same
-unit.
+**What is replaced.** The real folders at the destinations: a lock record
+of the same name (any key form for that name) or an untracked folder of
+that name. A destination that is a symlink into another destination of the
+same install is left exactly as it is; once the folder it points to holds
+the new copy, it does too. Its digest is never taken.
 
-**Same check, same dialog.** With `--replace` the new version is fetched,
-checked and asked about exactly as a fresh install, with the same verdicts
-and override. The dialog adds one line: "This replaces the installed
-<name> (approved <date>, from <installed_from, when known>). Files: N
-added, N removed, N changed." The counts compare the checked snapshot in
-quarantine with the installed folder by relative path and file digest. No
-file paths appear. The JSON gets the same three counts. Nothing is staged
-inside a watched root before the dialog.
+**Same check, same dialog.** The new version is fetched, checked and asked
+about exactly as a fresh install, with the same verdicts and override. The
+dialog adds one line: "This replaces the installed <name> (approved
+<date>, from <installed_from, when known>). Files: N added, N removed, N
+changed." The counts compare the checked snapshot in quarantine with the
+installed real folder by relative path and file digest. No file paths
+appear; the JSON gets the three counts.
 
-**Digest at both ends.** The installed folder's `add.tree_digest` is taken
-when the dialog is built and again under `_Commit`. Any difference refuses
-with "It changed while you were deciding; nothing was replaced."
+**Digest at both ends.** Each real folder's `add.tree_digest` is taken when
+the dialog is built and again at the swap. A difference, or a `SourceError`
+either time, refuses: "It changed while you were deciding, or holds links
+or special files; nothing was replaced."
 
-**The swap, one unit, under `_Commit`.** One replace-group id (the
-`HOLD_ID` format) names the unit. For each destination: rename the
-installed folder into `quarantine/held/<id>/entry` with a `hold.json` of
-`{"reason": "replaced", "group", "origin", "name", "at", "new_digest",
-"old_lock_record" (or null for an untracked folder), "old_origin"
-(slice C's origin, or null)}`; then rename the staged copy in. If any step
-fails, undo every step taken (new copies out, old copies back) and report
-"nothing was replaced". If an undo step itself fails, report the actual
-state of each destination and leave the slots. Slots emptied by a
-successful undo are removed.
+**Where things live.** Old copies go to a new store,
+`quarantine/replaced/<member-id>/entry`, with `<member-id>` in the
+`HOLD_ID` format, one per real folder, and a `replaced.json` beside each:
+`{"group", "members": [ids], "name", "origin", "at", "new_digest",
+"old_digest", "old_key", "new_key", "old_lock_record" (or null),
+"old_origin" (slice C's, or null)}`. The group id is the first member's
+id. The watcher's `held/` store, `watcher.held()`, `session_line` and the
+watcher's review loop are not touched, so replaced copies never reach
+them, and an older SkillCanary ignores the new folder. The new copy is
+staged inside quarantine (same volume as the skills folders; an `EXDEV`
+from rename refuses before anything moves).
 
-**After every swap succeeded, and only then:** ledger `replaced` (group,
-id, name, origin path, old digest) for each destination; `approved` for
-the new copy, carrying the new source's origin (slice C); the lock record
-(the old record's key when there was one, else `choose_key`).
+**The swap.** Under `add._Commit`, then `guestlist._Lock`, held across the
+swap and its ledger writes, in this order:
+1. Append `approved` for the new copy (with its slice C origin), as `add`
+   and `install` already approve before files appear, so the watcher never
+   holds the new copy.
+2. For each real folder: rename it into its `replaced/<member-id>/entry`
+   and write `replaced.json`; rename the staged copy into place.
+3. If any step in 2 fails: undo every step taken (new copies out, old
+   copies back), remove emptied slots, and append `approved` for the old
+   digest with `old_origin`, so the restored old copy is the approved one
+   again. Report "nothing was replaced". If an undo step itself fails,
+   report the actual state of each destination and leave its slot.
+4. On success: append `replaced` (group, member, name, origin, old digest)
+   per member, then write the lock record under `new_key` (the old
+   record's key when there was one, else `choose_key`) and remove
+   `old_key` when it differs.
 
-**Holds.** `watcher.held()` returns each hold's `reason` and `group`.
-`guestlist._state` ignores `replaced` for status. `session_line` does not
-count replaced holds. The watcher's `_review_loop` and `Watcher.review`
-skip and refuse a replaced hold. `canary list` shows replaced holds with
-their group id, marked "replaced".
+**Listing.** A new `guestlist.replaced(support, roots)` reads the store
+like `watcher.held()` does (ids by `HOLD_ID`, origins only in user roots).
+`canary list` adds `replaced: [{group, name, origins, at}]` to
+`canary.list/1` (an additive field) and a text section "Set aside by an
+update", one line per group with its id.
 
-**Restore.** `canary restore <id>` with a replaced hold's id or group id
-goes to a new `restore_replaced` path. It checks the held copy again and
-asks: "Put back the earlier <name> you replaced on <date>? The current
-copy is set aside the same way, so you can switch back." It proceeds only
-when every destination holds the copy that replaced it (`tree_digest`
-equals the hold's `new_digest`). A destination that is now empty answers
-"The folder it came from is empty now; run canary add or canary install
-again to reinstall." Anything else is `STILL_TAKEN`. On yes, the group
-swaps back as one unit with the same undo rules; the current copy becomes
-a new replaced group. Then: `replaced` for the current copy, `restored`
-for the old hold, `approved` (how "restore", carrying `old_origin`) for
-the old copy, and the lock: `old_lock_record` written back, or the new
-record removed when it was null. Nothing is deleted; `canary doctor
---prune` does not touch holds.
+**Restore.** `canary restore <id>` looks in `replaced/` first (a member or
+group id selects the whole group). It shows the same verdict dialog the
+watcher shows for a held skill, checking the old copy again, with one line
+first: "Put back the earlier <name> you replaced on <date>? The current
+copy is set aside the same way, so you can switch back." The group is all
+or nothing:
+- every member's destination must hold the copy that replaced it
+  (`tree_digest` equals `new_digest`);
+- if any destination is empty: "The folder it came from is empty now; run
+  canary add or canary install again to reinstall." Nothing moves;
+- anything else at any destination: `STILL_TAKEN`. Nothing moves.
+On yes, the swap runs the same way with old and new exchanged: `approved`
+(how "restore", `old_origin`) first, then the moves (the current copy
+becomes a new replaced group), then `replaced` and `restored` events, and
+the lock: `old_lock_record` written back under `old_key`, or the record
+under `new_key` removed when `old_lock_record` is null. Nothing is
+deleted; `canary doctor --prune` does not touch the store.
 
 **Tests (red first).**
 1. Without the flag: the new sentence, for a recorded skill and an
    untracked folder.
-2. With the flag and a yes: the new files are in place; the old copy is a
-   replaced hold with a correct `hold.json`; the ledger and lock are
-   updated; `installed_from` shows the new source.
+2. With the flag and a yes: new files in place; the old copy in
+   `replaced/` with a correct `replaced.json`; ledger and lock updated;
+   `installed_from` shows the new source.
 3. A no leaves files, ledger and lock untouched.
-4. The installed copy changing between dialog and swap refuses.
-5. A different-name record, a project destination, two skill names and a
-   plugin command each refuse.
-6. A second destination's rename failing leaves both destinations on the
-   old copy, writes no `approved`, and removes the emptied slots.
-7. The watcher and `session_line` ignore a replaced hold.
-8. The dialog counts are right for one file added, one removed and one
-   changed.
-9. Restore swaps the group back, restores the lock record (and removes it
-   for an untracked original), carries the old origin, and turns the
-   current copy into a new replaced group.
-10. Restore with a destination missing gives the empty-folder sentence.
-11. A listed link destination moves with the unit; an unlisted symlink
-    refuses.
+4. The installed copy changing between dialog and swap refuses, and so
+   does a link appearing inside it.
+5. Each refusal: two skill names, a project destination, a different-name
+   record, an unrelated symlink, a plugin command.
+6. A second member's rename failing leaves both destinations on the old
+   copy; the last `approved` for that name is the old digest; no slots
+   remain.
+7. The watcher and `session_line` never report a replaced copy, and
+   `watcher.held()` does not list it.
+8. Dialog counts are right for one file added, one removed, one changed.
+9. Restore swaps the group back, rewrites the old lock record (or removes
+   the new record for an untracked original), carries the old origin, and
+   leaves the current copy as a new replaced group.
+10. Restore with a destination empty gives the empty-folder sentence and
+    moves nothing.
+11. An `npx skills`-style layout (real folder in `~/.agents/skills`, a
+    symlink to it in `~/.claude/skills`) replaces the real folder and
+    leaves the symlink untouched and resolving to the new copy.
 
 ## Order and routing
 
-A and B (worker-t1, Haiku, medium) run in parallel; C (worker-t2, Sonnet,
-medium) after them; D (worker-t2 on Opus 5.5, medium, because it is
-fail-closed install code) starts from `main` after B and C have merged,
-since it edits the same install paths. Process per slice: red-first tests,
-build, Sol pre-merge review, fold, full gate once, done-when audit
-(milestone-auditor, Fable 5.1, high, using the done-when-audit skill's
-prompt), merge. `docs/architecture.md` is edited before the code in slices
-that change an interface it documents (B's JSON field, C's list fields, D's
-flag, holds and restore).
+A and B were built in parallel and merged into the program branch one
+after the other; C branched after both. D branches from the program
+branch after A, B and C are all merged, on an Opus worker, because it is
+fail-closed install code. Each slice: red-first tests, build, Sol
+pre-merge review, fold, full gate on the final tree, done-when audit
+(milestone-auditor, Fable 5.1, high; if it is unavailable, an Opus
+read-only reviewer with the same prompt), merge. `docs/architecture.md`
+is edited before the code in slices that change an interface it documents.
+Slice A's benchmark bullet is a regression guard; recall for its two rules
+rests on the must-flag unit tests, since no malicious sample names a
+keychain or skills path.
 
 ## Done when (per slice)
 
@@ -465,3 +493,17 @@ scrub above:
   yields `{"exit": 1, "codes": ["E404"]}` and no skill text anywhere in the
   JSON or `--text`; output with no known code yields `codes: []`; each
   site carries the field.
+
+## Fourth refutation (2026-10-16): A to C proceed, D reworked
+
+`~/.cache/reviews/20261016-184152-refute-program-2026-10-16-skill-updates/verdict.md`.
+Folded into the Slice D and Order sections above: per-member ids (2);
+links are left in place, not moved (3); staging in quarantine and both
+locks held, approval first with a compensating approval on undo (4);
+`SourceError` refuses with a named sentence (5); `replaced.json` keys
+(6); refusals after names and destinations are known, nothing recorded
+(7); a separate `replaced/` store so `held()`, `session_line` and the
+watcher are untouched (8, 13); sites found by name (9); restore dialog,
+all-or-nothing group rule and empty-destination sentence (10); superseded
+A and B text labelled history (11); bench bullet as regression guard and
+an auditor fallback (12).
