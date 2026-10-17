@@ -1,0 +1,75 @@
+commit c475e27fbf6acd794180f55bdd9302feec074113 (tests from HEAD; canary/ from 6b17c28, replace.py absent)
+Python 3.10.3
+test_33_an_entry_changed_after_its_check_is_not_put_back (tests.test_replace.RestoringAReplacedGroup)
+Automated security review (TOCTOU). Seam: the person's answer, which ... ERROR
+test_34_a_saved_link_whose_alias_was_repointed_is_not_put_back (tests.test_replace.RestoringAReplacedGroup)
+Sol review, finding 1. No seam: the link reaches the folder through an ... ERROR
+test_35_an_unchanged_clone_with_git_is_restored (tests.test_replace.RestoringAReplacedGroup)
+Sol review, finding 2. No seam: an untracked clone with a .git folder, ... ERROR
+test_36_a_restore_that_died_after_its_first_folder_is_finished (tests.test_replace.RestoringAReplacedGroup)
+Sol review, finding 3. Seam: patch.object(replace, "_rename") raising ... ERROR
+test_37_a_link_left_after_its_folder_returned_is_recovered (tests.test_replace.RestoringAReplacedGroup)
+Sol review, finding 4. Seam: patch.object(replace, "_rename") raising ... ERROR
+
+======================================================================
+ERROR: test_33_an_entry_changed_after_its_check_is_not_put_back (tests.test_replace.RestoringAReplacedGroup)
+Automated security review (TOCTOU). Seam: the person's answer, which
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary/250bf95e-1d20-422f-9ea3-69496bf4aec0/scratchpad/base-33-37/tests/test_replace.py", line 888, in test_33_an_entry_changed_after_its_check_is_not_put_back
+    g1 = h.replaced_group()
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary/250bf95e-1d20-422f-9ea3-69496bf4aec0/scratchpad/base-33-37/tests/test_replace.py", line 132, in replaced_group
+    out, _ = self.run(V2)
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary/250bf95e-1d20-422f-9ea3-69496bf4aec0/scratchpad/base-33-37/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_34_a_saved_link_whose_alias_was_repointed_is_not_put_back (tests.test_replace.RestoringAReplacedGroup)
+Sol review, finding 1. No seam: the link reaches the folder through an
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary/250bf95e-1d20-422f-9ea3-69496bf4aec0/scratchpad/base-33-37/tests/test_replace.py", line 915, in test_34_a_saved_link_whose_alias_was_repointed_is_not_put_back
+    out, _ = h.run(V2)
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary/250bf95e-1d20-422f-9ea3-69496bf4aec0/scratchpad/base-33-37/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_35_an_unchanged_clone_with_git_is_restored (tests.test_replace.RestoringAReplacedGroup)
+Sol review, finding 2. No seam: an untracked clone with a .git folder,
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary/250bf95e-1d20-422f-9ea3-69496bf4aec0/scratchpad/base-33-37/tests/test_replace.py", line 940, in test_35_an_unchanged_clone_with_git_is_restored
+    out, _ = h.run(V2)
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary/250bf95e-1d20-422f-9ea3-69496bf4aec0/scratchpad/base-33-37/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_36_a_restore_that_died_after_its_first_folder_is_finished (tests.test_replace.RestoringAReplacedGroup)
+Sol review, finding 3. Seam: patch.object(replace, "_rename") raising
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary/250bf95e-1d20-422f-9ea3-69496bf4aec0/scratchpad/base-33-37/tests/test_replace.py", line 956, in test_36_a_restore_that_died_after_its_first_folder_is_finished
+    h.run(V2)
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary/250bf95e-1d20-422f-9ea3-69496bf4aec0/scratchpad/base-33-37/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_37_a_link_left_after_its_folder_returned_is_recovered (tests.test_replace.RestoringAReplacedGroup)
+Sol review, finding 4. Seam: patch.object(replace, "_rename") raising
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary/250bf95e-1d20-422f-9ea3-69496bf4aec0/scratchpad/base-33-37/tests/test_replace.py", line 985, in test_37_a_link_left_after_its_folder_returned_is_recovered
+    h.run(V2)
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary/250bf95e-1d20-422f-9ea3-69496bf4aec0/scratchpad/base-33-37/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.281s
+
+FAILED (errors=5)
+exit=1

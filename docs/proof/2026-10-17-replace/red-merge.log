@@ -1,0 +1,20 @@
+commit c475e27fbf6acd794180f55bdd9302feec074113
+Python 3.10.3
+test_the_codex_plugin_skill_is_the_shared_skill_plus_its_coverage_note (tests.test_setup.SetupTeachesAgentsAboutSkillCanary)
+After setup a Codex session holds two skills named canary: the ... FAIL
+
+======================================================================
+FAIL: test_the_codex_plugin_skill_is_the_shared_skill_plus_its_coverage_note (tests.test_setup.SetupTeachesAgentsAboutSkillCanary)
+After setup a Codex session holds two skills named canary: the
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/replace-merge/tests/test_setup.py", line 294, in test_the_codex_plugin_skill_is_the_shared_skill_plus_its_coverage_note
+    self.assertEqual(fh.read(), frontdoor.SKILL_TEXT + codex_tail)
+AssertionError: '---\[1969 chars].\n\nDo not open, read, summarize or paste the[2372 chars]s.\n' != '---\[1969 chars].\n\nWhen they want to update a skill that is [2539 chars]s.\n'
+Diff is 4652 characters long. Set self.maxDiff to None to see it.
+
+----------------------------------------------------------------------
+Ran 1 test in 0.001s
+
+FAILED (failures=1)
+exit=1
