@@ -229,7 +229,8 @@ def _state(events):
         elif kind == "approved":
             skills[path] = {"status": CHECKED, "digest": e.get("digest"),
                             "approved": e.get("digest"), "name": e.get("name"), "since": e.get("at"),
-                            "override": e.get("override") is True}
+                            "override": e.get("override") is True,
+                            **({"origin": e["origin"]} if isinstance(e.get("origin"), dict) else {})}
         elif kind == "arrived":
             skills[path] = {"status": UNCHECKED, "digest": e.get("digest"), "approved": None,
                             "name": e.get("name"), "since": e.get("at")}
@@ -310,7 +311,9 @@ def scan(home=None, support=None, cwd=None, first_look=False):
             skills.append({"name": name, "names": names, "path": path,
                            "status": s.get("status", UNCHECKED),
                            "changed_since_approval": changed, "since": s.get("since"),
-                           "override": s.get("status") == CHECKED and bool(s.get("override"))})
+                           "override": s.get("status") == CHECKED and bool(s.get("override")),
+                           **({"installed_from": _listed_origin(s["origin"])}
+                              if s.get("status") == CHECKED and s.get("origin") else {})})
     from canary import watcher
     held = [{"id": h["id"], "name": h["name"], "origin": h["origin"], "since": h["at"],
              "restore": f"canary restore {h['id']}"}
@@ -322,13 +325,15 @@ def scan(home=None, support=None, cwd=None, first_look=False):
 
 
 def record_install(home, folders, name, verdict, support=None, source=None, how="canary add",
-                   override=False):
+                   override=False, origin=None):
     """Record the check and the approval of `folders`; `override` marks an
     approval the person gave despite an unsafe verdict. With `source`, the
     checked copy they are about to be made from: SkillCanary records the
     approval before the files appear, so the watcher never holds its own
     installs. A failed install leaves an approval for a path that is not
-    there, which the next scan records as removed."""
+    there, which the next scan records as removed. `origin` says where the
+    skill came from (kind github, installer, local or watcher) and is stored
+    on each approval."""
     support = _support(support) if support else os.path.join(home, SUPPORT[2:])
     at = _now()
     fixed = digest(source) if source else None
@@ -336,7 +341,8 @@ def record_install(home, folders, name, verdict, support=None, source=None, how=
         events = [{"at": at, "event": "checked", "name": name, "verdict": verdict}]
         events += [{"at": at, "event": "approved", "how": how, "name": name,
                     "skill": os.path.realpath(f), "digest": fixed or digest(os.path.realpath(f)),
-                    **({"override": True} if override else {})}
+                    **({"override": True} if override else {}),
+                    **({"origin": origin} if origin else {})}
                    for f in folders]
         _append(support, events)
 
@@ -397,6 +403,25 @@ def session_line(report):
             "<folder> marks a skill as yours.")
 
 
+def _listed_origin(origin):
+    """The origin as `canary list --json` shows it. An installer's command can
+    carry a token in its source argument, so only its kind is listed."""
+    if isinstance(origin, dict) and origin.get("kind") == "installer":
+        return {"kind": "installer"}
+    return origin
+
+
+def _came_from(origin):
+    """The words for where a checked skill came from, or None."""
+    if not isinstance(origin, dict):
+        return None
+    kind = origin.get("kind")
+    if kind == "github" and origin.get("owner") and origin.get("repo"):
+        commit = str(origin.get("commit") or "")[:7]
+        return f"{origin['owner']}/{origin['repo']}" + (f"@{commit}" if commit else "")
+    return {"installer": "installer", "local": "local folder", "watcher": "restored"}.get(kind)
+
+
 def render_text(report):
     lines = []
     if report["skills"]:
@@ -404,7 +429,9 @@ def render_text(report):
         for s in report["skills"]:
             status = ("changed since approval" if s["changed_since_approval"]
                       else "installed anyway" if s.get("override") else s["status"])
-            lines.append(f"{s['name']:<{width}}  {status:<22}  {s['path']}")
+            came = _came_from(s.get("installed_from"))
+            lines.append(f"{s['name']:<{width}}  {status:<22}  {s['path']}"
+                         + (f"  from {came}" if came else ""))
     else:
         lines.append("No skills found.")
     if report.get("held"):

@@ -1,0 +1,48 @@
+commit 33bf03a28efc5aa2eacab9dd3cfcaa222a662431 (base source plus the new tests, uncommitted)
+Python 3.10.3
+.EEEEE
+======================================================================
+ERROR: test_a_local_folder_renders_as_local_folder (tests.test_guestlist.WhereASkillCameFrom)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-aaa944baea6b76cf9/tests/test_guestlist.py", line 294, in test_a_local_folder_renders_as_local_folder
+    self.assertEqual(mac.status(report, "mine2")["installed_from"], {"kind": "local"})
+KeyError: 'installed_from'
+
+======================================================================
+ERROR: test_add_from_github_lists_owner_repo_and_commit (tests.test_guestlist.WhereASkillCameFrom)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-aaa944baea6b76cf9/tests/test_guestlist.py", line 278, in test_add_from_github_lists_owner_repo_and_commit
+    self.assertEqual(approved["origin"], {"kind": "github", "owner": "someone",
+KeyError: 'origin'
+
+======================================================================
+ERROR: test_origin_survives_a_changed_event (tests.test_guestlist.WhereASkillCameFrom)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-aaa944baea6b76cf9/tests/test_guestlist.py", line 307, in test_origin_survives_a_changed_event
+    self.assertEqual(skill["installed_from"]["commit"], SHA)
+KeyError: 'installed_from'
+
+======================================================================
+ERROR: test_the_list_shows_the_install_came_from_the_installer (tests.test_install.SkillsComeFromStaging)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-aaa944baea6b76cf9/tests/test_install.py", line 215, in test_the_list_shows_the_install_came_from_the_installer
+    self.assertEqual(approved["origin"], {"kind": "installer", "command": ADD})
+KeyError: 'origin'
+
+======================================================================
+ERROR: test_a_restored_skill_lists_as_restored (tests.test_watcher.ThePersonDecides)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-aaa944baea6b76cf9/tests/test_watcher.py", line 205, in test_a_restored_skill_lists_as_restored
+    self.assertEqual(item["installed_from"], {"kind": "watcher"})
+KeyError: 'installed_from'
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.581s
+
+FAILED (errors=5)
+exit=1

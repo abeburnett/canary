@@ -1,0 +1,41 @@
+commit 1bcfcb50cfa4555d3f22c83a20b38f1622d560d5
+interpreter python3: Python 3.10.3
+.....................F..............................................F.F...............................................................
+======================================================================
+FAIL: test_a_doc_comment_on_a_continuation_line_does_not_downgrade_a_key_read (tests.test_scan.KeychainAndSkillsFolderPatternsStayOnTheirLine)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a5767720b2ee22059/tests/test_scan.py", line 583, in test_a_doc_comment_on_a_continuation_line_does_not_downgrade_a_key_read
+    self.assertIn("credential-access", {f["check_id"] for f in result["findings"]
+AssertionError: 'credential-access' not found in set()
+
+======================================================================
+FAIL: test_a_successful_run_does_not_read_its_log_back (tests.test_install.FailedRunScansItsLogInChunks)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a5767720b2ee22059/tests/test_install.py", line 767, in test_a_successful_run_does_not_read_its_log_back
+    self.assertEqual(opened, [])
+AssertionError: Lists differ: ['/private/var/folders/c1/fh8lgj4n2q939sj0[131 chars]log'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'/private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-install-_hvsg56_/home/Library/Application Support/Canary/quarantine/logs/install-20261017T005718Z-559ab9ed.log'
+
++ []
+- ['/private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-install-_hvsg56_/home/Library/Application '
+-  'Support/Canary/quarantine/logs/install-20261017T005718Z-559ab9ed.log']
+
+======================================================================
+FAIL: test_a_token_in_the_installer_source_never_reaches_the_list (tests.test_install.InstallerOriginKeepsNoCommand)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a5767720b2ee22059/tests/test_install.py", line 780, in test_a_token_in_the_installer_source_never_reaches_the_list
+    self.assertNotIn("TOKEN", json.dumps(report))
+AssertionError: 'TOKEN' unexpectedly found in '{"schema": "canary.list/1", "skills": [{"name": "helper", "names": ["helper"], "path": "/private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-install-0ah7sqri/home/.agents/skills/helper", "status": "checked", "changed_since_approval": false, "since": "2026-10-17T00:57:18Z", "override": false, "installed_from": {"command": ["npx", "skills", "add", "https://user:TOKEN@example.invalid/repo.git", "-g", "-y"], "kind": "installer"}}], "unchecked": [], "changed": [], "held": []}'
+
+----------------------------------------------------------------------
+Ran 134 tests in 25.694s
+
+FAILED (failures=3)
+duration=27s
+exit=1

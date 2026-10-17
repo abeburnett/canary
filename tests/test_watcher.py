@@ -195,6 +195,16 @@ class ThePersonDecides(unittest.TestCase):
                                          backend=model(), model="fake"), (True, None))
         self.assertTrue(os.path.isfile(os.path.join(folder, "SKILL.md")))
 
+    def test_a_restored_skill_lists_as_restored(self):
+        mac = Mac()
+        skill(mac.codex, "dropped-in")
+        [held_id] = mac.settle()
+        self.assertEqual(mac.w.review(held_id), (True, None))
+        report = guestlist.scan(mac.home, support=mac.support)
+        [item] = [s for s in report["skills"] if s["name"] == "dropped-in"]
+        self.assertEqual(item["installed_from"], {"kind": "watcher"})
+        self.assertRegex(guestlist.render_text(report), r"dropped-in .*restored")
+
     def test_restore_still_needs_the_person(self):
         mac = Mac(answer=False)
         folder = skill(mac.codex, "dropped-in")

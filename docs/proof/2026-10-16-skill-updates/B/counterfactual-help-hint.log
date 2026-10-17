@@ -1,0 +1,17 @@
+commit 76594eb2a10dfed1d6602346de4e5d427b6ed20c
+counterfactual: gate.py decide, unsupported-installer branch: REDIRECT + HELP_HINT line replaced by plain REDIRECT
+Python 3.10.3
+.....F.......
+======================================================================
+FAIL: test_the_hint_is_for_the_piped_help_form_only (tests.test_gate.TheHelpHintIsForThePipedHelpForm)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-ab7d599c1d5550ce3/tests/test_gate.py", line 120, in test_the_hint_is_for_the_piped_help_form_only
+    self.assertIn(self.HINT, piped)
+AssertionError: "To read an installer's help, run it on its own, without pipes or redirects." not found in 'This installs skills or plugins without SkillCanary checking them first. Run the installer as a command of its own through `canary install -- <command>` (for example `canary install -- npx skills add <owner/repo>`), or use `canary add <link>`; both check what it adds and ask the person. To write a file that only mentions an installer, use your file-editing tool (Write or Edit in Claude Code, apply_patch in Codex), not the shell.'
+
+----------------------------------------------------------------------
+Ran 13 tests in 2.970s
+
+FAILED (failures=1)
+exit=1

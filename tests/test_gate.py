@@ -105,6 +105,25 @@ class InstallsGoThroughTheDoor(unittest.TestCase):
         self.assertTrue(gate.REDIRECT.endswith(" " + sentence))
 
 
+class TheHelpHintIsForThePipedHelpForm(unittest.TestCase):
+    """Program 2026-10-16, slice B: a piped help request is denied with a hint
+    to run the installer on its own; the plain form stays allowed."""
+
+    HINT = "To read an installer's help, run it on its own, without pipes or redirects."
+
+    def decide(self, command):
+        return gate.decide(gate.ToolCall("Bash", command, [], [], "/work"), "/h", [])
+
+    def test_the_hint_is_for_the_piped_help_form_only(self):
+        piped = self.decide("npx skills add --help | head")
+        self.assertIsNotNone(piped)
+        self.assertIn(self.HINT, piped)
+        self.assertIsNone(self.decide("npx skills add --help"))
+        unpiped = self.decide("npx skills add someone/repo --metadata x")
+        self.assertIsNotNone(unpiped)
+        self.assertNotIn(self.HINT, unpiped)
+
+
 class TheSkillsOwnTextIsForThePerson(unittest.TestCase):
     """Program 2026-10-06: the hook denies `canary explain` and `--excerpts` by
     name, before the allowance for `canary` commands."""

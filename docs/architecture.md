@@ -208,7 +208,10 @@ Decision rules (`canary/gate.py`, `decide`), in order:
    denied; the Write tool writes such a file, and `git commit -F` takes such
    a message. A single, plain command (no `;`, `&`, `|`, `$`, quotes of
    commands, brackets or line breaks) asking only for help or a listing
-   (`-h`, `--help`, `-l`, `--list`) is allowed. Only the shell tool's command
+   (`-h`, `--help`, `-l`, `--list`) is allowed. The same help request with a
+   pipe, redirect or other shell syntax is still denied, and its message adds
+   "To read an installer's help, run it on its own, without pipes or
+   redirects." Only the shell tool's command
    is read; words in other tools' input (a message, a question) are not an
    install. A command assembled from pieces (`npx $X add`) and a program
    that starts an installer itself are out of the hook's reach; the watcher
@@ -785,6 +788,27 @@ Result: `{"schema": "canary.install/1", "outcome": "installed" | "declined" |
 install-flow steps, in order; `recommendation` is the strictest of the
 skills'), with `canary add`'s exit codes (`done` is 0).
 
+**Installer error on failure** (program 2026-10-16, slice B, final design:
+codes, not text). A failed run's result has
+`"installer_error": {"exit": <code>, "codes": [...]}`. The installer's own
+text never reaches the agent. `codes` is the sorted, de-duplicated set of
+tokens from a fixed vocabulary found in that run's output: `ENOTFOUND`,
+`ECONNREFUSED`, `ECONNRESET`, `ETIMEDOUT`, `EACCES`, `EPERM`, `ENOENT`, `E401`,
+`E403`, `E404`, `E429`, `E500`, `HTTP_4XX`, `HTTP_5XX`, `UNKNOWN_OPTION`,
+`NOT_FOUND`, `PERMISSION_DENIED`, `RATE_LIMITED`, `AUTH_REQUIRED`, `GIT_FAILED`.
+Each code has one fixed detector, run on that run's own output (the log slice
+after the run's header line). `exit` is null when the installer could not
+start or ran out of time. Every failure site sets it: the marketplace add,
+the skills run (failed, or no skills added), the plugin's marketplace stage,
+its staging install, and its real install. The reason still names the log
+path for the person. `render_text` prints `Installer error: exit <n>; <codes,
+or 'no known error code'>` and then one fixed hint sentence per code. The log
+stays complete and quarantined.
+
+The `installer_error` values are untrusted installer output reduced to fixed
+tokens; the detectors narrow what gets through but do not guarantee that
+nothing else does.
+
 Limits: the installer runs as the person; staging changes where it writes
 by default, not where it can write. A write into a skills folder during the
 staged run stops the install; a write anywhere else is outside SkillCanary's
@@ -798,8 +822,12 @@ every later change or removal (`canary/guestlist.py`). The record is an
 append-only ledger, `ledger.jsonl` in `~/Library/Application Support/Canary`,
 one JSON event per line, written under a file lock: `first_look`,
 `baseline`, `arrived` (with `how`), `checked`, `approved` (with `how: canary
-add`, and `override: true` when the person installed an unsafe skill anyway),
-`declined`, `refused` or `not_installed`, `changed`, `removed` and `trusted`. A damaged line is skipped. Each skill is keyed by its resolved
+add`, and `override: true` when the person installed an unsafe skill anyway;
+since 0.1.5 also `origin`, where the skill came from: `{"kind": "github",
+"owner", "repo", "commit"}` from `canary add` (the commit is the SHA GitHub
+resolved, not the link text), `{"kind": "installer", "command": [...]}` from
+`canary install`, `{"kind": "local"}` for a folder, `{"kind": "watcher"}` for
+a restore; plugin installs record none), `declined`, `refused` or `not_installed`, `changed`, `removed` and `trusted`. A damaged line is skipped. Each skill is keyed by its resolved
 path; a skill reached under several names is listed under each. Its
 fingerprint covers every file's bytes, path and program bit, without `.git`.
 Links inside a skill are recorded and followed (each folder once), so a
@@ -820,6 +848,10 @@ Every skill has one status:
   reported as **changed since approval**. One the person installed despite an
   unsafe verdict shows as **installed anyway** (its status stays `checked`;
   `canary list --json` adds `"override": true`) until it changes.
+  A checked skill also shows where it came from, `owner/repo@abc1234` (the
+  first seven characters of the commit), `installer`, `local folder` or
+  `restored`. The ledger keeps the origin through a later `changed` event.
+  A ledger written before 0.1.5 has none, and the text shows nothing.
 - **unchecked**: arrived any other way. Reported until the person trusts it
   or removes it.
 
@@ -834,7 +866,9 @@ repository's skills are what this report is for.
 
 - `canary list` prints each skill, its status and path; `--json` prints
   `{"schema": "canary.list/1", "skills": [{"name", "path", "status",
-  "changed_since_approval", "since", "override"}], "unchecked": [...], "changed": [...]}`.
+  "changed_since_approval", "since", "override", "installed_from"}], "unchecked": [...], "changed": [...]}`.
+  `installed_from` is the approved event's `origin` and is present only for
+  checked skills whose ledger has one.
   Listing scans first, so it also records what changed.
 - `canary trust <folder>` marks one skill, or every skill in a skills
   folder, as the person's.

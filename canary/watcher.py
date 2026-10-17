@@ -336,7 +336,8 @@ class Watcher:
             resolved = origin if not os.path.islink(entry) else _resolved(entry, origin)
             guestlist.record_install(self.home, [resolved], h["name"], verdict,
                                      support=self.support, source=snap, how="watcher",
-                                     override=(verdict == "UNSAFE"))
+                                     override=(verdict == "UNSAFE"),
+                                     origin={"kind": "watcher"})
             os.rename(entry, origin)
         except OSError:
             self.notify(f"SkillCanary could not put {h['name']} back. It stays held; "

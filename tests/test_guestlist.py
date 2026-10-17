@@ -14,9 +14,9 @@ import unittest
 
 from canary import add, guestlist
 try:
-    from test_add import FakeGitHub, URL, SKILL, Approver, model, tarball
+    from test_add import FakeGitHub, URL, SKILL, SHA, Approver, model, tarball
 except ImportError:  # run as tests.test_guestlist
-    from tests.test_add import FakeGitHub, URL, SKILL, Approver, model, tarball
+    from tests.test_add import FakeGitHub, URL, SKILL, SHA, Approver, model, tarball
 
 YES = lambda text, verdict: True  # the person agrees
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -257,6 +257,67 @@ class AnInstallAnywayIsRecordedAndShown(unittest.TestCase):
         mac.skill(mac.claude, "treg", body="Different.\n")
         report = mac.scan()
         self.assertRegex(guestlist.render_text(report), r"treg\s+changed since approval\s")
+
+
+class WhereASkillCameFrom(unittest.TestCase):
+    """Program 2026-10-16, slice C: the approval records where the skill
+    came from, and canary list shows it."""
+
+    def add_notes2(self, mac):
+        archive = tarball([("notes2/SKILL.md", tarfile.REGTYPE, SKILL.replace("notes", "notes2"))])
+        out = add.add(URL.replace("notes", "notes2"), home=mac.home, support_dir=mac.support,
+                      approve=Approver(True), fetch=FakeGitHub(archive), backend=model(),
+                      model="fake")
+        self.assertEqual(out["outcome"], "installed")
+
+    def test_add_from_github_lists_owner_repo_and_commit(self):
+        mac = Mac()
+        mac.scan(first_look=True)
+        self.add_notes2(mac)
+        approved = [e for e in mac.events() if e["event"] == "approved" and e["name"] == "notes2"][0]
+        self.assertEqual(approved["origin"], {"kind": "github", "owner": "someone",
+                                              "repo": "skills", "commit": SHA})
+        report = mac.scan()
+        self.assertEqual(mac.status(report, "notes2")["installed_from"], approved["origin"])
+        self.assertIn("someone/skills@" + SHA[:7], guestlist.render_text(report))
+        self.assertNotIn(SHA[:8], guestlist.render_text(report))
+        self.assertNotIn("installed_from", mac.status(report, "notes"))
+
+    def test_a_local_folder_renders_as_local_folder(self):
+        mac = Mac()
+        mac.scan(first_look=True)
+        src = mac.skill(os.path.join(mac.home, "elsewhere"), "mine2")
+        out = add.add(src, home=mac.home, support_dir=mac.support, approve=Approver(True),
+                      backend=model(), model="fake")
+        self.assertEqual(out["outcome"], "installed")
+        report = mac.scan()
+        self.assertEqual(mac.status(report, "mine2")["installed_from"], {"kind": "local"})
+        self.assertRegex(guestlist.render_text(report), r"mine2 .*local folder")
+
+    def test_origin_survives_a_changed_event(self):
+        mac = Mac()
+        mac.scan(first_look=True)
+        self.add_notes2(mac)
+        mac.scan()
+        mac.skill(mac.claude, "notes2", body="Different.\n")
+        report = mac.scan()
+        self.assertIn("changed", [e["event"] for e in mac.events()])
+        skill = mac.status(report, "notes2")
+        self.assertTrue(skill["changed_since_approval"])
+        self.assertEqual(skill["installed_from"]["commit"], SHA)
+        self.assertIn("someone/skills@" + SHA[:7], guestlist.render_text(report))
+
+    def test_a_ledger_from_before_0_1_5_lists_cleanly_with_nothing_shown(self):
+        mac = Mac()
+        mac.scan(first_look=True)
+        folder = mac.skill(mac.claude, "old")
+        guestlist.record_install(mac.home, [folder], "old", "LIKELY_SAFE", support=mac.support)
+        self.assertNotIn("origin", [e for e in mac.events() if e["event"] == "approved"][0])
+        report = mac.scan()
+        self.assertNotIn("installed_from", mac.status(report, "old"))
+        line = [l for l in guestlist.render_text(report).splitlines() if l.startswith("old")][0]
+        self.assertNotIn(" from ", line)
+        self.assertEqual(mac.run("list").returncode, 0)
 
 
 class TheSessionStartLine(unittest.TestCase):
