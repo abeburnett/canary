@@ -392,3 +392,32 @@ inside another skill (`skills/<name>/<file>`) stay flagged. Residual,
 written into checks.md: a skill that copies a whole folder over another
 skill is not caught by this pattern; the guest list reports the
 overwritten skill as changed since approval at the next scan or session.
+
+## Slice B, final design (2026-10-16): codes, not text
+
+Two more automated reviews found further gaps in the text scrub
+(normalisation of escape sequences in the corpus, short fragments beside
+an allowed error code). Each fix invites the next, because any free text
+an installer prints can carry package text. Slice B therefore returns no
+installer text to the agent at all, which supersedes the allowlist and
+scrub above:
+
+- `installer_error` (replacing `installer_output`): `{"exit": <code>,
+  "codes": [...]}`, where `codes` is the sorted, de-duplicated set of
+  tokens from a fixed vocabulary found in that run's output: `ENOTFOUND`,
+  `ECONNREFUSED`, `ECONNRESET`, `ETIMEDOUT`, `EACCES`, `EPERM`, `ENOENT`,
+  `E401`, `E403`, `E404`, `E429`, `E500`, `HTTP_4XX`, `HTTP_5XX`,
+  `UNKNOWN_OPTION`, `NOT_FOUND`, `PERMISSION_DENIED`, `RATE_LIMITED`,
+  `AUTH_REQUIRED`, `GIT_FAILED`. Each code has a fixed detector; the agent
+  sees only the code names, never the matched text.
+- `render_text` prints "Installer error: exit <n>; <codes or 'no known
+  error code'>" and one fixed hint per code (for example `ENOTFOUND`:
+  "The installer could not reach the network").
+- The log stays complete and quarantined; the reason still names its path
+  for the person.
+- No corpus, scrub, caps or `_landed` call are needed; the sites at 244,
+  323, 335, 527, 529 and 558 all get `installer_error`.
+- Tests: an installer printing a skill line plus `npm ERR! code E404`
+  yields `{"exit": 1, "codes": ["E404"]}` and no skill text anywhere in the
+  JSON or `--text`; output with no known code yields `codes: []`; each
+  site carries the field.
