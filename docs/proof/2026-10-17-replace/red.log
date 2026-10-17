@@ -1,0 +1,671 @@
+commit 6b17c287e17de059bd574195b79842edb6f66c84
+Python 3.10.3
+source: canary/ checked out from 6b17c28 (its canary/ and tests/ trees equal 1465c3b's); tests: tests/ at d838a623aed92f8cbc296dfdec784cada6da66f7 (the tests commit).
+Pins first (contract tests 27 and 24), then test 1's seven changed sentences, test 23's extended restore-line test, then every test in tests/test_replace.py.
+
+--- pin 27
+test_nothing_the_tool_says_points_to_a_command_it_does_not_have (tests.test_add.RecordsKnowWhereTheyAre) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.028s
+
+OK
+exit=0
+--- pin 24
+test_24_replaced_fields_and_events_change_nothing_older_code_reads (tests.test_replace.OlderDataIsReadAsBefore)
+A pin, green before the program. No seam. ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.019s
+
+OK
+exit=0
+--- test 1 (changed sentence pins)
+test_a_live_record_blocks_with_a_refusal_that_names_what_is_in_the_way (tests.test_add.RecordsKnowWhereTheyAre) ... FAIL
+test_a_folder_with_no_record_is_named_and_the_date_is_dropped_when_missing (tests.test_add.RecordsKnowWhereTheyAre) ... FAIL
+test_a_record_that_turns_up_during_the_dialog_is_refused_in_the_same_words (tests.test_add.RecordsKnowWhereTheyAre) ... FAIL
+test_a_live_record_blocks_with_a_refusal_that_names_what_is_in_the_way (tests.test_install.RecordsKnowWhereTheyAre) ... FAIL
+test_a_folder_with_no_record_is_named (tests.test_install.RecordsKnowWhereTheyAre) ... FAIL
+test_a_record_that_turns_up_during_the_dialog_is_refused_in_the_same_words (tests.test_install.RecordsKnowWhereTheyAre) ... FAIL
+
+======================================================================
+FAIL: test_a_live_record_blocks_with_a_refusal_that_names_what_is_in_the_way (tests.test_add.RecordsKnowWhereTheyAre)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_add.py", line 516, in test_a_live_record_blocks_with_a_refusal_that_names_what_is_in_the_way
+    self.assertIn("A skill named notes is already installed at ~/.claude/skills/notes and "
+AssertionError: 'A skill named notes is already installed at ~/.claude/skills/notes and ~/.agents/skills/notes (recorded 2026-10-05). Nothing was installed. To replace it, run this again with --replace.' not found in ['A skill named notes is already installed at ~/.claude/skills/notes and ~/.agents/skills/notes (recorded 2026-10-05). Nothing was installed. To replace it, remove those folders and run this again.']
+
+======================================================================
+FAIL: test_a_folder_with_no_record_is_named_and_the_date_is_dropped_when_missing (tests.test_add.RecordsKnowWhereTheyAre)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_add.py", line 526, in test_a_folder_with_no_record_is_named_and_the_date_is_dropped_when_missing
+    self.assertIn("~/.claude/skills/notes already exists. Nothing was installed. "
+AssertionError: '~/.claude/skills/notes already exists. Nothing was installed. To replace it, run this again with --replace.' not found in ['~/.claude/skills/notes already exists. Nothing was installed. To replace it, remove it and run this again.']
+
+======================================================================
+FAIL: test_a_record_that_turns_up_during_the_dialog_is_refused_in_the_same_words (tests.test_add.RecordsKnowWhereTheyAre)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_add.py", line 575, in test_a_record_that_turns_up_during_the_dialog_is_refused_in_the_same_words
+    self.assertIn("A skill named notes is already installed at ~/.claude/skills/notes "
+AssertionError: 'A skill named notes is already installed at ~/.claude/skills/notes (recorded 2026-10-06). Nothing was installed. To replace it, run this again with --replace.' not found in ['A skill named notes is already installed at ~/.claude/skills/notes (recorded 2026-10-06). Nothing was installed. To replace it, remove that folder and run this again.']
+
+======================================================================
+FAIL: test_a_live_record_blocks_with_a_refusal_that_names_what_is_in_the_way (tests.test_install.RecordsKnowWhereTheyAre)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_install.py", line 470, in test_a_live_record_blocks_with_a_refusal_that_names_what_is_in_the_way
+    self.assertIn(f"A skill named helper is already installed at ~/.agents/skills/helper "
+AssertionError: 'A skill named helper is already installed at ~/.agents/skills/helper and ~/.claude/skills/helper (recorded 2026-10-17). Nothing was installed. To replace it, run this again with --replace.' not found in ['A skill named helper is already installed at ~/.agents/skills/helper and ~/.claude/skills/helper (recorded 2026-10-17). Nothing was installed. To replace it, remove those folders and run this again.']
+
+======================================================================
+FAIL: test_a_folder_with_no_record_is_named (tests.test_install.RecordsKnowWhereTheyAre)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_install.py", line 488, in test_a_folder_with_no_record_is_named
+    self.assertIn("~/.agents/skills/helper already exists. Nothing was installed. To "
+AssertionError: '~/.agents/skills/helper already exists. Nothing was installed. To replace it, run this again with --replace.' not found in ['~/.agents/skills/helper already exists. Nothing was installed. To replace it, remove it and run this again.']
+
+======================================================================
+FAIL: test_a_record_that_turns_up_during_the_dialog_is_refused_in_the_same_words (tests.test_install.RecordsKnowWhereTheyAre)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_install.py", line 507, in test_a_record_that_turns_up_during_the_dialog_is_refused_in_the_same_words
+    self.assertIn("A skill named helper is already installed at ~/.agents/skills/other "
+AssertionError: 'A skill named helper is already installed at ~/.agents/skills/other (recorded 2026-10-06). Nothing was installed. To replace it, run this again with --replace.' not found in ['A skill named helper is already installed at ~/.agents/skills/other (recorded 2026-10-06). Nothing was installed. To replace it, remove that folder and run this again.']
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.606s
+
+FAILED (failures=6)
+exit=1
+--- test 23 (restore line, extended test in test_watcher)
+test_canary_restore_prints_the_reason_or_the_success_line (tests.test_watcher.ThePersonDecides) ... 
+======================================================================
+FAIL: test_canary_restore_prints_the_reason_or_the_success_line (tests.test_watcher.ThePersonDecides) (line='Put back where it was; the copy that was there is set aside as X.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_watcher.py", line 320, in test_canary_restore_prints_the_reason_or_the_success_line
+    self.assertEqual(out.getvalue(), line + "\n")
+AssertionError: 'Put back where it was.\n' != 'Put back where it was; the copy that was there is set aside as X.\n'
+- Put back where it was.
++ Put back where it was; the copy that was there is set aside as X.
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+FAILED (failures=1)
+exit=1
+--- tests 2 to 32 (tests/test_replace.py, every class but the pin)
+test_02_a_yes_replaces_both_copies_and_keeps_the_old_ones (tests.test_replace.AReplaceSetsTheOldCopyAside)
+No seam. ... ERROR
+test_03_a_folder_and_its_link_are_set_aside_and_restored_as_a_unit (tests.test_replace.AReplaceSetsTheOldCopyAside)
+HireReach: an untracked folder plus a relative link, as the skills ... ERROR
+test_25_with_nothing_there_it_is_a_fresh_install (tests.test_replace.AReplaceSetsTheOldCopyAside)
+No seam. ... ERROR
+test_26_an_old_copy_at_one_host_only_is_one_member (tests.test_replace.AReplaceSetsTheOldCopyAside)
+No seam. ... ERROR
+test_04_a_no_or_an_unsafe_refusal_leaves_everything (tests.test_replace.NothingMovesUntilThePersonSaysYes)
+No seam. ... test_05_the_dialog_says_what_it_replaces (tests.test_replace.NothingMovesUntilThePersonSaysYes)
+No seam. ... ERROR
+test_05_the_install_dialog_says_what_it_replaces (tests.test_replace.NothingMovesUntilThePersonSaysYes)
+No seam. ... ERROR
+test_06_a_folder_without_skill_md_or_a_plain_file (tests.test_replace.RefusalsBeforeTheDialog)
+No seam. ... ERROR
+test_06_a_link_to_a_folder_outside_the_run (tests.test_replace.RefusalsBeforeTheDialog)
+No seam. ... ERROR
+test_06_a_link_to_the_other_destination_while_it_is_empty (tests.test_replace.RefusalsBeforeTheDialog)
+A link-only group is refused. No seam. ... ERROR
+test_06_a_record_of_another_name (tests.test_replace.RefusalsBeforeTheDialog)
+No seam. ... ERROR
+test_06_a_subset_of_a_recorded_skill (tests.test_replace.RefusalsBeforeTheDialog)
+No seam. ... ERROR
+test_07_a_store_on_another_disk_refuses_a_replace_and_a_restore (tests.test_replace.TheStoreMustBeOnTheSameDisk)
+Seam: patch.object(replace, "_device"). ... ERROR
+test_08_a_change_while_the_person_decides_refuses (tests.test_replace.UnderTheCommitLock)
+Seam: the approver changes the destinations or the lock file. ... test_09_a_failed_rename_in_puts_the_old_copies_back (tests.test_replace.UnderTheCommitLock)
+Seam: patch.object(add.os, "rename") with a wrapper that raises once, ... ERROR
+test_09_an_untracked_old_copy_comes_back_as_arrived (tests.test_replace.UnderTheCommitLock)
+Seam: patch.object(add.os, "rename"), as above. ... ERROR
+test_10_an_undo_that_cannot_put_a_copy_back_keeps_it_for_restore (tests.test_replace.UnderTheCommitLock)
+Seams: test 9's, plus patch.object(replace, "_rename") raising on ... ERROR
+test_11_a_failed_lock_write_puts_the_old_copies_back (tests.test_replace.UnderTheCommitLock)
+Seam: patch.object(add.os, "replace", side_effect=OSError). ... ERROR
+test_12_a_death_after_the_set_aside_is_recovered_by_restore (tests.test_replace.UnderTheCommitLock)
+Seam: patch.object(add, "_install", side_effect=RuntimeError). ... ERROR
+test_13_the_ledger_lock_is_never_taken_twice (tests.test_replace.UnderTheCommitLock)
+Seam: wrappers on guestlist._Lock.__enter__ and __exit__ that count ... ERROR
+test_14_a_replace_is_not_held_and_not_counted (tests.test_replace.TheWatcherAndTheNotice)
+Seam: a wrapper on add._install that lets a watcher look while both ... ERROR
+test_15_an_npx_layout_is_replaced_as_a_unit (tests.test_replace.CanaryInstallReplace)
+No seam. ... ERROR
+test_16_what_install_replace_refuses (tests.test_replace.CanaryInstallReplace)
+No seam. ... ERROR
+test_17_a_yes_switches_back_and_sets_the_newer_copy_aside (tests.test_replace.RestoringAReplacedGroup)
+No seam; a variant keeps the old record under a hashed key. ... test_18_with_both_origins_empty_nothing_is_set_aside (tests.test_replace.RestoringAReplacedGroup)
+No seam. ... ERROR
+test_19_what_a_restore_refuses (tests.test_replace.RestoringAReplacedGroup)
+No seam. ... ERROR
+test_20_a_failed_move_back_returns_the_current_copies (tests.test_replace.RestoringAReplacedGroup)
+Seam: patch.object(replace, "_rename") raising on the second old ... test_21_an_unsafe_earlier_copy_needs_the_typed_name (tests.test_replace.RestoringAReplacedGroup)
+No seam. ... ERROR
+test_22_every_folder_member_is_checked_and_approved_with_its_own_digest (tests.test_replace.RestoringAReplacedGroup)
+Seam: patch.object(replace.classify, "check", wraps=...) counting calls. ... ERROR
+test_28_a_death_between_the_record_and_the_first_rename (tests.test_replace.RestoringAReplacedGroup)
+Seam: patch.object(replace, "_rename", side_effect=RuntimeError). ... ERROR
+test_29_no_key_under_the_lock_puts_the_files_back_and_writes_nothing (tests.test_replace.RestoringAReplacedGroup)
+Seam: patch.object(add, "choose_key", return_value=None). ... ERROR
+test_30_a_restore_that_died_after_its_set_aside_is_finished_by_another (tests.test_replace.RestoringAReplacedGroup)
+Seam: patch.object(replace, "_rename") raising RuntimeError on the ... test_31_a_failed_lock_write_after_the_move_says_the_record_is_stale (tests.test_replace.RestoringAReplacedGroup)
+Seam: patch.object(add, "_write_lock", side_effect=OSError). ... ERROR
+test_32_a_watcher_look_between_the_move_and_the_lock_holds_nothing (tests.test_replace.RestoringAReplacedGroup)
+Seam: patch.object(replace, "_rename") wrapping the real rename; a ... ERROR
+test_23_the_flag_reaches_add_and_install_and_nothing_else (tests.test_replace.TheCommandLine)
+Seams: patch.object(add, "add") and patch.object(install, "install"). ... FAIL
+
+======================================================================
+ERROR: test_02_a_yes_replaces_both_copies_and_keeps_the_old_ones (tests.test_replace.AReplaceSetsTheOldCopyAside)
+No seam.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 179, in test_02_a_yes_replaces_both_copies_and_keeps_the_old_ones
+    out, approve = h.run(V2)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_03_a_folder_and_its_link_are_set_aside_and_restored_as_a_unit (tests.test_replace.AReplaceSetsTheOldCopyAside)
+HireReach: an untracked folder plus a relative link, as the skills
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 226, in test_03_a_folder_and_its_link_are_set_aside_and_restored_as_a_unit
+    out, _ = h.run(V2)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_25_with_nothing_there_it_is_a_fresh_install (tests.test_replace.AReplaceSetsTheOldCopyAside)
+No seam.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 250, in test_25_with_nothing_there_it_is_a_fresh_install
+    out, _ = h.run(V2, approve=lambda summary: seen.append(add.dialog_text(summary)) or True)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_26_an_old_copy_at_one_host_only_is_one_member (tests.test_replace.AReplaceSetsTheOldCopyAside)
+No seam.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 262, in test_26_an_old_copy_at_one_host_only_is_one_member
+    out, _ = h.run(V2, approve=lambda summary: seen.append(add.dialog_text(summary)) or True)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_04_a_no_or_an_unsafe_refusal_leaves_everything (tests.test_replace.NothingMovesUntilThePersonSaysYes) (outcome='declined')
+No seam.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 281, in test_04_a_no_or_an_unsafe_refusal_leaves_everything
+    out, approve = h.run(V2, answer=answer, verdict=verdict)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_04_a_no_or_an_unsafe_refusal_leaves_everything (tests.test_replace.NothingMovesUntilThePersonSaysYes) (outcome='refused')
+No seam.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 281, in test_04_a_no_or_an_unsafe_refusal_leaves_everything
+    out, approve = h.run(V2, answer=answer, verdict=verdict)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_05_the_dialog_says_what_it_replaces (tests.test_replace.NothingMovesUntilThePersonSaysYes)
+No seam.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 296, in test_05_the_dialog_says_what_it_replaces
+    h.run(V2, approve=lambda summary: seen.append(add.dialog_text(summary)) or False)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_05_the_install_dialog_says_what_it_replaces (tests.test_replace.NothingMovesUntilThePersonSaysYes)
+No seam.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 316, in test_05_the_install_dialog_says_what_it_replaces
+    out = install_replace(mac, test_install.ADD, spec=test_install.ONE, answer=False)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 142, in install_replace
+    return install.install(argv, home=mac.home, cwd=mac.project, support_dir=mac.support,
+TypeError: install() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_06_a_folder_without_skill_md_or_a_plain_file (tests.test_replace.RefusalsBeforeTheDialog)
+No seam.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 391, in test_06_a_folder_without_skill_md_or_a_plain_file
+    self.refused(h, sentence, present=[h.claude])
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 336, in refused
+    out, approve = h.run(V2, hosts=hosts)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_06_a_link_to_a_folder_outside_the_run (tests.test_replace.RefusalsBeforeTheDialog)
+No seam.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 372, in test_06_a_link_to_a_folder_outside_the_run
+    self.refused(h, "~/.claude/skills/notes is a link to a folder this install would not "
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 336, in refused
+    out, approve = h.run(V2, hosts=hosts)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_06_a_link_to_the_other_destination_while_it_is_empty (tests.test_replace.RefusalsBeforeTheDialog)
+A link-only group is refused. No seam.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 381, in test_06_a_link_to_the_other_destination_while_it_is_empty
+    self.refused(h, "~/.claude/skills/notes is a link to a folder this install would not "
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 336, in refused
+    out, approve = h.run(V2, hosts=hosts)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_06_a_record_of_another_name (tests.test_replace.RefusalsBeforeTheDialog)
+No seam.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 362, in test_06_a_record_of_another_name
+    self.refused(h, "~/.claude/skills/notes is recorded as the skill other (recorded "
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 336, in refused
+    out, approve = h.run(V2, hosts=hosts)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_06_a_subset_of_a_recorded_skill (tests.test_replace.RefusalsBeforeTheDialog)
+No seam.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 350, in test_06_a_subset_of_a_recorded_skill
+    self.refused(h, "A skill named notes is installed at ~/.claude/skills/notes and "
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 336, in refused
+    out, approve = h.run(V2, hosts=hosts)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_07_a_store_on_another_disk_refuses_a_replace_and_a_restore (tests.test_replace.TheStoreMustBeOnTheSameDisk)
+Seam: patch.object(replace, "_device").
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 408, in test_07_a_store_on_another_disk_refuses_a_replace_and_a_restore
+    with unittest.mock.patch.object(R(), "_device", self.device(h)):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 49, in R
+    return canary.replace
+AttributeError: module 'canary' has no attribute 'replace'
+
+======================================================================
+ERROR: test_08_a_change_while_the_person_decides_refuses (tests.test_replace.UnderTheCommitLock) [second_copy]
+Seam: the approver changes the destinations or the lock file.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 449, in test_08_a_change_while_the_person_decides_refuses
+    out, _ = h.run(V2, approve=approve)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_08_a_change_while_the_person_decides_refuses (tests.test_replace.UnderTheCommitLock) [a_record]
+Seam: the approver changes the destinations or the lock file.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 449, in test_08_a_change_while_the_person_decides_refuses
+    out, _ = h.run(V2, approve=approve)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_09_a_failed_rename_in_puts_the_old_copies_back (tests.test_replace.UnderTheCommitLock)
+Seam: patch.object(add.os, "rename") with a wrapper that raises once,
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 467, in test_09_a_failed_rename_in_puts_the_old_copies_back
+    out, _ = h.run(V2)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_09_an_untracked_old_copy_comes_back_as_arrived (tests.test_replace.UnderTheCommitLock)
+Seam: patch.object(add.os, "rename"), as above.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 488, in test_09_an_untracked_old_copy_comes_back_as_arrived
+    out, _ = h.run(V2)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_10_an_undo_that_cannot_put_a_copy_back_keeps_it_for_restore (tests.test_replace.UnderTheCommitLock)
+Seams: test 9's, plus patch.object(replace, "_rename") raising on
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 501, in test_10_an_undo_that_cannot_put_a_copy_back_keeps_it_for_restore
+    real = R()._rename
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 49, in R
+    return canary.replace
+AttributeError: module 'canary' has no attribute 'replace'
+
+======================================================================
+ERROR: test_11_a_failed_lock_write_puts_the_old_copies_back (tests.test_replace.UnderTheCommitLock)
+Seam: patch.object(add.os, "replace", side_effect=OSError).
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 531, in test_11_a_failed_lock_write_puts_the_old_copies_back
+    out, _ = h.run(V2)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_12_a_death_after_the_set_aside_is_recovered_by_restore (tests.test_replace.UnderTheCommitLock)
+Seam: patch.object(add, "_install", side_effect=RuntimeError).
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 549, in test_12_a_death_after_the_set_aside_is_recovered_by_restore
+    h.run(V2)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_13_the_ledger_lock_is_never_taken_twice (tests.test_replace.UnderTheCommitLock)
+Seam: wrappers on guestlist._Lock.__enter__ and __exit__ that count
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 586, in test_13_the_ledger_lock_is_never_taken_twice
+    out, _ = h.run(V2)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_14_a_replace_is_not_held_and_not_counted (tests.test_replace.TheWatcherAndTheNotice)
+Seam: a wrapper on add._install that lets a watcher look while both
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 612, in test_14_a_replace_is_not_held_and_not_counted
+    out, _ = h.run(V2)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_15_an_npx_layout_is_replaced_as_a_unit (tests.test_replace.CanaryInstallReplace)
+No seam.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 639, in test_15_an_npx_layout_is_replaced_as_a_unit
+    out = install_replace(mac, test_install.ADD, spec=ONE_V2)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 142, in install_replace
+    return install.install(argv, home=mac.home, cwd=mac.project, support_dir=mac.support,
+TypeError: install() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_16_what_install_replace_refuses (tests.test_replace.CanaryInstallReplace)
+No seam.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 669, in test_16_what_install_replace_refuses
+    out = install_replace(mac, test_install.ADD, spec=two)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 142, in install_replace
+    return install.install(argv, home=mac.home, cwd=mac.project, support_dir=mac.support,
+TypeError: install() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_17_a_yes_switches_back_and_sets_the_newer_copy_aside (tests.test_replace.RestoringAReplacedGroup) (hashed=False)
+No seam; a variant keeps the old record under a hashed key.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 710, in test_17_a_yes_switches_back_and_sets_the_newer_copy_aside
+    h.run(V2)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_17_a_yes_switches_back_and_sets_the_newer_copy_aside (tests.test_replace.RestoringAReplacedGroup) (hashed=True)
+No seam; a variant keeps the old record under a hashed key.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 710, in test_17_a_yes_switches_back_and_sets_the_newer_copy_aside
+    h.run(V2)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_18_with_both_origins_empty_nothing_is_set_aside (tests.test_replace.RestoringAReplacedGroup)
+No seam.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 745, in test_18_with_both_origins_empty_nothing_is_set_aside
+    h.run(V2)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_19_what_a_restore_refuses (tests.test_replace.RestoringAReplacedGroup)
+No seam.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 757, in test_19_what_a_restore_refuses
+    g1 = h.replaced_group()
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 132, in replaced_group
+    out, _ = self.run(V2)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_20_a_failed_move_back_returns_the_current_copies (tests.test_replace.RestoringAReplacedGroup) (also_the_put_back=False)
+Seam: patch.object(replace, "_rename") raising on the second old
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 808, in test_20_a_failed_move_back_returns_the_current_copies
+    g1 = h.replaced_group()
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 132, in replaced_group
+    out, _ = self.run(V2)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_20_a_failed_move_back_returns_the_current_copies (tests.test_replace.RestoringAReplacedGroup) (also_the_put_back=True)
+Seam: patch.object(replace, "_rename") raising on the second old
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 808, in test_20_a_failed_move_back_returns_the_current_copies
+    g1 = h.replaced_group()
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 132, in replaced_group
+    out, _ = self.run(V2)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_21_an_unsafe_earlier_copy_needs_the_typed_name (tests.test_replace.RestoringAReplacedGroup)
+No seam.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 850, in test_21_an_unsafe_earlier_copy_needs_the_typed_name
+    g1 = h.replaced_group()
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 132, in replaced_group
+    out, _ = self.run(V2)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_22_every_folder_member_is_checked_and_approved_with_its_own_digest (tests.test_replace.RestoringAReplacedGroup)
+Seam: patch.object(replace.classify, "check", wraps=...) counting calls.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 870, in test_22_every_folder_member_is_checked_and_approved_with_its_own_digest
+    g1 = h.replaced_group()
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 132, in replaced_group
+    out, _ = self.run(V2)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_28_a_death_between_the_record_and_the_first_rename (tests.test_replace.RestoringAReplacedGroup)
+Seam: patch.object(replace, "_rename", side_effect=RuntimeError).
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 889, in test_28_a_death_between_the_record_and_the_first_rename
+    with unittest.mock.patch.object(R(), "_rename", side_effect=RuntimeError("killed")):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 49, in R
+    return canary.replace
+AttributeError: module 'canary' has no attribute 'replace'
+
+======================================================================
+ERROR: test_29_no_key_under_the_lock_puts_the_files_back_and_writes_nothing (tests.test_replace.RestoringAReplacedGroup)
+Seam: patch.object(add, "choose_key", return_value=None).
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 906, in test_29_no_key_under_the_lock_puts_the_files_back_and_writes_nothing
+    out, _ = h.run(V2)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_30_a_restore_that_died_after_its_set_aside_is_finished_by_another (tests.test_replace.RestoringAReplacedGroup) (recorded=True)
+Seam: patch.object(replace, "_rename") raising RuntimeError on the
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 924, in test_30_a_restore_that_died_after_its_set_aside_is_finished_by_another
+    h.run(V2)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_30_a_restore_that_died_after_its_set_aside_is_finished_by_another (tests.test_replace.RestoringAReplacedGroup) (recorded=False)
+Seam: patch.object(replace, "_rename") raising RuntimeError on the
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 924, in test_30_a_restore_that_died_after_its_set_aside_is_finished_by_another
+    h.run(V2)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_31_a_failed_lock_write_after_the_move_says_the_record_is_stale (tests.test_replace.RestoringAReplacedGroup)
+Seam: patch.object(add, "_write_lock", side_effect=OSError).
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 948, in test_31_a_failed_lock_write_after_the_move_says_the_record_is_stale
+    g1 = h.replaced_group()
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 132, in replaced_group
+    out, _ = self.run(V2)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+ERROR: test_32_a_watcher_look_between_the_move_and_the_lock_holds_nothing (tests.test_replace.RestoringAReplacedGroup)
+Seam: patch.object(replace, "_rename") wrapping the real rename; a
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 976, in test_32_a_watcher_look_between_the_move_and_the_lock_holds_nothing
+    g1 = h.replaced_group()
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 132, in replaced_group
+    out, _ = self.run(V2)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 80, in run
+    out = add.add(self.source(text), home=self.home, support_dir=self.support,
+TypeError: add() got an unexpected keyword argument 'replace'
+
+======================================================================
+FAIL: test_23_the_flag_reaches_add_and_install_and_nothing_else (tests.test_replace.TheCommandLine) (args=['x', '--replace'])
+Seams: patch.object(add, "add") and patch.object(install, "install").
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 1044, in test_23_the_flag_reaches_add_and_install_and_nothing_else
+    self.assertEqual(cli._add(args), 0)
+AssertionError: 2 != 0
+
+======================================================================
+FAIL: test_23_the_flag_reaches_add_and_install_and_nothing_else (tests.test_replace.TheCommandLine) (args=['x'])
+Seams: patch.object(add, "add") and patch.object(install, "install").
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 1045, in test_23_the_flag_reaches_add_and_install_and_nothing_else
+    self.assertIs(fake.call_args.kwargs.get("replace"), expected)
+AssertionError: None is not False
+
+======================================================================
+FAIL: test_23_the_flag_reaches_add_and_install_and_nothing_else (tests.test_replace.TheCommandLine) (args=['--replace', '--', 'npx', 'skills', 'add', 'x'])
+Seams: patch.object(add, "add") and patch.object(install, "install").
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 1053, in test_23_the_flag_reaches_add_and_install_and_nothing_else
+    self.assertEqual(cli._install(args), 0)
+AssertionError: 2 != 0
+
+======================================================================
+FAIL: test_23_the_flag_reaches_add_and_install_and_nothing_else (tests.test_replace.TheCommandLine) (args=['--', 'npx', 'skills', 'add', 'x'])
+Seams: patch.object(add, "add") and patch.object(install, "install").
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 1054, in test_23_the_flag_reaches_add_and_install_and_nothing_else
+    self.assertIs(fake.call_args.kwargs.get("replace"), expected)
+AssertionError: None is not False
+
+======================================================================
+FAIL: test_23_the_flag_reaches_add_and_install_and_nothing_else (tests.test_replace.TheCommandLine)
+Seams: patch.object(add, "add") and patch.object(install, "install").
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 1057, in test_23_the_flag_reaches_add_and_install_and_nothing_else
+    self.assertIn("canary add <github-link-or-folder> [--replace]", cli.USAGE)
+AssertionError: 'canary add <github-link-or-folder> [--replace]' not found in 'usage: canary scan <skill-file-or-directory> [--json | --text] [--excerpts] [--exclude <relative-path>]...\n       canary check <skill-file-or-directory> [--json | --text] [--excerpts] [--backend auto|claude|anthropic_api|openai_api|none] [--model <id>] [--timeout <seconds>]\n       canary explain <github-link-or-folder> [--backend <name>] [--model <id>] [--timeout <seconds>]\n       canary add <github-link-or-folder> [--host claude|codex]... [--json | --text] [--backend <name>] [--model <id>] [--timeout <seconds>]\n       canary install [--json | --text] [--backend <name>] [--model <id>] [--timeout <seconds>] -- <installer command>\n       canary bench [--json] [--layer 1|2] [--backend <name>] [--model <id>] [--corpus <folder>]\n       canary list [--json]\n       canary restore <held-id>\n       canary trust <skill-folder-or-skills-folder>\n       canary setup [--level scan|guard]\n       canary doctor [--json | --prune]\n       canary digest <folder>'
+
+----------------------------------------------------------------------
+Ran 35 tests in 0.431s
+
+FAILED (failures=5, errors=39)
+exit=1

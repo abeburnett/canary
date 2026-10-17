@@ -314,14 +314,17 @@ def scan(home=None, support=None, cwd=None, first_look=False):
                            "override": s.get("status") == CHECKED and bool(s.get("override")),
                            **({"installed_from": _listed_origin(s["origin"])}
                               if s.get("status") == CHECKED and s.get("origin") else {})})
-    from canary import watcher
+    from canary import replace, watcher
     held = [{"id": h["id"], "name": h["name"], "origin": h["origin"], "since": h["at"],
              "restore": f"canary restore {h['id']}"}
             for h in watcher.held(support, user_roots(home))]
     return {"schema": "canary.list/1", "skills": skills,
             "unchecked": [s for s in skills if s["status"] == UNCHECKED],
             "changed": [s for s in skills if s["changed_since_approval"]],
-            "held": held}
+            "held": held,
+            # What a replace set aside: the person's own decision, so the
+            # session-start notice does not count it (program 2026-10-17).
+            "replaced": replace.groups(support, user_roots(home))}
 
 
 def record_install(home, folders, name, verdict, support=None, source=None, how="canary add",
@@ -344,6 +347,13 @@ def record_install(home, folders, name, verdict, support=None, source=None, how=
                     **({"override": True} if override else {}),
                     **({"origin": origin} if origin else {})}
                    for f in folders]
+        _append(support, events)
+
+
+def record_events(support, events):
+    """Append `events` under the ledger lock. Raises OSError. Nothing calls
+    this, or record_install, while holding the lock (program 2026-10-17)."""
+    with _Lock(support):
         _append(support, events)
 
 
@@ -438,4 +448,8 @@ def render_text(report):
         lines += ["", "Held by SkillCanary (arrived without its check; nothing is deleted):"]
         lines += [f"  {h['name']}  from {h['origin']}  to restore: {h['restore']}"
                   for h in report["held"]]
+    if report.get("replaced"):
+        lines += ["", "Set aside by a replace (nothing is deleted):"]
+        lines += [f"  {g['name']}  replaced {g['at'][:10]}  {', '.join(g['paths'])}  "
+                  f"to restore: {g['restore']}" for g in report["replaced"]]
     return "\n".join(lines)

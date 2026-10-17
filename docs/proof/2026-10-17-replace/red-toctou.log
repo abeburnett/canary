@@ -1,0 +1,32 @@
+commit fe58454c3c62e78958eb06060227b71a82eab0ce
+Python 3.10.3
+source: canary/ at HEAD (the implementation before the TOCTOU fix); tests/test_replace.py with test 33 added, uncommitted.
+
+test_33_an_entry_changed_after_its_check_is_not_put_back (tests.test_replace.RestoringAReplacedGroup)
+Automated security review (TOCTOU). Seam: the person's answer, which ... FAIL
+
+======================================================================
+FAIL: test_33_an_entry_changed_after_its_check_is_not_put_back (tests.test_replace.RestoringAReplacedGroup)
+Automated security review (TOCTOU). Seam: the person's answer, which
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 897, in test_33_an_entry_changed_after_its_check_is_not_put_back
+    self.assertEqual(h.restore(g1, ask=swap_then_yes),
+AssertionError: Tuples differ: (True, 'Put back where it was; the copy th[52 chars]70.') != (False, 'Still set aside: it changed after[88 chars]is.')
+
+First differing element 0:
+True
+False
+
+- (True,
+-  'Put back where it was; the copy that was there is set aside as '
+-  '20261017T052909Z-88f1cb70.')
++ (False,
++  'Still set aside: it changed after its check; it stays set aside as '
++  '20261017T052909Z-2a25ecc0. canary list shows where it is.')
+
+----------------------------------------------------------------------
+Ran 1 test in 0.016s
+
+FAILED (failures=1)
+exit=1

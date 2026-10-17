@@ -537,8 +537,9 @@ scanned. Default hosts: those whose home folder exists (`~/.claude`,
 
 The installed name is the frontmatter `name` if it matches
 `^[a-z0-9][a-z0-9-]{0,63}$`, else the folder name if that matches, else the
-add is refused. An existing folder of that name is never overwritten: to
-replace an installed skill, the person removes its folder and adds it again.
+add is refused. An existing folder of that name is never overwritten
+silently: without `--replace` the add is refused; with it, the copy there
+is set aside first (below, "Replacing an installed skill").
 
 There is still no `--yes`, environment override or terminal prompt, because
 an agent can type into a terminal; the only typed confirmation is in the
@@ -622,13 +623,41 @@ keys are left for `canary doctor`.
 
 **Refusals** name what is in the way, and are the same before the dialog and
 again inside the commit lock: `A skill named <name> is already installed at
-<paths> (recorded <date>). Nothing was installed. To replace it, remove
-<that folder|those folders> and run this again.` (the live paths, shortened
-with `~`; the date is dropped, keeping the full stop, when `installed_at` is
-missing), or, for a destination that exists with no live record, `<path>
-already exists. Nothing was installed. To replace it, remove it and run this
-again.` `canary install` checks first with each staged folder's name, then
-again with the checked names, before it asks.
+<paths> (recorded <date>). Nothing was installed. To replace it, run this
+again with --replace.` (the live paths, shortened with `~`; the date is
+dropped, keeping the full stop, when `installed_at` is missing), or, for a
+destination that exists with no live record, `<path> already exists. Nothing
+was installed. To replace it, run this again with --replace.` `canary
+install` checks first with each staged folder's name, then again with the
+checked names, before it asks.
+
+**Replacing an installed skill: `--replace`** (program 2026-10-17). With
+`--replace`, `canary add` and `canary install` update a skill that is
+already installed under the same name, in one step. The new copy is
+fetched, checked, approved and recorded exactly as a fresh install; the
+dialog adds `This replaces the installed <name> at <paths> (recorded
+<date>). The copy there now is set aside, not deleted; canary restore puts
+it back.` Under the commit lock, the copies at the destinations (a real
+folder holding a `SKILL.md`, or a link to another destination of the same
+run) are renamed into `quarantine/replaced/<id>/entry-<n>` next to
+`replaced.json`, which names the group, each member's origin and kind,
+the ledger state and the lock records it replaced; the record is written
+before any rename. Only then is approval recorded and the new copy staged
+and renamed in, as for any install; the lock record carries `"replaced":
+"<id>"` and the old records are removed from the lock. If the install
+fails, the old copies go back: the ledger first gets a compensating event
+(`approved`, `trusted` or `arrived`, with `how: replace undo`) restoring
+each path's earlier status, then the entries are renamed back. A copy
+SkillCanary had never approved may therefore return as a new arrival
+that the watcher at Guard holds and asks about; nothing is deleted. The
+replace refuses, before the dialog and again under the lock, when the
+same name is also installed in a folder this run would not replace, when a
+destination belongs to a record of another name, when a destination is a
+link to somewhere outside the run, when it holds no `SKILL.md`, when the
+store is on another disk, when a `canary install` would add more than one
+skill or would write to a project, and for plugin and marketplace
+commands; the sentences are fixed in `canary/replace.py`. The store is
+never pruned; `canary doctor --prune` does not touch it.
 
 ## `canary setup [--level scan|guard]` and `canary doctor`
 
@@ -870,6 +899,10 @@ repository's skills are what this report is for.
   `installed_from` is the approved event's `origin` and is present only for
   checked skills whose ledger has one.
   Listing scans first, so it also records what changed.
+- `canary list` also lists what a replace set aside, read from the store
+  (`quarantine/replaced/`), as `replaced: [{"id", "name", "paths", "kept",
+  "at", "how", "restore"}]` and a text section `Set aside by a replace`.
+  The session-start notice does not count them.
 - `canary trust <folder>` marks one skill, or every skill in a skills
   folder, as the person's.
 - `canary session-start --host claude|codex` is the SessionStart hook that
@@ -950,6 +983,17 @@ command naming its label or launch-agent file is denied, and so is a file
 tool writing that file. `canary doctor` reports a gap when the launch agent
 is missing or not loaded.
 
+`canary restore <id>` also takes a replaced group's id: it checks the
+earlier copy again (both layers), asks the person with `Put back the
+earlier <name> you replaced on <date>?`, and on their yes, under the
+commit lock, sets aside whatever is at the origins now into a new group
+(so a restore can be undone the same way), records approval for the
+earlier copy, renames it back, writes its old lock record back and
+removes the displaced one. Every refusal is one `Still set aside: …`
+line. A replace or restore that died between its steps leaves the old
+copies in the store and some origins empty; `canary restore <id>` is the
+recovery for every such state.
+
 ## `canary bench [--json] [--layer 1|2] [--backend <name>] [--model <id>] [--corpus <folder>]`
 
 How well the check separates malicious skills from harmless ones (program
@@ -1018,9 +1062,10 @@ page to install it.
 4. **Redirects:** at Guard and above, `npx skills add`, plugin installs and
    file-tool creation of a new skill are denied with the message "use `canary
    add <source>`", so the insecure path points to the secure one.
-5. **Replacing:** to replace an installed skill, the person removes its
-   folder and installs it again; the new copy is checked and approved like
-   any other.
+5. **Replacing:** `canary add <link> --replace` (or `canary install
+   --replace -- …`) updates an installed skill. The new copy is checked
+   and approved like any other; the earlier copy is set aside and `canary
+   restore <id>` brings it back.
 
 The Claude Code and Codex marketplace plugins are front doors: a descriptive
 skill that teaches the agent to use `canary add` and, when `canary` is

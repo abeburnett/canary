@@ -307,7 +307,10 @@ class ThePersonDecides(unittest.TestCase):
         self.assertEqual(mac.w.review(held_id), (False, STILL_TAKEN))
 
     def test_canary_restore_prints_the_reason_or_the_success_line(self):
+        # Program 2026-10-17, test 23: the line restore returns is printed.
+        switched = "Put back where it was; the copy that was there is set aside as X."
         for result, line, code in (((True, None), "Put back where it was.", 0),
+                                   ((True, switched), switched, 0),
                                    ((False, STILL_CANCELLED), STILL_CANCELLED, 10)):
             with self.subTest(line=line):
                 out = io.StringIO()

@@ -140,8 +140,7 @@ def _resolved(entry, origin):
 def _record(support, events):
     """The ledger is a report: a failure to write it never stops a hold."""
     try:
-        with guestlist._Lock(support):
-            guestlist._append(support, events)
+        guestlist.record_events(support, events)
     except OSError:
         pass
 
@@ -451,7 +450,9 @@ def _notify(text):
 
 def restore(held_id, home=None, support=None, ask=None, backend="auto", model=None):
     """`canary restore <id>`: check again and ask the person; only their
-    approval puts it back. (True, None), or (False, the line saying why not)."""
+    approval puts it back. (True, None), or (False, the line saying why not).
+    An id the watcher holds takes that path; a replaced group's id goes to
+    replace.restore (program 2026-10-17), which may return (True, a line)."""
     home = home or os.path.expanduser("~")
     w = Watcher.__new__(Watcher)
     w.home = home
@@ -460,10 +461,12 @@ def restore(held_id, home=None, support=None, ask=None, backend="auto", model=No
     w.ask, w.notify = ask or add.ask, lambda text: None
     w.backend, w.model = backend, model
     w.roots = guestlist.user_roots(home)
-    if not any(h["id"] == held_id for h in held(w.support, w.roots)):
-        raise ValueError("SkillCanary is not holding anything with that id; canary list "
-                         "shows what it holds.")
-    return w.review(held_id)
+    if any(h["id"] == held_id for h in held(w.support, w.roots)):
+        return w.review(held_id)
+    from canary import replace
+    if any(g["id"] == held_id for g in replace.groups(w.support, w.roots)):
+        return replace.restore(held_id, home, w.support, w.ask, backend, model)
+    raise ValueError(replace.NOT_KEEPING)
 
 
 def agent_path(which=shutil.which):

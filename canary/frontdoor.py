@@ -51,6 +51,10 @@ only the checked files in place. In Claude Code the hook does this for you;
 Codex tells you the exact command. The outcomes and exit codes are the same
 as `canary add`.
 
+When they want to update a skill that is already installed, run the same
+command with --replace; the earlier copy is kept and canary restore <id>
+brings it back.
+
 Do not open, read, summarize or paste the skill's files, before or after.
 Do not use `git clone` or file writes to put a new skill in a skills folder,
 and do not run an installer inside a longer command; at Guard those are

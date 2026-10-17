@@ -1,0 +1,82 @@
+commit fcb4222c8c0495bf76605ed13bd0bebcdbe836b4
+Python 3.10.3
+source: canary/ at HEAD (before the Sol fixes); tests/test_replace.py with tests 34 to 37 added, uncommitted.
+
+test_34_a_saved_link_whose_alias_was_repointed_is_not_put_back (tests.test_replace.RestoringAReplacedGroup)
+Sol review, finding 1. No seam: the link reaches the folder through an ... FAIL
+test_35_an_unchanged_clone_with_git_is_restored (tests.test_replace.RestoringAReplacedGroup)
+Sol review, finding 2. No seam: an untracked clone with a .git folder, ... FAIL
+test_36_a_restore_that_died_after_its_first_folder_is_finished (tests.test_replace.RestoringAReplacedGroup)
+Sol review, finding 3. Seam: patch.object(replace, "_rename") raising ... FAIL
+test_37_a_link_left_after_its_folder_returned_is_recovered (tests.test_replace.RestoringAReplacedGroup)
+Sol review, finding 4. Seam: patch.object(replace, "_rename") raising ... FAIL
+
+======================================================================
+FAIL: test_34_a_saved_link_whose_alias_was_repointed_is_not_put_back (tests.test_replace.RestoringAReplacedGroup)
+Sol review, finding 1. No seam: the link reaches the folder through an
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 922, in test_34_a_saved_link_whose_alias_was_repointed_is_not_put_back
+    self.assertEqual(result, (False, "Still set aside: the link saved from "
+AssertionError: Tuples differ: (True, 'Put back where it was; the copy th[52 chars]39.') != (False, 'Still set aside: the link saved f[101 chars]is.')
+
+First differing element 0:
+True
+False
+
+- (True,
+-  'Put back where it was; the copy that was there is set aside as '
+-  '20261017T060848Z-8d6b9d39.')
++ (False,
++  'Still set aside: the link saved from ~/.claude/skills/notes no longer leads '
++  'to a copy SkillCanary checked. canary list shows where it is.')
+
+======================================================================
+FAIL: test_35_an_unchanged_clone_with_git_is_restored (tests.test_replace.RestoringAReplacedGroup)
+Sol review, finding 2. No seam: an untracked clone with a .git folder,
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 944, in test_35_an_unchanged_clone_with_git_is_restored
+    self.assertTrue(back, line)
+AssertionError: False is not true : Still set aside: it changed after its check; it stays set aside as 20261017T060848Z-c56b3d6f. canary list shows where it is.
+
+======================================================================
+FAIL: test_36_a_restore_that_died_after_its_first_folder_is_finished (tests.test_replace.RestoringAReplacedGroup)
+Sol review, finding 3. Seam: patch.object(replace, "_rename") raising
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 971, in test_36_a_restore_that_died_after_its_first_folder_is_finished
+    self.assertEqual(h.restore(g1), (True, None))
+AssertionError: Tuples differ: (False, 'Still set aside: the copy at ~/.a[129 chars]is.') != (True, None)
+
+First differing element 0:
+False
+True
+
++ (True, None)
+- (False,
+-  'Still set aside: the copy at ~/.agents/skills/notes is also installed at '
+-  '~/.claude/skills/notes; replace all of them in one run first. canary list '
+-  'shows where it is.')
+
+======================================================================
+FAIL: test_37_a_link_left_after_its_folder_returned_is_recovered (tests.test_replace.RestoringAReplacedGroup)
+Sol review, finding 4. Seam: patch.object(replace, "_rename") raising
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 999, in test_37_a_link_left_after_its_folder_returned_is_recovered
+    self.assertEqual(h.restore(g1), (True, None))
+AssertionError: Tuples differ: (False, "Still set aside: nothing of it is left in SkillCanary's store.") != (True, None)
+
+First differing element 0:
+False
+True
+
+- (False, "Still set aside: nothing of it is left in SkillCanary's store.")
++ (True, None)
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.065s
+
+FAILED (failures=4)
+exit=1
