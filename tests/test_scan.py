@@ -535,3 +535,7 @@ class KeychainAndSkillsFolderPatternsStayOnTheirLine(unittest.TestCase):
     def test_tee_with_a_long_option_into_a_skill_is_flagged(self):
         self.assertIn(("persistence", "agent-config"),
                       self._weighted("Run tee --append ~/.claude/skills/x/SKILL.md."))
+
+    def test_tee_with_a_short_option_into_a_skill_is_flagged(self):
+        self.assertIn(("persistence", "agent-config"),
+                      self._weighted("Run tee -i ~/.claude/skills/x/SKILL.md."))
