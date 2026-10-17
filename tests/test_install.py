@@ -161,6 +161,10 @@ class Mac:
         with open(self.log) as fh:
             return [json.loads(line) for line in fh]
 
+    def ledger(self):
+        with open(os.path.join(self.support, "ledger.jsonl")) as fh:
+            return [json.loads(line) for line in fh]
+
     def events(self, name):
         with open(os.path.join(self.support, "ledger.jsonl")) as fh:
             return [e["event"] for e in map(json.loads, fh) if e.get("name") == name]
@@ -203,6 +207,16 @@ class SkillsComeFromStaging(unittest.TestCase):
                          {"checked"})
         self.assertEqual([d for d in os.listdir(os.path.join(mac.support, "quarantine"))
                           if d != "logs"], [])  # no staging left behind
+
+    def test_the_list_shows_the_install_came_from_the_installer(self):
+        mac = Mac()
+        self.assertEqual(mac.install(ADD, spec=ONE)["outcome"], "installed")
+        [approved] = [e for e in mac.ledger() if e["event"] == "approved"]
+        self.assertEqual(approved["origin"], {"kind": "installer", "command": ADD})
+        report = guestlist.scan(mac.home, support=mac.support)
+        helper = [s for s in report["skills"] if s["name"] == "helper"]
+        self.assertEqual({s["installed_from"]["kind"] for s in helper}, {"installer"})
+        self.assertRegex(guestlist.render_text(report), r"helper .*installer")
 
     def test_a_project_install_lands_in_the_project(self):
         mac = Mac()

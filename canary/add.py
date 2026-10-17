@@ -727,7 +727,9 @@ def add(source, *, home=None, support_dir=None, approve=None, fetch=None,
                 return out
             # Recorded before the files appear, so the watcher leaves them alone.
             _record(guestlist.record_install, home, destinations, name, verdict,
-                    support=support_dir, source=snapshot, override=unsafe)
+                    support=support_dir, source=snapshot, override=unsafe,
+                    origin=({"kind": "github", "owner": owner, "repo": repo, "commit": commit}
+                            if kind == "github" else {"kind": "local"}))
             done = _install(snapshot, destinations, snapshot_digest, run_id, name, out)
             if done is None:
                 return out
