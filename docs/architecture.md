@@ -208,7 +208,10 @@ Decision rules (`canary/gate.py`, `decide`), in order:
    denied; the Write tool writes such a file, and `git commit -F` takes such
    a message. A single, plain command (no `;`, `&`, `|`, `$`, quotes of
    commands, brackets or line breaks) asking only for help or a listing
-   (`-h`, `--help`, `-l`, `--list`) is allowed. Only the shell tool's command
+   (`-h`, `--help`, `-l`, `--list`) is allowed. The same help request with a
+   pipe, redirect or other shell syntax is still denied, and its message adds
+   "To read an installer's help, run it on its own, without pipes or
+   redirects." Only the shell tool's command
    is read; words in other tools' input (a message, a question) are not an
    install. A command assembled from pieces (`npx $X add`) and a program
    that starts an installer itself are out of the hook's reach; the watcher
@@ -784,6 +787,27 @@ Result: `{"schema": "canary.install/1", "outcome": "installed" | "declined" |
 "recommendation": {...}}` (`next_steps` is the union of the skills'
 install-flow steps, in order; `recommendation` is the strictest of the
 skills'), with `canary add`'s exit codes (`done` is 0).
+
+**Installer error on failure** (program 2026-10-16, slice B, final design:
+codes, not text). A failed run's result has
+`"installer_error": {"exit": <code>, "codes": [...]}`. The installer's own
+text never reaches the agent. `codes` is the sorted, de-duplicated set of
+tokens from a fixed vocabulary found in that run's output: `ENOTFOUND`,
+`ECONNREFUSED`, `ECONNRESET`, `ETIMEDOUT`, `EACCES`, `EPERM`, `ENOENT`, `E401`,
+`E403`, `E404`, `E429`, `E500`, `HTTP_4XX`, `HTTP_5XX`, `UNKNOWN_OPTION`,
+`NOT_FOUND`, `PERMISSION_DENIED`, `RATE_LIMITED`, `AUTH_REQUIRED`, `GIT_FAILED`.
+Each code has one fixed detector, run on that run's own output (the log slice
+after the run's header line). `exit` is null when the installer could not
+start or ran out of time. Every failure site sets it: the marketplace add,
+the skills run (failed, or no skills added), the plugin's marketplace stage,
+its staging install, and its real install. The reason still names the log
+path for the person. `render_text` prints `Installer error: exit <n>; <codes,
+or 'no known error code'>` and then one fixed hint sentence per code. The log
+stays complete and quarantined.
+
+The `installer_error` values are untrusted installer output reduced to fixed
+tokens; the detectors narrow what gets through but do not guarantee that
+nothing else does.
 
 Limits: the installer runs as the person; staging changes where it writes
 by default, not where it can write. A write into a skills folder during the

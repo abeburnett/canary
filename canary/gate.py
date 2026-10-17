@@ -32,6 +32,7 @@ REDIRECT = ("This installs skills or plugins without SkillCanary checking them f
             "`canary add <link>`; both check what it adds and ask the person. "
             "To write a file that only mentions an installer, use your file-editing tool "
             "(Write or Edit in Claude Code, apply_patch in Codex), not the shell.")
+HELP_HINT = "To read an installer's help, run it on its own, without pipes or redirects."
 INSTALL_INSTEAD = ("SkillCanary checks skills and plugins before they are installed. Run "
                    "this instead; it runs the same installer, checks what it adds and asks "
                    "the person: canary install -- {command}")
@@ -195,6 +196,13 @@ def _own_text(command):
     return OWN_TEXT.format(what=what, arguments=_own_text_arguments(command))
 
 
+def _piped_help(command):
+    """A help or listing request that carries shell syntax (a pipe, a redirect
+    and so on): the hint tells the agent to run it on its own."""
+    return bool(installers.HELP.search(installers.tidy(command))
+                and any(c in installers.COMPOUND for c in command))
+
+
 def decide(call, home, roots, canary_bin=None, can_rewrite=False):
     """A deny reason, None to allow, or a Rewrite (only when the host can
     rewrite a command). Any internal error denies."""
@@ -210,7 +218,7 @@ def decide(call, home, roots, canary_bin=None, can_rewrite=False):
             if installers.installs(call.command, call.cwd, in_skills):
                 parsed = installers.supported(call.command)
                 if parsed is None:
-                    return REDIRECT
+                    return REDIRECT + (" " + HELP_HINT if _piped_help(call.command) else "")
                 words = shlex.join(parsed[1])
                 if can_rewrite and canary_bin:
                     return Rewrite(f"/usr/bin/python3 -I -B {shlex.quote(canary_bin)} "

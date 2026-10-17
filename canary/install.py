@@ -12,12 +12,14 @@ installs nothing an agent loads, so it runs as given.
 
 The installer is the person's chosen program and runs as them; staging
 redirects where it writes by default, not where it could write. Its output
-can quote package text, so it goes to a log, never to the agent.
+can quote package text, so it goes to a log. A failed run's last lines reach
+the agent as error codes only (`installer_error`), never as text.
 """
 
 import concurrent.futures
 import json
 import os
+import re
 import secrets
 import shutil
 import stat
@@ -30,6 +32,53 @@ INSTALLER_SECONDS = 600
 CHECK_WORKERS = 4
 SKIP_DIRS = {".git", "node_modules", ".npm", ".cache"}
 EXIT_FOR_OUTCOME = dict(add.EXIT_FOR_OUTCOME, done=0)
+# installer_error: the exit code and the error codes found in a failed run's
+# output. The installer's own text never reaches the agent. Each code has one
+# fixed detector, run on that run's output only.
+ERROR_DETECTORS = {
+    "ENOTFOUND": re.compile(r"\bENOTFOUND\b", re.I),
+    "ECONNREFUSED": re.compile(r"\bECONNREFUSED\b", re.I),
+    "ECONNRESET": re.compile(r"\bECONNRESET\b", re.I),
+    "ETIMEDOUT": re.compile(r"\bETIMEDOUT\b", re.I),
+    "EACCES": re.compile(r"\bEACCES\b", re.I),
+    "EPERM": re.compile(r"\bEPERM\b", re.I),
+    "ENOENT": re.compile(r"\bENOENT\b", re.I),
+    "E401": re.compile(r"\bE401\b", re.I),
+    "E403": re.compile(r"\bE403\b", re.I),
+    "E404": re.compile(r"\bE404\b", re.I),
+    "E429": re.compile(r"\bE429\b", re.I),
+    "E500": re.compile(r"\bE500\b", re.I),
+    "HTTP_4XX": re.compile(r"\bhttp(?:/\d(?:\.\d)?)? 4\d\d\b", re.I),
+    "HTTP_5XX": re.compile(r"\bhttp(?:/\d(?:\.\d)?)? 5\d\d\b", re.I),
+    "UNKNOWN_OPTION": re.compile(r"\bunknown option\b", re.I),
+    "NOT_FOUND": re.compile(r"\bnot found\b", re.I),
+    "PERMISSION_DENIED": re.compile(r"\bpermission denied\b", re.I),
+    "RATE_LIMITED": re.compile(r"\brate[ -]limit(?:ed|ing)?\b", re.I),
+    "AUTH_REQUIRED": re.compile(r"\bauth(?:entication)? required\b", re.I),
+    "GIT_FAILED": re.compile(r"\bfatal:|\bgit (?:error|failed)\b", re.I),
+}
+HINTS = {
+    "ENOTFOUND": "The installer could not reach the network.",
+    "ECONNREFUSED": "The server refused the connection; try again later.",
+    "ECONNRESET": "The connection to the server was reset; try again.",
+    "ETIMEDOUT": "The connection to the server timed out; check the network and try again.",
+    "EACCES": "The installer could not write to a folder it needs; check its permissions.",
+    "EPERM": "The system refused an operation the installer needed; check permissions.",
+    "ENOENT": "The installer could not find a file or folder it expected.",
+    "E401": "The server did not accept the credentials; sign in again.",
+    "E403": "The server refused access; check the package's visibility and your access.",
+    "E404": "The package or page was not found; check the name and source.",
+    "E429": "The server is limiting requests; wait and try again.",
+    "E500": "The server failed; try again later.",
+    "HTTP_4XX": "The server returned a client error; check the name and your access.",
+    "HTTP_5XX": "The server returned a server error; try again later.",
+    "UNKNOWN_OPTION": "The installer does not know an option that was passed; check its help.",
+    "NOT_FOUND": "Something the installer needed was not found; check the name.",
+    "PERMISSION_DENIED": "The installer was denied permission; check the folder's permissions.",
+    "RATE_LIMITED": "The service is limiting requests; wait and try again.",
+    "AUTH_REQUIRED": "The service needs you to sign in first.",
+    "GIT_FAILED": "A git operation failed; check the source and your git access.",
+}
 
 
 class InstallError(Exception):
@@ -87,17 +136,37 @@ def _mirror_home(real_home, stage_home):
 def _run(argv, cwd, env, log_path, timeout=INSTALLER_SECONDS):
     """Run the installer; its output goes to the log. The exit code, or None
     when it could not start or ran out of time."""
+    return _run_output(argv, cwd, env, log_path, timeout)[0]
+
+
+def _run_output(argv, cwd, env, log_path, timeout=INSTALLER_SECONDS):
+    """`_run`, and the output this run wrote. The log is shared by every run in
+    one install, so the run's bytes start at the log's size after its own
+    header line."""
     os.makedirs(os.path.dirname(log_path), mode=0o700, exist_ok=True)
     fd = os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW, 0o600)
     with os.fdopen(fd, "a") as log:
         log.write(f"$ {' '.join(argv)}  (in {cwd})\n")
         log.flush()
+        start = os.fstat(log.fileno()).st_size
         try:
-            return subprocess.run(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
+            code = subprocess.run(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
                                   stdout=log, stderr=log, timeout=timeout).returncode
         except (OSError, subprocess.TimeoutExpired) as exc:
             log.write(f"canary: {type(exc).__name__}\n")
-            return None
+            code = None
+        log.flush()
+    with open(log_path, "rb") as fh:
+        fh.seek(start)
+        return code, fh.read().decode("utf-8", errors="replace")
+
+
+def _installer_error(code, run_output):
+    """`installer_error` for a failed run: its exit code, and the sorted codes
+    whose fixed detector matches that run's output. Matched text is never
+    kept."""
+    return {"exit": code,
+            "codes": sorted(c for c, rx in ERROR_DETECTORS.items() if rx.search(run_output))}
 
 
 def _landed(stage_root):
@@ -238,10 +307,13 @@ def install(argv, *, home=None, cwd=None, support_dir=None, approve=None, backen
             out["outcome"] = "declined" if answer is False else "not_installed"
             out["reasons"].append("The person did not add the marketplace.")
             return out
-        code = _run(list(argv), cwd, _real_env(home), log_path)
+        code, run_output = _run_output(list(argv), cwd, _real_env(home), log_path)
+        if code != 0:
+            out["installer_error"] = _installer_error(code, run_output)
         out["outcome"] = "done" if code == 0 else "not_installed"
         out["reasons"].append("Added the marketplace; nothing from it is installed yet."
-                              if code == 0 else f"The installer failed; its output is in {log_path}.")
+                              if code == 0 else
+                              f"The installer failed before anything landed; its output is in {log_path}, which the person can open.")
         return out
     run_dir = os.path.join(support_dir, "quarantine", run_id)
     os.makedirs(run_dir, mode=0o700)
@@ -312,13 +384,14 @@ def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approv
             model, timeout_s):
     stage_home, stage_project = _stage(run_dir, home)
     before = _real_listing(home, cwd)
-    code = _run(list(argv), stage_project, _env(stage_home, home), log_path)
+    code, run_output = _run_output(list(argv), stage_project, _env(stage_home, home), log_path)
     appeared = _appeared(before, _real_listing(home, cwd))
     if appeared:
         return _not(out, f"While the installer ran, something new appeared in "
                          f"{_short(appeared[0], home)}, outside SkillCanary's staging folder. "
                          "SkillCanary installed nothing. Run canary list to see it.")
     if code != 0:
+        out["installer_error"] = _installer_error(code, run_output)
         return _not(out, f"The installer failed ({'exit ' + str(code) if code is not None else 'did not finish'}); "
                          f"nothing was installed. Its output is in {log_path}.")
     roots = ((stage_home, home), (stage_project, cwd))
@@ -331,8 +404,10 @@ def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approv
         return _not(out, "A skill folder's name is not one SkillCanary can use (lowercase "
                          "letters, digits and dashes); nothing was installed.")
     if not plan:
+        out["installer_error"] = _installer_error(code, run_output)
         return _not(out, "The installer added no skills to its staging home, so there was "
-                         f"nothing to check or install. Its output is in {log_path}.")
+                         f"nothing to check or install. The installer failed before any skill "
+                         f"landed; its output is in {log_path}, which the person can open.")
     by_stage = {os.path.realpath(f): dest for f, dest in plan}
     link_plan = []
     for link, real_root, stage_root in links:
@@ -523,10 +598,18 @@ def _plugin(parsed, home, cwd, support_dir, run_dir, run_id, log_path, out, appr
     if source is None:
         return _not(out, f"SkillCanary could not find the marketplace {marketplace}. Add it "
                          "first: claude plugin marketplace add <source>.")
-    if _run([argv[0], "plugin", "marketplace", "add", source], stage_project, env, log_path) != 0:
-        return _not(out, f"SkillCanary could not stage the marketplace; see {log_path}.")
-    if _run(list(argv), stage_project, env, log_path) != 0:
-        return _not(out, f"The installer failed in staging; nothing was installed. See {log_path}.")
+    code, run_output = _run_output([argv[0], "plugin", "marketplace", "add", source],
+                                   stage_project, env, log_path)
+    if code != 0:
+        out["installer_error"] = _installer_error(code, run_output)
+        return _not(out, "SkillCanary could not stage the marketplace. The installer failed "
+                         f"before anything landed; its output is in {log_path}, which the "
+                         "person can open.")
+    code, run_output = _run_output(list(argv), stage_project, env, log_path)
+    if code != 0:
+        out["installer_error"] = _installer_error(code, run_output)
+        return _not(out, f"The installer failed in staging; nothing was installed. "
+                         f"Its output is in {log_path}.")
     staged = _install_path(stage_config, plugin_id, scope)
     if not staged or not os.path.isdir(staged):
         return _not(out, f"The installer did not report where it put {plugin_id}; nothing was installed.")
@@ -550,11 +633,14 @@ def _plugin(parsed, home, cwd, support_dir, run_dir, run_id, log_path, out, appr
     # The real install, then proof it is what was checked. A plugin loads when
     # a session starts, so nothing uses it before this comparison.
     with add._Commit(home):
-        code = _run(list(argv), cwd, _real_env(home), log_path)
+        code, run_output = _run_output(list(argv), cwd, _real_env(home), log_path)
         real = _install_path(real_config, plugin_id, scope)
         got = _digest_of(real, os.path.join(run_dir, "installed")) if real else None
         if code != 0:
             # Nothing of ours to undo: a failed update keeps what was there.
+            # A real install folder that exists but cannot be read leaves the
+            # package partly seen, so its output is withheld.
+            out["installer_error"] = _installer_error(code, run_output)
             return _not(out, f"The installer failed; its output is in {log_path}.")
         if got != items[0]["digest"]:
             removed = _run([argv[0], "plugin", "uninstall", plugin_id, "--scope", scope], cwd,
@@ -584,5 +670,10 @@ def render_text(out):
     lines = [f"SkillCanary install: {out['outcome']}" + (f" ({out['verdict']})" if out["verdict"] else "")]
     lines += [f"  {s['name']}: {s['verdict']}" for s in out["skills"]]
     lines += [f"  - {r}" for r in out["reasons"]]
+    if "installer_error" in out:
+        err = out["installer_error"]
+        lines.append(f"  Installer error: exit {err['exit']}; "
+                     f"{', '.join(err['codes']) or 'no known error code'}")
+        lines += [f"  {HINTS[code]}" for code in err["codes"]]
     lines += [f"  Installed: {p}" for p in out["installed"]]
     return "\n".join(lines)

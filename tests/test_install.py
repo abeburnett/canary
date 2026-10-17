@@ -49,6 +49,8 @@ for s in spec["skills"]:
                    os.path.join(base, ".claude", "skills", s["name"]))
 with open(os.path.join(home, ".agents", ".skill-lock.json") if os.path.isdir(os.path.join(home, ".agents")) else os.devnull, "w") as fh:
     fh.write("{}")
+for line in spec.get("print", []):
+    print(line)
 sys.exit(1 if spec.get("fail") else 0)
 """
 
@@ -56,6 +58,12 @@ FAKE_CLAUDE = """\
 import json, os, shutil, sys
 config = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.environ["HOME"], ".claude")
 args = sys.argv[1:]
+if os.environ.get("FAKE_CLAUDE_PRINTS"):
+    print(os.environ["FAKE_CLAUDE_PRINTS"])
+if os.environ.get("FAKE_MARKETPLACE_FAILS") and args[:3] == ["plugin", "marketplace", "add"]:
+    sys.exit(1)
+if os.environ.get("FAKE_STAGING_FAILS") and "quarantine" in config and args[:2] == ["plugin", "install"]:
+    sys.exit(1)
 with open(os.environ["FAKE_LOG"], "a") as log:
     log.write(json.dumps({"argv": args, "config": config}) + "\\n")
 plugins = os.path.join(config, "plugins")
@@ -333,6 +341,67 @@ class SkillsComeFromStaging(unittest.TestCase):
         out = mac.install(ADD, spec=dict(ONE, fail=True))
         self.assertEqual((out["outcome"], mac.asked), ("not_installed", []))
         self.assertEqual(os.listdir(os.path.join(mac.home, ".agents", "skills")), [])
+
+
+WIDGET = "Rotate the widget cache every night, then reload."
+E404 = "npm ERR! code E404"
+
+
+class FailedInstallReportsCodes(unittest.TestCase):
+    """Program 2026-10-16, slice B (final design): a failed run reports its exit
+    code and the error codes in its output, never the output's text."""
+
+    def test_a_skill_line_and_an_error_code_report_the_code_only(self):
+        mac = Mac()
+        out = mac.install(ADD, spec={"skills": [{"name": "helper", "body": WIDGET + "\n"}],
+                                     "fail": True, "print": [WIDGET, E404]})
+        self.assertEqual(out["outcome"], "not_installed")
+        self.assertEqual(out["installer_error"], {"exit": 1, "codes": ["E404"]})
+        self.assertNotIn("installer_output", out)
+        self.assertNotIn("widget", json.dumps(out).lower())
+        text = install.render_text(out)
+        self.assertIn("Installer error: exit 1; E404", text)
+        self.assertIn("The package or page was not found", text)
+        self.assertNotIn("widget", text.lower())
+
+    def test_output_with_no_known_code_has_no_codes(self):
+        mac = Mac()
+        out = mac.install(ADD, spec={"skills": [], "fail": True,
+                                     "print": ["something odd happened"]})
+        self.assertEqual(out["installer_error"], {"exit": 1, "codes": []})
+        self.assertIn("Installer error: exit 1; no known error code", install.render_text(out))
+
+    def test_a_marketplace_add_failure_reports_its_codes(self):
+        mac = Mac()
+        out = mac.install(["claude", "plugin", "marketplace", "add", "someone/mkt"], answer=True,
+                          FAKE_MARKETPLACE_FAILS="1", FAKE_CLAUDE_PRINTS=E404)
+        self.assertEqual(out["outcome"], "not_installed")
+        self.assertEqual(out["installer_error"], {"exit": 1, "codes": ["E404"]})
+
+    def test_a_plugin_marketplace_stage_failure_reports_its_codes(self):
+        mac = Mac()
+        out = mac.install(["claude", "plugin", "install", "helper@mkt"], answer=True,
+                          FAKE_MARKETPLACE_FAILS="1", FAKE_CLAUDE_PRINTS=E404)
+        self.assertEqual(out["installer_error"], {"exit": 1, "codes": ["E404"]})
+
+    def test_a_plugin_staging_failure_reports_its_codes(self):
+        mac = Mac()
+        out = mac.install(["claude", "plugin", "install", "helper@mkt"], answer=True,
+                          FAKE_STAGING_FAILS="1", FAKE_CLAUDE_PRINTS=E404)
+        self.assertEqual(out["installer_error"], {"exit": 1, "codes": ["E404"]})
+
+    def test_a_real_plugin_install_failure_reports_its_codes(self):
+        mac = Mac()
+        out = mac.install(["claude", "plugin", "install", "helper@mkt"], answer=True,
+                          FAKE_REAL_FAILS="1", FAKE_CLAUDE_PRINTS=E404)
+        self.assertEqual(out["outcome"], "not_installed")
+        self.assertEqual(out["installer_error"], {"exit": 1, "codes": ["E404"]})
+
+    def test_an_installer_that_adds_no_skills_reports_its_codes(self):
+        mac = Mac()
+        out = mac.install(ADD, spec={"skills": [], "print": [E404]})
+        self.assertEqual(out["outcome"], "not_installed")
+        self.assertEqual(out["installer_error"], {"exit": 0, "codes": ["E404"]})
 
 
 PROJECT_ADD = ["npx", "skills", "add", "someone/repo", "-y"]
