@@ -788,43 +788,26 @@ Result: `{"schema": "canary.install/1", "outcome": "installed" | "declined" |
 install-flow steps, in order; `recommendation` is the strictest of the
 skills'), with `canary add`'s exit codes (`done` is 0).
 
-**Installer output on failure** (program 2026-10-16, slice B). The result
-has `"installer_output": {"lines": [...], "dropped": n}` only when a failed
-run had a complete package to scrub against; otherwise the key is absent and
-the reason says the output is held back, or, for a failure before any skill
-landed, that the log is at a path the person can open. The output is that
-run's own bytes from the log (each run starts at its own offset). The
-log never goes to the agent. The `installer_output` lines are untrusted installer text, filtered
-by the allowlist and scrub, which are a narrowing, not a guarantee.
-The filter works in order:
+**Installer error on failure** (program 2026-10-16, slice B, final design:
+codes, not text). A failed run's result has
+`"installer_error": {"exit": <code>, "codes": [...]}`. The installer's own
+text never reaches the agent. `codes` is the sorted, de-duplicated set of
+tokens from a fixed vocabulary found in that run's output: `ENOTFOUND`,
+`ECONNREFUSED`, `ECONNRESET`, `ETIMEDOUT`, `EACCES`, `EPERM`, `ENOENT`, `E401`,
+`E403`, `E404`, `E429`, `E500`, `HTTP_4XX`, `HTTP_5XX`, `UNKNOWN_OPTION`,
+`NOT_FOUND`, `PERMISSION_DENIED`, `RATE_LIMITED`, `AUTH_REQUIRED`, `GIT_FAILED`.
+Each code has one fixed detector, run on that run's own output (the log slice
+after the run's header line). `exit` is null when the installer could not
+start or ran out of time. Every failure site sets it: the marketplace add,
+the skills run (failed, or no skills added), the plugin's marketplace stage,
+its staging install, and its real install. The reason still names the log
+path for the person. `render_text` prints `Installer error: exit <n>; <codes,
+or 'no known error code'>` and then one fixed hint sentence per code. The log
+stays complete and quarantined.
 
-1. Allowlist: a line is a candidate only if, after trimming, it starts with
-   `Error`, `error`, `ERR!`, `npm ERR!`, `npm error`, `fatal:`, `warning:` or
-   `WARN`, or contains a fixed error code (`ENOTFOUND`, `ECONNREFUSED`,
-   `ECONNRESET`, `ETIMEDOUT`, `EACCES`, `EPERM`, `ENOENT`, `E404`, `E403`,
-   an HTTP 4xx or 5xx, `404 Not Found`, `403 Forbidden`, `unknown option`,
-   `not found`, `permission denied`). Every other line is held back.
-2. One normalisation for output lines and package text: control and ANSI
-   characters removed, tabs and CR made spaces, whitespace runs collapsed to
-   one space, casefolded.
-3. A candidate is dropped when it shares a run of 24 characters with the
-   package. When it is shorter than 24 characters once its error prefix is
-   removed, it is dropped when that remainder appears anywhere in the package.
-4. The package is the folders the failed run landed under the staging roots
-   (skills: the landed folders; plugins: the staged plugin copy). The scrub
-   reads files under those folders, skipping `.git`, `node_modules`, `.npm`
-   and `.cache`, at most 500 files and 2 MB, as UTF-8 with errors ignored. A
-   partial package is never scrubbed against: when the cap is reached, when a
-   file or folder cannot be read, or, for a plugin, when the real install
-   folder exists but cannot be read, `installer_output` is withheld and the
-   held-back sentence is used.
-
-Each shown line is cut to 200 characters, the last 20 kept, 4 KB in all. The
-JSON's `dropped` counts every line of the run that was not shown. The log
-file stays complete and quarantined. The marketplace add and a failure where
-nothing landed have no package, so no `installer_output`. `render_text` prints
-the lines under `Installer output:` after the reasons, with a count of lines
-left out.
+The `installer_error` values are untrusted installer output reduced to fixed
+tokens; the detectors narrow what gets through but do not guarantee that
+nothing else does.
 
 Limits: the installer runs as the person; staging changes where it writes
 by default, not where it can write. A write into a skills folder during the
