@@ -13,7 +13,7 @@ installs nothing an agent loads, so it runs as given.
 The installer is the person's chosen program and runs as them; staging
 redirects where it writes by default, not where it could write. Its output
 can quote package text, so it goes to a log. A failed run's last lines reach
-the agent only after the package's own text is scrubbed out (`installer_output`).
+the agent as error codes only (`installer_error`), never as text.
 """
 
 import concurrent.futures
@@ -32,22 +32,53 @@ INSTALLER_SECONDS = 600
 CHECK_WORKERS = 4
 SKIP_DIRS = {".git", "node_modules", ".npm", ".cache"}
 EXIT_FOR_OUTCOME = dict(add.EXIT_FOR_OUTCOME, done=0)
-# installer_output: the last lines of a failed run, scrubbed against the package.
-OUTPUT_LINES = 20
-OUTPUT_LINE_CHARS = 200
-OUTPUT_BYTES = 4096
-SHARED_RUN = 24
-CORPUS_FILES = 500
-CORPUS_BYTES = 2 * 1024 * 1024
-HELD_BACK = ("Its output is held back, because it can contain the package's own text; "
-             "you can read the log at {log} yourself.")
-ERROR_START = ("error", "err!", "npm err!", "npm error", "fatal:", "warning:", "warn")
-ERROR_CODES = ("enotfound", "econnrefused", "econnreset", "etimedout", "eacces", "eperm",
-               "enoent", "e404", "e403", "404 not found", "403 forbidden",
-               "unknown option", "not found", "permission denied")
-HTTP_ERROR = re.compile(r"\bhttp [45]\d\d\b")
-CONTROL = re.compile(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-9;?]*[ -/]*[@-~]"
-                     r"|\x1b[@-_]|[\x00-\x08\x0b-\x1f\x7f]")
+# installer_error: the exit code and the error codes found in a failed run's
+# output. The installer's own text never reaches the agent. Each code has one
+# fixed detector, run on that run's output only.
+ERROR_DETECTORS = {
+    "ENOTFOUND": re.compile(r"\bENOTFOUND\b", re.I),
+    "ECONNREFUSED": re.compile(r"\bECONNREFUSED\b", re.I),
+    "ECONNRESET": re.compile(r"\bECONNRESET\b", re.I),
+    "ETIMEDOUT": re.compile(r"\bETIMEDOUT\b", re.I),
+    "EACCES": re.compile(r"\bEACCES\b", re.I),
+    "EPERM": re.compile(r"\bEPERM\b", re.I),
+    "ENOENT": re.compile(r"\bENOENT\b", re.I),
+    "E401": re.compile(r"\bE401\b", re.I),
+    "E403": re.compile(r"\bE403\b", re.I),
+    "E404": re.compile(r"\bE404\b", re.I),
+    "E429": re.compile(r"\bE429\b", re.I),
+    "E500": re.compile(r"\bE500\b", re.I),
+    "HTTP_4XX": re.compile(r"\bhttp(?:/\d(?:\.\d)?)? 4\d\d\b", re.I),
+    "HTTP_5XX": re.compile(r"\bhttp(?:/\d(?:\.\d)?)? 5\d\d\b", re.I),
+    "UNKNOWN_OPTION": re.compile(r"\bunknown option\b", re.I),
+    "NOT_FOUND": re.compile(r"\bnot found\b", re.I),
+    "PERMISSION_DENIED": re.compile(r"\bpermission denied\b", re.I),
+    "RATE_LIMITED": re.compile(r"\brate[ -]limit(?:ed|ing)?\b", re.I),
+    "AUTH_REQUIRED": re.compile(r"\bauth(?:entication)? required\b", re.I),
+    "GIT_FAILED": re.compile(r"\bfatal:|\bgit (?:error|failed)\b", re.I),
+}
+HINTS = {
+    "ENOTFOUND": "The installer could not reach the network.",
+    "ECONNREFUSED": "The server refused the connection; try again later.",
+    "ECONNRESET": "The connection to the server was reset; try again.",
+    "ETIMEDOUT": "The connection to the server timed out; check the network and try again.",
+    "EACCES": "The installer could not write to a folder it needs; check its permissions.",
+    "EPERM": "The system refused an operation the installer needed; check permissions.",
+    "ENOENT": "The installer could not find a file or folder it expected.",
+    "E401": "The server did not accept the credentials; sign in again.",
+    "E403": "The server refused access; check the package's visibility and your access.",
+    "E404": "The package or page was not found; check the name and source.",
+    "E429": "The server is limiting requests; wait and try again.",
+    "E500": "The server failed; try again later.",
+    "HTTP_4XX": "The server returned a client error; check the name and your access.",
+    "HTTP_5XX": "The server returned a server error; try again later.",
+    "UNKNOWN_OPTION": "The installer does not know an option that was passed; check its help.",
+    "NOT_FOUND": "Something the installer needed was not found; check the name.",
+    "PERMISSION_DENIED": "The installer was denied permission; check the folder's permissions.",
+    "RATE_LIMITED": "The service is limiting requests; wait and try again.",
+    "AUTH_REQUIRED": "The service needs you to sign in first.",
+    "GIT_FAILED": "A git operation failed; check the source and your git access.",
+}
 
 
 class InstallError(Exception):
@@ -130,113 +161,12 @@ def _run_output(argv, cwd, env, log_path, timeout=INSTALLER_SECONDS):
         return code, fh.read().decode("utf-8", errors="replace")
 
 
-def _norm(text):
-    """The one normalisation for output lines and corpus text: control and
-    ANSI characters removed, tabs and CR to spaces, whitespace runs collapsed,
-    casefolded."""
-    text = CONTROL.sub("", text.replace("\r", " ").replace("\t", " "))
-    return " ".join(text.split()).casefold()
-
-
-def _display(raw):
-    """A raw output line as it may be shown: control characters removed,
-    whitespace collapsed, cut to OUTPUT_LINE_CHARS."""
-    return " ".join(CONTROL.sub("", raw.replace("\r", " ").replace("\t", " ")).split()
-                    )[:OUTPUT_LINE_CHARS].rstrip()
-
-
-def _corpus(folders):
-    """(normalised package text, complete). The text is the files under
-    `folders`, skipping SKIP_DIRS and links. It is complete only when every
-    file was read within CORPUS_FILES and CORPUS_BYTES, and no folder failed
-    to list; a partial corpus is never used to scrub."""
-    parts, files, size, complete = [], 0, 0, True
-
-    def failed(_error):
-        nonlocal complete
-        complete = False
-
-    for folder in folders:
-        for dirpath, dirnames, filenames in os.walk(folder, followlinks=False, onerror=failed):
-            dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)
-            for name in sorted(filenames):
-                path = os.path.join(dirpath, name)
-                if os.path.islink(path):
-                    continue
-                if files >= CORPUS_FILES or size >= CORPUS_BYTES:
-                    return _norm("\n".join(parts)), False
-                try:
-                    with open(path, "rb") as fh:
-                        data = fh.read(CORPUS_BYTES - size + 1)
-                except OSError:
-                    complete = False
-                    continue
-                if size + len(data) > CORPUS_BYTES:
-                    return _norm("\n".join(parts)), False
-                files += 1
-                size += len(data)
-                parts.append(data.decode("utf-8", errors="ignore"))
-    return _norm("\n".join(parts)), complete
-
-
-def _error_prefix(norm):
-    """The error prefix a normalised line starts with, or None."""
-    return next((p for p in ERROR_START if norm.startswith(p)), None)
-
-
-def _is_error_line(norm):
-    """The allowlist: only an installer's error-looking lines may be shown."""
-    return (_error_prefix(norm) is not None
-            or any(code in norm for code in ERROR_CODES)
-            or HTTP_ERROR.search(norm) is not None)
-
-
-def _leaks(norm, corpus):
-    """True when a normalised candidate line may quote the package. Long
-    enough: any SHARED_RUN characters of the line appear in the corpus. Short
-    once its error prefix is removed: the remainder appears in the corpus."""
-    prefix = _error_prefix(norm)
-    core = norm[len(prefix):].lstrip(" :") if prefix else norm
-    if len(core) < SHARED_RUN:
-        return core in corpus
-    return any(norm[i:i + SHARED_RUN] in corpus for i in range(len(norm) - SHARED_RUN + 1))
-
-
-def _installer_output(run_output, corpus):
-    """`installer_output` for one run: allowlisted error lines only, each
-    shown line cut to OUTPUT_LINE_CHARS, lines that may quote the package
-    dropped, and every line not shown counted as dropped. Then the last
-    OUTPUT_LINES that fit in OUTPUT_BYTES."""
-    lines, dropped = [], 0
-    for raw in run_output.replace("\r", "\n").split("\n"):
-        shown = _display(raw)
-        if not shown:
-            continue
-        norm = _norm(shown)
-        if not _is_error_line(norm) or _leaks(norm, corpus):
-            dropped += 1
-        else:
-            lines.append(shown)
-    tail, total = [], 0
-    for line in reversed(lines[-OUTPUT_LINES:]):
-        cost = len(line.encode("utf-8")) + 1
-        if total + cost > OUTPUT_BYTES:
-            break
-        tail.insert(0, line)
-        total += cost
-    return {"lines": tail, "dropped": dropped}
-
-
-def _shown(out, run_output, folders, log_path, complete=True):
-    """Attach `installer_output` when a package landed to scrub against, and
-    return the reason's sentence about the output. The output is held back
-    when nothing landed, when the caller says the package is incomplete, or
-    when the corpus is partial (over the cap, or unreadable)."""
-    corpus, ok = _corpus(folders) if folders else ("", False)
-    if not complete or not ok:
-        return HELD_BACK.format(log=log_path)
-    out["installer_output"] = _installer_output(run_output, corpus)
-    return f"Its output is in {log_path}."
+def _installer_error(code, run_output):
+    """`installer_error` for a failed run: its exit code, and the sorted codes
+    whose fixed detector matches that run's output. Matched text is never
+    kept."""
+    return {"exit": code,
+            "codes": sorted(c for c, rx in ERROR_DETECTORS.items() if rx.search(run_output))}
 
 
 def _landed(stage_root):
@@ -377,7 +307,9 @@ def install(argv, *, home=None, cwd=None, support_dir=None, approve=None, backen
             out["outcome"] = "declined" if answer is False else "not_installed"
             out["reasons"].append("The person did not add the marketplace.")
             return out
-        code = _run(list(argv), cwd, _real_env(home), log_path)
+        code, run_output = _run_output(list(argv), cwd, _real_env(home), log_path)
+        if code != 0:
+            out["installer_error"] = _installer_error(code, run_output)
         out["outcome"] = "done" if code == 0 else "not_installed"
         out["reasons"].append("Added the marketplace; nothing from it is installed yet."
                               if code == 0 else
@@ -459,10 +391,9 @@ def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approv
                          f"{_short(appeared[0], home)}, outside SkillCanary's staging folder. "
                          "SkillCanary installed nothing. Run canary list to see it.")
     if code != 0:
-        landed = [f for root in (stage_home, stage_project) for f in _landed(root)[0]]
-        shown = _shown(out, run_output, landed, log_path)
+        out["installer_error"] = _installer_error(code, run_output)
         return _not(out, f"The installer failed ({'exit ' + str(code) if code is not None else 'did not finish'}); "
-                         f"nothing was installed. {shown}")
+                         f"nothing was installed. Its output is in {log_path}.")
     roots = ((stage_home, home), (stage_project, cwd))
     plan, links = [], []  # (staged folder, destination); (link destination, target destination)
     for stage_root, real_root in roots:
@@ -473,6 +404,7 @@ def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approv
         return _not(out, "A skill folder's name is not one SkillCanary can use (lowercase "
                          "letters, digits and dashes); nothing was installed.")
     if not plan:
+        out["installer_error"] = _installer_error(code, run_output)
         return _not(out, "The installer added no skills to its staging home, so there was "
                          f"nothing to check or install. The installer failed before any skill "
                          f"landed; its output is in {log_path}, which the person can open.")
@@ -666,16 +598,18 @@ def _plugin(parsed, home, cwd, support_dir, run_dir, run_id, log_path, out, appr
     if source is None:
         return _not(out, f"SkillCanary could not find the marketplace {marketplace}. Add it "
                          "first: claude plugin marketplace add <source>.")
-    if _run([argv[0], "plugin", "marketplace", "add", source], stage_project, env, log_path) != 0:
+    code, run_output = _run_output([argv[0], "plugin", "marketplace", "add", source],
+                                   stage_project, env, log_path)
+    if code != 0:
+        out["installer_error"] = _installer_error(code, run_output)
         return _not(out, "SkillCanary could not stage the marketplace. The installer failed "
                          f"before anything landed; its output is in {log_path}, which the "
                          "person can open.")
     code, run_output = _run_output(list(argv), stage_project, env, log_path)
     if code != 0:
-        staged_now = _install_path(stage_config, plugin_id, scope)
-        landed = [staged_now] if staged_now and os.path.isdir(staged_now) else []
-        shown = _shown(out, run_output, landed, log_path)
-        return _not(out, f"The installer failed in staging; nothing was installed. {shown}")
+        out["installer_error"] = _installer_error(code, run_output)
+        return _not(out, f"The installer failed in staging; nothing was installed. "
+                         f"Its output is in {log_path}.")
     staged = _install_path(stage_config, plugin_id, scope)
     if not staged or not os.path.isdir(staged):
         return _not(out, f"The installer did not report where it put {plugin_id}; nothing was installed.")
@@ -706,9 +640,8 @@ def _plugin(parsed, home, cwd, support_dir, run_dir, run_id, log_path, out, appr
             # Nothing of ours to undo: a failed update keeps what was there.
             # A real install folder that exists but cannot be read leaves the
             # package partly seen, so its output is withheld.
-            shown = _shown(out, run_output, [staged], log_path,
-                           complete=not (real and got is None))
-            return _not(out, f"The installer failed. {shown}")
+            out["installer_error"] = _installer_error(code, run_output)
+            return _not(out, f"The installer failed; its output is in {log_path}.")
         if got != items[0]["digest"]:
             removed = _run([argv[0], "plugin", "uninstall", plugin_id, "--scope", scope], cwd,
                            _real_env(home), log_path)
@@ -737,12 +670,10 @@ def render_text(out):
     lines = [f"SkillCanary install: {out['outcome']}" + (f" ({out['verdict']})" if out["verdict"] else "")]
     lines += [f"  {s['name']}: {s['verdict']}" for s in out["skills"]]
     lines += [f"  - {r}" for r in out["reasons"]]
-    if "installer_output" in out:
-        shown = out["installer_output"]
-        lines.append("  Installer output:")
-        lines += [f"    {line}" for line in shown["lines"]]
-        if shown["dropped"]:
-            lines.append(f"    ({shown['dropped']} lines left out, because they quote "
-                         "the package's own text)")
+    if "installer_error" in out:
+        err = out["installer_error"]
+        lines.append(f"  Installer error: exit {err['exit']}; "
+                     f"{', '.join(err['codes']) or 'no known error code'}")
+        lines += [f"  {HINTS[code]}" for code in err["codes"]]
     lines += [f"  Installed: {p}" for p in out["installed"]]
     return "\n".join(lines)
