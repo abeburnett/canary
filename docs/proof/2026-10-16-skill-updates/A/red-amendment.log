@@ -1,0 +1,55 @@
+commit a895a1b8ac5bda9456ffccac7fe6409c320477a7 (catalog from this commit, tests from the amendment; run in a scratch copy)
+Python 3.10.3
+...................FFF..............FFF......
+======================================================================
+FAIL: test_a_security_subcommand_split_across_two_lines_is_flagged (tests.test_scan.KeychainAndSkillsFolderPatternsStayOnTheirLine)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary/250bf95e-1d20-422f-9ea3-69496bf4aec0/scratchpad/redcheck/tests/test_scan.py", line 509, in test_a_security_subcommand_split_across_two_lines_is_flagged
+    self.assertIn(("credential-access", "keychain"),
+AssertionError: ('credential-access', 'keychain') not found in []
+
+======================================================================
+FAIL: test_appending_to_another_skill_with_a_redirect_is_flagged (tests.test_scan.KeychainAndSkillsFolderPatternsStayOnTheirLine)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary/250bf95e-1d20-422f-9ea3-69496bf4aec0/scratchpad/redcheck/tests/test_scan.py", line 513, in test_appending_to_another_skill_with_a_redirect_is_flagged
+    self.assertIn(("persistence", "agent-config"),
+AssertionError: ('persistence', 'agent-config') not found in []
+
+======================================================================
+FAIL: test_copying_a_file_onto_another_skill_is_flagged (tests.test_scan.KeychainAndSkillsFolderPatternsStayOnTheirLine)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary/250bf95e-1d20-422f-9ea3-69496bf4aec0/scratchpad/redcheck/tests/test_scan.py", line 525, in test_copying_a_file_onto_another_skill_is_flagged
+    self.assertIn(("persistence", "agent-config"),
+AssertionError: ('persistence', 'agent-config') not found in []
+
+======================================================================
+FAIL: test_security_with_an_option_before_the_subcommand_is_flagged (tests.test_scan.KeychainAndSkillsFolderPatternsStayOnTheirLine)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary/250bf95e-1d20-422f-9ea3-69496bf4aec0/scratchpad/redcheck/tests/test_scan.py", line 505, in test_security_with_an_option_before_the_subcommand_is_flagged
+    self.assertIn(("credential-access", "keychain"),
+AssertionError: ('credential-access', 'keychain') not found in []
+
+======================================================================
+FAIL: test_sed_in_place_on_an_agents_skill_is_flagged (tests.test_scan.KeychainAndSkillsFolderPatternsStayOnTheirLine)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary/250bf95e-1d20-422f-9ea3-69496bf4aec0/scratchpad/redcheck/tests/test_scan.py", line 521, in test_sed_in_place_on_an_agents_skill_is_flagged
+    self.assertIn(("persistence", "agent-config"),
+AssertionError: ('persistence', 'agent-config') not found in []
+
+======================================================================
+FAIL: test_tee_into_a_codex_skill_is_flagged (tests.test_scan.KeychainAndSkillsFolderPatternsStayOnTheirLine)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary/250bf95e-1d20-422f-9ea3-69496bf4aec0/scratchpad/redcheck/tests/test_scan.py", line 517, in test_tee_into_a_codex_skill_is_flagged
+    self.assertIn(("persistence", "agent-config"),
+AssertionError: ('persistence', 'agent-config') not found in []
+
+----------------------------------------------------------------------
+Ran 45 tests in 10.843s
+
+FAILED (failures=6)

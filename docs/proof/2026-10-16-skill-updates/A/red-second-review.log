@@ -1,0 +1,7 @@
+commit 375e13e2e2c7a13132d15ebb98ad033fdc142f67 (catalog from this commit, tests from the second review; run in a scratch copy)
+Python 3.10.3
+...............................................
+----------------------------------------------------------------------
+Ran 47 tests in 8.454s
+
+OK

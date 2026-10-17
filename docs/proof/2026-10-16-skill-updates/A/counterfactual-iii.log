@@ -1,0 +1,69 @@
+commit 0f8daa37b7dbfa1eed813f5e16391e42e037da5d
+Python 3.10.3
+counterfactual (iii): reverted line canary/catalog.py agent-config settings alternative restored to include the bare skills folder ("config\.toml|skills)")
+......................FFF.........F............
+======================================================================
+FAIL: test_copying_a_folder_into_a_named_skill_folder_is_not_flagged (tests.test_scan.KeychainAndSkillsFolderPatternsStayOnTheirLine)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-acd541b30fb1b9c06/tests/test_scan.py", line 532, in test_copying_a_folder_into_a_named_skill_folder_is_not_flagged
+    self.assertEqual(
+AssertionError: Lists differ: [('persistence', 'agent-config')] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+('persistence', 'agent-config')
+
+- [('persistence', 'agent-config')]
++ []
+
+======================================================================
+FAIL: test_copying_a_folder_into_a_skills_folder_is_not_flagged (tests.test_scan.KeychainAndSkillsFolderPatternsStayOnTheirLine)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-acd541b30fb1b9c06/tests/test_scan.py", line 529, in test_copying_a_folder_into_a_skills_folder_is_not_flagged
+    self.assertEqual(self._weighted("Run cp -r taste-skill ~/.claude/skills/"), [])
+AssertionError: Lists differ: [('persistence', 'agent-config')] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+('persistence', 'agent-config')
+
+- [('persistence', 'agent-config')]
++ []
+
+======================================================================
+FAIL: test_copying_into_a_skills_folder_is_not_flagged (tests.test_scan.KeychainAndSkillsFolderPatternsStayOnTheirLine)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-acd541b30fb1b9c06/tests/test_scan.py", line 467, in test_copying_into_a_skills_folder_is_not_flagged
+    self.assertEqual(self._weighted("To use it, copy this folder into ~/.claude/skills."), [])
+AssertionError: Lists differ: [('persistence', 'agent-config')] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+('persistence', 'agent-config')
+
+- [('persistence', 'agent-config')]
++ []
+
+======================================================================
+FAIL: test_removing_then_copying_into_a_skills_folder_is_not_flagged (tests.test_scan.KeychainAndSkillsFolderPatternsStayOnTheirLine)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-acd541b30fb1b9c06/tests/test_scan.py", line 470, in test_removing_then_copying_into_a_skills_folder_is_not_flagged
+    self.assertEqual(
+AssertionError: Lists differ: [('persistence', 'agent-config')] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+('persistence', 'agent-config')
+
+- [('persistence', 'agent-config')]
++ []
+
+----------------------------------------------------------------------
+Ran 47 tests in 11.814s
+
+FAILED (failures=4)
+exit=1

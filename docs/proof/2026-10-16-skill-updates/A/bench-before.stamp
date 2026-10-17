@@ -1,0 +1,4 @@
+commit 3b8446f3e3dc73e3756aed85bca4b6acd7a693ec
+version 0.1.4
+interpreter Python 3.10.3
+scanner source commit 5563ca7 (no scanner code changed by 3b8446f)

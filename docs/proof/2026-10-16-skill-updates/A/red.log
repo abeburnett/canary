@@ -1,0 +1,92 @@
+commit 3b8446f3e3dc73e3756aed85bca4b6acd7a693ec
+Python 3.10.3
+note: the new class in tests/test_scan.py is uncommitted on top of this commit; scanner code is unchanged
+...................FF...F.F..FF.......
+======================================================================
+FAIL: test_copying_into_a_skills_folder_is_not_flagged (tests.test_scan.KeychainAndSkillsFolderPatternsStayOnTheirLine)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-acd541b30fb1b9c06/tests/test_scan.py", line 467, in test_copying_into_a_skills_folder_is_not_flagged
+    self.assertEqual(self._weighted("To use it, copy this folder into ~/.claude/skills."), [])
+AssertionError: Lists differ: [('persistence', 'agent-config')] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+('persistence', 'agent-config')
+
+- [('persistence', 'agent-config')]
++ []
+
+======================================================================
+FAIL: test_dump_and_keychain_on_separate_lines_are_not_flagged (tests.test_scan.KeychainAndSkillsFolderPatternsStayOnTheirLine)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-acd541b30fb1b9c06/tests/test_scan.py", line 474, in test_dump_and_keychain_on_separate_lines_are_not_flagged
+    self.assertEqual(self._weighted("We can dump\nkeychain images to a folder."), [])
+AssertionError: Lists differ: [('credential-access', 'keychain')] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+('credential-access', 'keychain')
+
+- [('credential-access', 'keychain')]
++ []
+
+======================================================================
+FAIL: test_keychain_charms_prose_is_not_flagged (tests.test_scan.KeychainAndSkillsFolderPatternsStayOnTheirLine)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-acd541b30fb1b9c06/tests/test_scan.py", line 458, in test_keychain_charms_prose_is_not_flagged
+    self.assertEqual(self._weighted("Our gallery lists 3D keychain charms."), [])
+AssertionError: Lists differ: [('credential-access', 'keychain')] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+('credential-access', 'keychain')
+
+- [('credential-access', 'keychain')]
++ []
+
+======================================================================
+FAIL: test_read_about_keychain_charms_is_not_flagged (tests.test_scan.KeychainAndSkillsFolderPatternsStayOnTheirLine)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-acd541b30fb1b9c06/tests/test_scan.py", line 461, in test_read_about_keychain_charms_is_not_flagged
+    self.assertEqual(self._weighted("Read about our 3D keychain charms."), [])
+AssertionError: Lists differ: [('credential-access', 'keychain')] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+('credential-access', 'keychain')
+
+- [('credential-access', 'keychain')]
++ []
+
+======================================================================
+FAIL: test_removing_then_copying_into_a_skills_folder_is_not_flagged (tests.test_scan.KeychainAndSkillsFolderPatternsStayOnTheirLine)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-acd541b30fb1b9c06/tests/test_scan.py", line 470, in test_removing_then_copying_into_a_skills_folder_is_not_flagged
+    self.assertEqual(
+AssertionError: Lists differ: [('persistence', 'agent-config')] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+('persistence', 'agent-config')
+
+- [('persistence', 'agent-config')]
++ []
+
+======================================================================
+FAIL: test_sec_item_copy_matching_is_flagged (tests.test_scan.KeychainAndSkillsFolderPatternsStayOnTheirLine)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-acd541b30fb1b9c06/tests/test_scan.py", line 489, in test_sec_item_copy_matching_is_flagged
+    self.assertIn(("credential-access", "keychain"),
+AssertionError: ('credential-access', 'keychain') not found in []
+
+----------------------------------------------------------------------
+Ran 38 tests in 10.508s
+
+FAILED (failures=6)
+exit=1
