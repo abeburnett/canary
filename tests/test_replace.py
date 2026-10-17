@@ -903,6 +903,105 @@ class RestoringAReplacedGroup(unittest.TestCase):
                          ["entry-0", "entry-1", "replaced.json"])
         self.assertNotIn("approved", [e["event"] for e in h.ledger()[before:]])
 
+    def test_34_a_saved_link_whose_alias_was_repointed_is_not_put_back(self):
+        """Sol review, finding 1. No seam: the link reaches the folder through an
+        alias, and the alias is repointed after the replace."""
+        h = Home()
+        h.untracked(h.codex)
+        alias = os.path.join(h.home, "alias")
+        os.symlink(h.codex, alias)
+        os.makedirs(os.path.dirname(h.claude))
+        os.symlink(alias, h.claude)
+        out, _ = h.run(V2)
+        self.assertEqual(out["outcome"], "installed")
+        [g1] = h.ids()
+        os.unlink(alias)
+        os.symlink(write_skill(os.path.join(h.home, "elsewhere", "notes"), V3), alias)
+        asked, before = [], len(h.ledger())
+        result = h.restore(g1, ask=lambda text, verdict, confirm=None: asked.append(text) or True)
+        self.assertEqual(result, (False, "Still set aside: the link saved from "
+                                         "~/.claude/skills/notes no longer leads to a copy "
+                                         "SkillCanary checked. canary list shows where it is."))
+        self.assertEqual(asked, [])
+        self.assertEqual([h.read(d) for d in h.dests], [V2, V2])
+        self.assertFalse(os.path.islink(h.claude))
+        self.assertEqual(h.ids(), [g1])
+        self.assertNotIn("approved", [e["event"] for e in h.ledger()[before:]])
+
+    def test_35_an_unchanged_clone_with_git_is_restored(self):
+        """Sol review, finding 2. No seam: an untracked clone with a .git folder,
+        replaced, then restored unchanged."""
+        h = Home()
+        h.untracked()
+        for d in h.dests:
+            os.makedirs(os.path.join(d, ".git"))
+            with open(os.path.join(d, ".git", "HEAD"), "w") as fh:
+                fh.write("ref: refs/heads/main\n")
+        out, _ = h.run(V2)
+        self.assertEqual(out["outcome"], "installed")
+        [g1] = h.ids()
+        back, line = h.restore(g1)
+        self.assertTrue(back, line)
+        self.assertEqual([h.read(d) for d in h.dests], [V1, V1])
+        for d in h.dests:
+            self.assertTrue(os.path.isfile(os.path.join(d, ".git", "HEAD")))
+
+    def test_36_a_restore_that_died_after_its_first_folder_is_finished(self):
+        """Sol review, finding 3. Seam: patch.object(replace, "_rename") raising
+        RuntimeError on the second old entry's move, then a second restore
+        without it."""
+        h = Home()
+        h.run(V1, replace=False)
+        old = h.lock()["skills"]
+        h.run(V2)
+        [g1] = h.ids()
+        g1dir = os.path.join(h.store, g1)
+        real = R()._rename
+
+        def rename(src, dst):
+            if src == os.path.join(g1dir, "entry-1"):
+                raise RuntimeError("killed")
+            return real(src, dst)
+
+        with unittest.mock.patch.object(R(), "_rename", rename):
+            with self.assertRaises(RuntimeError):
+                h.restore(g1)
+        [g2] = [g for g in h.ids() if g != g1]
+        self.assertEqual((h.read(h.claude), os.path.lexists(h.codex)), (V1, False))
+        self.assertEqual(h.restore(g1), (True, None))
+        self.assertEqual([h.read(d) for d in h.dests], [V1, V1])
+        self.assertEqual(h.lock()["skills"], old)
+        self.assertEqual([g["id"] for g in guestlist.scan(h.home, support=h.support)["replaced"]],
+                         [g2])
+
+    def test_37_a_link_left_after_its_folder_returned_is_recovered(self):
+        """Sol review, finding 4. Seam: patch.object(replace, "_rename") raising
+        RuntimeError on the link entry's move (folders move first), then a second
+        restore without it."""
+        h = Home()
+        h.untracked(h.codex)
+        os.makedirs(os.path.dirname(h.claude))
+        os.symlink(os.path.join("..", "..", ".agents", "skills", "notes"), h.claude)
+        h.run(V2)
+        [g1] = h.ids()
+        g1dir = os.path.join(h.store, g1)
+        real = R()._rename
+
+        def rename(src, dst):
+            if src == os.path.join(g1dir, "entry-0"):
+                raise RuntimeError("killed")
+            return real(src, dst)
+
+        with unittest.mock.patch.object(R(), "_rename", rename):
+            with self.assertRaises(RuntimeError):
+                h.restore(g1)
+        self.assertEqual((h.read(h.codex), os.path.lexists(h.claude)), (V1, False))
+        self.assertEqual(h.restore(g1), (True, None))
+        self.assertTrue(os.path.islink(h.claude))
+        self.assertEqual(os.path.realpath(h.claude), os.path.realpath(h.codex))
+        self.assertEqual(h.read(h.codex), V1)
+        self.assertNotIn(g1, h.ids())
+
     def test_28_a_death_between_the_record_and_the_first_rename(self):
         """Seam: patch.object(replace, "_rename", side_effect=RuntimeError)."""
         h = Home()
