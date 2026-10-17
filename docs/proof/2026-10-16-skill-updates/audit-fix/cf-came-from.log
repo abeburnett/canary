@@ -1,0 +1,184 @@
+commit 8ffed53246b4ef1c97a265aa25a449106693f1ed
+Python 3.10.3
+# Counterfactual g: _came_from returns None for every origin (guestlist.py)
+# working-tree diff vs HEAD:
+diff --git a/canary/guestlist.py b/canary/guestlist.py
+index 0eacf29..05c1170 100644
+--- a/canary/guestlist.py
++++ b/canary/guestlist.py
+@@ -413,6 +413,7 @@ def _listed_origin(origin):
+ 
+ def _came_from(origin):
+     """The words for where a checked skill came from, or None."""
++    return None
+     if not isinstance(origin, dict):
+         return None
+     kind = origin.get("kind")
+# ---- suite output ----
+.FFFF................................................................................................................................./Users/abrahamburnett/.pyenv/versions/3.10.3/lib/python3.10/unittest/case.py:549: ResourceWarning: unclosed file <_io.TextIOWrapper name=5 encoding='UTF-8'>
+  method()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+...........................................FFF......................................F...................................................................................................canary: skipped /private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-unlock-0lqhap4k/home/.claude/skills: it is reached through a link
+..................................F...................canary watch: OSError: disk trouble
+.......
+======================================================================
+FAIL: test_each_skill_folder_is_one_package_and_the_strictest_wins (test_action.CanaryActionTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69e10019a0c3744f/tests/test_action.py", line 108, in test_each_skill_folder_is_one_package_and_the_strictest_wins
+    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_files_outside_skill_folders_are_still_scanned (test_action.CanaryActionTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69e10019a0c3744f/tests/test_action.py", line 129, in test_files_outside_skill_folders_are_still_scanned
+    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_invalid_escaping_and_incomplete_inputs_are_rejected (test_action.CanaryActionTests) (name='incomplete-coverage-fails')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69e10019a0c3744f/tests/test_action.py", line 184, in test_invalid_escaping_and_incomplete_inputs_are_rejected
+    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_invalid_escaping_and_incomplete_inputs_are_rejected (test_action.CanaryActionTests) (name='workflow-command-path')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69e10019a0c3744f/tests/test_action.py", line 197, in test_invalid_escaping_and_incomplete_inputs_are_rejected
+    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+AssertionError: 2 != 0 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_private_repository_requires_token_presence_without_disclosure (test_action.CanaryActionTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69e10019a0c3744f/tests/test_action.py", line 224, in test_private_repository_requires_token_presence_without_disclosure
+    self.assertEqual(present.returncode, 0, present.stdout + present.stderr)
+AssertionError: 2 != 0 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='safe')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69e10019a0c3744f/tests/test_action.py", line 79, in test_verdicts_and_fail_thresholds_follow_the_public_contract
+    self.assertEqual(result.returncode, expected_code, result.stderr)
+AssertionError: 2 != 0 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='review')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69e10019a0c3744f/tests/test_action.py", line 79, in test_verdicts_and_fail_thresholds_follow_the_public_contract
+    self.assertEqual(result.returncode, expected_code, result.stderr)
+AssertionError: 2 != 0 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='unsafe')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69e10019a0c3744f/tests/test_action.py", line 79, in test_verdicts_and_fail_thresholds_follow_the_public_contract
+    self.assertEqual(result.returncode, expected_code, result.stderr)
+AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='review-fails')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69e10019a0c3744f/tests/test_action.py", line 79, in test_verdicts_and_fail_thresholds_follow_the_public_contract
+    self.assertEqual(result.returncode, expected_code, result.stderr)
+AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='never')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69e10019a0c3744f/tests/test_action.py", line 79, in test_verdicts_and_fail_thresholds_follow_the_public_contract
+    self.assertEqual(result.returncode, expected_code, result.stderr)
+AssertionError: 2 != 0 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69e10019a0c3744f/tests/test_action.py", line 96, in test_verdicts_and_fail_thresholds_follow_the_public_contract
+    self.assertEqual(result.returncode, 1, result.stderr)
+AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_a_local_folder_renders_as_local_folder (test_guestlist.WhereASkillCameFrom)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69e10019a0c3744f/tests/test_guestlist.py", line 295, in test_a_local_folder_renders_as_local_folder
+    self.assertRegex(guestlist.render_text(report), r"mine2 .*local folder")
+AssertionError: Regex didn't match: 'mine2 .*local folder' not found in 'mine2        checked                 /private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-guests-7s46589y/.agents/skills/mine2\nmine2        checked                 /private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-guests-7s46589y/.claude/skills/mine2\nnotes        yours                   /private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-guests-7s46589y/.claude/skills/notes\norchestrate  yours                   /private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-guests-7s46589y/.agents/skills/orchestrate'
+
+======================================================================
+FAIL: test_add_from_github_lists_owner_repo_and_commit (test_guestlist.WhereASkillCameFrom)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69e10019a0c3744f/tests/test_guestlist.py", line 282, in test_add_from_github_lists_owner_repo_and_commit
+    self.assertIn("someone/skills@" + SHA[:7], guestlist.render_text(report))
+AssertionError: 'someone/skills@0123456' not found in 'notes        yours                   /private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-guests-qe85njx0/.claude/skills/notes\nnotes2       checked                 /private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-guests-qe85njx0/.agents/skills/notes2\nnotes2       checked                 /private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-guests-qe85njx0/.claude/skills/notes2\norchestrate  yours                   /private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-guests-qe85njx0/.agents/skills/orchestrate'
+
+======================================================================
+FAIL: test_origin_survives_a_changed_event (test_guestlist.WhereASkillCameFrom)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69e10019a0c3744f/tests/test_guestlist.py", line 308, in test_origin_survives_a_changed_event
+    self.assertIn("someone/skills@" + SHA[:7], guestlist.render_text(report))
+AssertionError: 'someone/skills@0123456' not found in 'notes        yours                   /private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-guests-l_m8k_sf/.claude/skills/notes\nnotes2       checked                 /private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-guests-l_m8k_sf/.agents/skills/notes2\nnotes2       changed since approval  /private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-guests-l_m8k_sf/.claude/skills/notes2\norchestrate  yours                   /private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-guests-l_m8k_sf/.agents/skills/orchestrate'
+
+======================================================================
+FAIL: test_the_list_shows_the_install_came_from_the_installer (test_install.SkillsComeFromStaging)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69e10019a0c3744f/tests/test_install.py", line 221, in test_the_list_shows_the_install_came_from_the_installer
+    self.assertRegex(guestlist.render_text(report), r"helper .*installer")
+AssertionError: Regex didn't match: 'helper .*installer' not found in 'helper  checked                 /private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-install-kpevbqxd/home/.agents/skills/helper'
+
+======================================================================
+FAIL: test_a_restored_skill_lists_as_restored (test_watcher.ThePersonDecides)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69e10019a0c3744f/tests/test_watcher.py", line 206, in test_a_restored_skill_lists_as_restored
+    self.assertRegex(guestlist.render_text(report), r"dropped-in .*restored")
+AssertionError: Regex didn't match: 'dropped-in .*restored' not found in 'dropped-in   checked                 /private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-watch-u658f_xx/.agents/skills/dropped-in\nnotes        yours                   /private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-watch-u658f_xx/.claude/skills/notes\norchestrate  yours                   /private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-watch-u658f_xx/.agents/skills/orchestrate'
+
+----------------------------------------------------------------------
+Ran 380 tests in 82.428s
+
+FAILED (failures=16)
+# ---- red lines ----
+FAIL: test_each_skill_folder_is_one_package_and_the_strictest_wins (test_action.CanaryActionTests)
+FAIL: test_files_outside_skill_folders_are_still_scanned (test_action.CanaryActionTests)
+FAIL: test_invalid_escaping_and_incomplete_inputs_are_rejected (test_action.CanaryActionTests) (name='incomplete-coverage-fails')
+FAIL: test_invalid_escaping_and_incomplete_inputs_are_rejected (test_action.CanaryActionTests) (name='workflow-command-path')
+FAIL: test_private_repository_requires_token_presence_without_disclosure (test_action.CanaryActionTests)
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='safe')
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='review')
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='unsafe')
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='review-fails')
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='never')
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests)
+FAIL: test_a_local_folder_renders_as_local_folder (test_guestlist.WhereASkillCameFrom)
+FAIL: test_add_from_github_lists_owner_repo_and_commit (test_guestlist.WhereASkillCameFrom)
+FAIL: test_origin_survives_a_changed_event (test_guestlist.WhereASkillCameFrom)
+FAIL: test_the_list_shows_the_install_came_from_the_installer (test_install.SkillsComeFromStaging)
+FAIL: test_a_restored_skill_lists_as_restored (test_watcher.ThePersonDecides)
+duration=82s exit=1

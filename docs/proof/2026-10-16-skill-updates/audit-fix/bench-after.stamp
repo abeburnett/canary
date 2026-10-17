@@ -1,0 +1,5 @@
+commit 8ffed53246b4ef1c97a265aa25a449106693f1ed
+version 0.1.4
+interpreter Python 3.10.3
+scanner source commit 2320a5b (last commit touching canary/catalog.py or canary/scan.py)
+command python3 bin/canary bench --json --layer 1
