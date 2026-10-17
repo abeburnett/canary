@@ -112,6 +112,9 @@ two lines, which the paragraph pass now catches. The planted attack fixture scor
   The scanner flags the capability; it cannot see the future bytes.
 - **Multi-package attacks**: a clean skill that tells the agent to install a
   second one. The gate, not the scanner, has to stop that install.
+- **Whole-folder overwrite**: a skill that copies a whole folder over another
+  skill is not caught by the skills-folder pattern. The guest list reports
+  the overwritten skill as changed since approval at the next scan or session.
 
 ## Context labels
 

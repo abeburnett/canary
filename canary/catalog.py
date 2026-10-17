@@ -104,7 +104,8 @@ CHECKS = [
       (r"\b(write|edit|modify|overwrite|append|patch)\w*\s+(to\s+|into\s+|in\s+)?(\S+\s+){0,2}?(~/\.claude|~/\.codex|~/\.cursor|~/\.agents)/skills", False, "agent-config", True),
       (r"\b(delete|remove|rm(\s+-\w+)*)\s+(\S+\s+){0,1}?(~/\.claude|~/\.codex|~/\.cursor|~/\.agents)/skills", False, "agent-config", True),
       # Writes into a skills folder by form: a redirect or tee, sed -i, or cp, mv, ln or rsync onto another skill's file.
-      (r"(>>?\s*|\btee(\s+-\w+)*\s+)['\"]?(~/\.claude|~/\.codex|~/\.cursor|~/\.agents)/skills", False, "agent-config"),
+      (r">>?\s*['\"]?(~/\.claude|~/\.codex|~/\.cursor|~/\.agents)/skills", False, "agent-config"),
+      (r"\btee\b[^\n|;&]{0,200}?(~/\.claude|~/\.codex|~/\.cursor|~/\.agents)/skills", False, "agent-config", True),
       (r"\bsed\b.{0,200}?\s-i\S*\s.{0,200}?(~/\.claude|~/\.codex|~/\.cursor|~/\.agents)/skills", False, "agent-config", True),
       (r"\b(cp|mv|ln|rsync)\b(\s+-\S+)*\s+.{0,200}?(~/\.claude|~/\.codex|~/\.cursor|~/\.agents)/skills/[^\s/]+/\S+", False, "agent-config", True),
       (r"launchctl\s+(load|bootstrap|bootout|unload)|LaunchAgents/|crontab\s", False, "schedule")]),

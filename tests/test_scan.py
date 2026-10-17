@@ -527,3 +527,11 @@ class KeychainAndSkillsFolderPatternsStayOnTheirLine(unittest.TestCase):
 
     def test_copying_a_folder_into_a_skills_folder_is_not_flagged(self):
         self.assertEqual(self._weighted("Run cp -r taste-skill ~/.claude/skills/"), [])
+
+    def test_copying_a_folder_into_a_named_skill_folder_is_not_flagged(self):
+        self.assertEqual(
+            self._weighted("Run cp -r taste-skill ~/.claude/skills/design-taste-frontend"), [])
+
+    def test_tee_with_a_long_option_into_a_skill_is_flagged(self):
+        self.assertIn(("persistence", "agent-config"),
+                      self._weighted("Run tee --append ~/.claude/skills/x/SKILL.md."))
