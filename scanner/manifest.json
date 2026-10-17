@@ -1,11 +1,11 @@
 {
-  "version": "d16b09d",
+  "version": "f347664",
   "files": {
     "bin/canary": "6be3492d4a1c5373bf1040f4a612737548593853448d95f436d5828e9545ffa9",
     "canary/__init__.py": "5b37f94f73410df850a139e19d13474a502c1345cca9b7255c6f8cf3555ab3bd",
     "canary/add.py": "fa429422f339e8f46f6159f87d0525a1efc3d99ea09b25da1928d38fb5666c40",
     "canary/bench.py": "fe922b5e3d4452079b135b0c1122a586c5c70648478e2b01cdcd6be399dfe44d",
-    "canary/catalog.py": "e93a69fcddbe9e2161930519d498097aa42ce3203992b4d58a261ea36be4614e",
+    "canary/catalog.py": "7fc85de1af33f52ac9e2dec59557fc0de053222990de9495acf9c58597c1ceeb",
     "canary/classifiers/anthropic_api.py": "a38794d24641ab62a3acfa889e6f264ee2f83fe68e42c028d8fe211d01b6f833",
     "canary/classifiers/claude_cli.py": "6985170c7cc0d4e512d2491b9219db08f90e26c6d23e32a5427d4840414e7067",
     "canary/classifiers/openai_api.py": "8f12e081140a78b472788263bc483677dabcdc547082cb034849d7d5cb569dc6",
