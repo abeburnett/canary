@@ -284,3 +284,36 @@ Tests added for each: `security -i find-generic-password` and a
 ~/.codex/skills/x/SKILL.md`, `sed -i '' s/a/b/ ~/.agents/skills/x/SKILL.md`
 and `cp evil.md ~/.claude/skills/other/SKILL.md` flag; `cp -r taste-skill
 ~/.claude/skills/` does not.
+
+## Slice B amendment (automated security review, 2026-10-16)
+
+The plugin found four ways the scrub fails open: lines shorter than 24
+characters are never compared; output and package text are normalised
+differently; a capped corpus scrubs against part of the package; and a
+failure before the package fully lands scrubs against what happened to
+land. A scrub cannot be made airtight, so slice B now fails closed:
+
+1. **Allowlist first.** A line is a candidate only when it looks like an
+   installer error: it starts with (after trimming) `Error`, `error`,
+   `ERR!`, `npm ERR!`, `npm error`, `fatal:`, `warning:` or `WARN`, or it
+   contains an error code from a fixed list (`ENOTFOUND`, `ECONNREFUSED`,
+   `ECONNRESET`, `ETIMEDOUT`, `EACCES`, `EPERM`, `ENOENT`, `E404`, `E403`,
+   `HTTP 4xx/5xx`, `404 Not Found`, `403 Forbidden`, `unknown option`,
+   `not found`, `permission denied`). Everything else is held back.
+2. **One normalisation.** Output lines and corpus text both go through the
+   same steps: control and ANSI characters removed, tabs and CR to spaces,
+   runs of whitespace collapsed to one space, casefolded. Matching runs on
+   that form.
+3. **Short lines too.** After normalising, a candidate line is dropped when
+   it shares a run of 24 characters with the corpus, or, when shorter than
+   24 characters once its error prefix is removed, when the remainder
+   appears anywhere in the corpus.
+4. **No partial corpus.** When the corpus cap (500 files, 2 MB) is reached,
+   or no package text landed, or for the plugin path the real install
+   folder exists but cannot be read, `installer_output` is withheld and the
+   held-back sentence is used.
+
+Tests added: a short skill line under 24 characters echoed with an
+`Error:` prefix is dropped; a skill line echoed with tabs or doubled
+spaces is dropped; a corpus over the cap withholds the output; an ordinary
+progress line (not an error form) never appears.
