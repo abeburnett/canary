@@ -1,0 +1,41 @@
+commit b7ccf1fe188556145181d009e4c55139d0e0a7a0 (plus the counterfactual edit below)
+Python 3.10.3
+counterfactual (vi): canary/scan.py _logical_lines loop condition changed to "while False and lines[n].endswith(backslash) and n + 1 < total" so no backslash line is joined
+...................F..FFF..................................
+======================================================================
+FAIL: test_a_cp_continued_with_a_backslash_onto_another_skill_is_flagged (tests.test_scan.KeychainAndSkillsFolderPatternsStayOnTheirLine)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-acd541b30fb1b9c06/tests/test_scan.py", line 552, in test_a_cp_continued_with_a_backslash_onto_another_skill_is_flagged
+    self.assertIn(("persistence", "agent-config"),
+AssertionError: ('persistence', 'agent-config') not found in []
+
+======================================================================
+FAIL: test_a_sed_in_place_continued_with_a_backslash_on_an_agents_skill_is_flagged (tests.test_scan.KeychainAndSkillsFolderPatternsStayOnTheirLine)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-acd541b30fb1b9c06/tests/test_scan.py", line 560, in test_a_sed_in_place_continued_with_a_backslash_on_an_agents_skill_is_flagged
+    self.assertIn(("persistence", "agent-config"),
+AssertionError: ('persistence', 'agent-config') not found in []
+
+======================================================================
+FAIL: test_a_tee_continued_with_a_backslash_into_a_skill_is_flagged (tests.test_scan.KeychainAndSkillsFolderPatternsStayOnTheirLine)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-acd541b30fb1b9c06/tests/test_scan.py", line 556, in test_a_tee_continued_with_a_backslash_into_a_skill_is_flagged
+    self.assertIn(("persistence", "agent-config"),
+AssertionError: ('persistence', 'agent-config') not found in []
+
+======================================================================
+FAIL: test_an_overwrite_continued_with_a_backslash_onto_a_skill_is_flagged (tests.test_scan.KeychainAndSkillsFolderPatternsStayOnTheirLine)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-acd541b30fb1b9c06/tests/test_scan.py", line 570, in test_an_overwrite_continued_with_a_backslash_onto_a_skill_is_flagged
+    self.assertIn(("persistence", "agent-config"),
+AssertionError: ('persistence', 'agent-config') not found in []
+
+----------------------------------------------------------------------
+Ran 59 tests in 9.821s
+
+FAILED (failures=4)
+exit=1
