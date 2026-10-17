@@ -81,13 +81,18 @@ none until step 11.
    - `paths`: the sorted `existing` destinations (the dialog and the
      re-plan compare on this and on `sorted(records)`).
    The plan refuses (section 2) when: a destination is a link whose
-   resolved target is not another destination of this run; a destination
+   resolved target is not another destination of this run that exists
+   (`lexists`) as a folder holding `SKILL.md` (so a group always has at
+   least one folder to check on restore); a destination
    exists but is neither a link nor a folder holding `SKILL.md`; a live
    record of another name lists a destination; a record in `records` has a
    live path outside `destinations`; or the store and an existing
    destination's parent are on different devices
    (`os.stat(parent).st_dev != os.stat(store).st_dev`, store created with
-   `os.makedirs(mode=0o700, exist_ok=True)` first). When nothing exists and
+   `os.makedirs(mode=0o700, exist_ok=True)` first). `plan(..., name=None)`
+   runs only the filesystem rules (link target, `SKILL.md`, device) and
+   skips the record rules; `canary install` uses that form before its
+   classifier calls (1.2 step 2). When nothing exists and
    `records` is empty, the plan is empty and the run is a fresh install
    with the flag ignored; the dialog is the ordinary one.
    Without `--replace`, `conflict_reason` runs as today with the new
@@ -119,8 +124,13 @@ none until step 11.
 8. **Capture the old ledger states** (`replace.ledger_states(support,
    paths)`): `guestlist._state(guestlist._events(support))` read without
    the ledger lock (as `watcher._approved` does), one entry per existing
-   destination's real path: `{status, digest, approved, override, origin,
-   since}` or `None`. These feed the undo (step 10) and the group record.
+   folder destination, **keyed by the destination path as planned** (the
+   origin), holding `{"path": os.path.realpath(origin), status, digest,
+   approved, override, origin, since}` or `None`; the ledger state is
+   looked up by that real path, which is what `record_install` stores and
+   `watcher._approved` reads. Every later lookup (`undo`, the group
+   record, restore's 4.5) is `states[origin]`; nothing looks up by real
+   path again. These feed the undo (1.4) and the group record.
 9. **Set aside** (`replace.set_aside(support, name, "canary add", plan,
    states)` → group id, or `None` for an empty plan):
    1. `id = time.strftime("%Y%m%dT%H%M%SZ") + "-" + secrets.token_hex(4)`
@@ -200,17 +210,22 @@ none until step 11.
 2. `_skills`: staging, the installer run, `_appeared`, the failure checks,
    `_landed`, the folder-name check, `link_plan`, `taken`, `places`: all
    unchanged. The first `conflict_reason(lock, [], places, taken, home)`
-   (destinations only, before names) is **skipped** when `replace` is
-   true; the plan runs once names are known.
+   (destinations only, before names) is **replaced**, when `replace` is
+   true, by `replace.plan(lock, None, taken, roots, home, support)`: the
+   filesystem-only refusals (a link to anywhere but an existing folder
+   destination of this run, a destination without `SKILL.md`, a store on
+   another disk) and the project-destination refusal of step 4 run here,
+   before any classifier call; the record rules run once names are known.
 3. `_snapshot_and_check` as today (one classifier call per skill).
 4. With `--replace`, refusals once names and destinations are known, with
    nothing recorded (no `record_decision`) and the installer not run again:
-   more than one name in `names`; any path in `taken` whose
-   `os.path.realpath(os.path.dirname(p))` (the normalisation of 1.1 step 3,
-   which never collapses a link onto its target) is not in
-   `guestlist.user_roots(home)` (a project destination); then
-   `replace.plan(lock, name, taken, roots, home, support)` with its own
-   refusals. The destinations of an install are `taken`: the real folder
+   more than one name in `names`; then the full
+   `replace.plan(lock, name, taken, roots, home, support)` with its record
+   rules. (The project-destination check, any path in `taken` whose
+   `os.path.realpath(os.path.dirname(p))`, the normalisation of 1.1 step 3
+   that never collapses a link onto its target, is not in
+   `guestlist.user_roots(home)`, already ran in step 2, before the
+   classifier.) The destinations of an install are `taken`: the real folder
    and every link the installer made between its skills, so an npx layout
    (`~/.agents/skills/x` plus the link `~/.claude/skills/x`) is replaced
    as a unit and recreated as a unit.
@@ -248,7 +263,7 @@ in place. In this order:
    guestlist.record_events, support, events)`, one per member, chosen
    from the state captured in step 8, all with `"how": "replace undo"`:
    - `checked`: `{"event": "approved", "how": "replace undo", "name",
-     "skill": path, "digest": <old approved digest>, "override": true
+     "skill": states[origin]["path"], "digest": <old approved digest>, "override": true
      when it was, "origin": <old origin> when there was one}`, followed by
      `{"event": "changed", "skill": path, "name", "digest": <old current
      digest>}` when the old copy had drifted from its approval;
@@ -368,7 +383,9 @@ After a failed install or lock write (added to the existing sentence):
 - Restore undo incomplete (section 4.6): `Still set aside: SkillCanary could not move it back, and could not put the copy that was there back at <paths>; that copy is kept as <G2 id>. canary list shows where it is.`
 
 Outcomes and exit codes are unchanged: every refusal above is
-`not_installed` (exit 10) except the two `InstallError`s (exit 2).
+`not_installed` (exit 10) except the two `InstallError`s (exit 2), and
+`canary restore` with an id that is neither held nor replaced raises
+`ValueError`, which `cli._restore` prints as usage (exit 2), as today.
 
 ## 3. The store for old copies
 
@@ -397,8 +414,9 @@ link exactly as it was). The record, written before any rename:
  "records": {"design-taste-frontend": {"...": "the lock record exactly as it was"}}}
 ```
 
-`states` holds the ledger state of each folder member's real path at
-set-aside time (`null` when there was none); `records` holds every lock
+`states` is keyed by each folder member's origin (as `members[].origin`)
+and holds that path's ledger state at set-aside time, with the real path
+the ledger used under `path` (`null` when there was none); `records` holds every lock
 record the replace removed (`{}` for an untracked folder). `how` is
 `canary add`, `canary install` or `restore`.
 
@@ -448,9 +466,12 @@ Steps:
 
 1. Load the group (validated as in section 3). Members whose entry does
    not exist are not restorable; if none is kept: `(False, "Still set aside: nothing of it is left in SkillCanary's store.")`.
-2. For each kept folder member: `add._copy_local(entry, temp)` and
-   `classify.check` (one classifier call per folder; a `canary add` group
-   has two identical folders and costs two). `SourceError`/`OSError`:
+2. For each kept folder member: `add._copy_local(entry, <a folder under
+   tempfile.mkdtemp(prefix="canary-replaced-")>)` and `classify.check`
+   (one classifier call per folder; a `canary add` group has two identical
+   folders and costs two). The temporary folder is removed in a `finally`
+   when `restore` returns, as `watcher.review` removes its own; the
+   approval in 4.5 is recorded while it still exists. `SourceError`/`OSError`:
    `(False, "Still set aside: it holds links or special files SkillCanary will not copy. canary list shows where it is.")`
    and `record_decision(home, name, "UNSAFE", "refused", support=support)`,
    as `watcher.review` does. Links are not checked; the plan
@@ -524,7 +545,9 @@ Steps:
       else the restore-undo-incomplete sentence of section 2 with the
       paths left and the `G2` id.
    7. Lock: the keys found in 4.2 are already deleted in memory (their
-      records go into `G2`'s `records`, dead ones included); write each
+      records go into `G2`'s `records`, dead ones included, when `G2`
+      exists; with no `G2` they are dropped, which only happens when every
+      origin was empty and so every such record was dead); write each
       record from the old group's `records` back under the key decided in
       4.2 (its own key whenever that key was free) with `"replaced":
       "<G2 id>"` when `G2` exists (the field is dropped when it does not).
@@ -540,15 +563,19 @@ Steps:
    9. Remove the old group's folder: `os.unlink` of `replaced.json`, then
       `os.rmdir`, which refuses while any entry remains; never
       `shutil.rmtree` (unlike `watcher.put_back`, which may `rmtree` an
-      emptied hold).
+      emptied hold). An `OSError` here is swallowed: the restore has
+      succeeded, and a folder without `replaced.json` is not listed
+      (section 3's validation), so a leftover is invisible and harmless.
 5. `(True, "Put back where it was; the copy that was there is set aside as <G2 id>.")`, or `(True, None)` when nothing was there.
 
 Death points: after 4.4, before 4.6: the origins are empty, both groups
 complete, and the lock still holds the displaced record (dead now). A
-second `canary restore <old id>` finds that record in 4.2 (live or not),
-moves it into the new group's `records` (that group has no entries, since
-the origins are empty), puts the old copies back and writes the old
-record; the first `G2` stays listed and restorable. After 4.6, before
+second `canary restore <old id>` finds that record in 4.2 (live or not)
+and deletes it from the lock; since every origin is empty, `set_aside`
+returns `None` and no new group is made, so the record is dropped (the
+first `G2`'s `records` already holds a copy of it). It then puts the old
+copies back and writes the old record; the first `G2` stays listed and
+restorable. After 4.6, before
 4.7: files right, lock stale (the displaced record still present and now
 pointing at the old copy); `canary list` is right (ledger); a later
 `--replace` or restore finds that record by path and corrects the lock.
@@ -575,6 +602,12 @@ set aside into `G2` like any other folder with a `SKILL.md`.
 "--replace"}`) and is passed as `replace="--replace" in flags`. `_install`:
 the same for `options`. No flag approves anything; `--replace` only
 changes what happens to a copy already there, and the dialog says so.
+
+`cli._restore` changes one line: on `(True, line)` it prints `line or "Put
+back where it was."` (today it prints the fixed string and ignores
+`line`), so the `G2` line and the stale-lock line of section 4 reach the
+person; on `(False, reason)` it prints `reason` as today. Exit codes 0 and
+10, and 2 for `ValueError`, unchanged.
 
 ### 5.2 JSON fields
 
@@ -689,7 +722,10 @@ Each test names the seam it uses to inject a fault. New tests live in
    link (`kind` folder/link), installs two real folders, `records == {}`;
    then restore (test 17) puts the folder and the link back and the link
    resolves to the old folder.
-4. A no leaves everything: no store folder, no ledger `approved`, lock
+4. A no leaves everything: no group folder (throughout section 6, "no
+   group folder" means no `quarantine/replaced/<id>/`; the empty
+   `quarantine/replaced/` itself may exist, since the device preflight
+   creates it before the dialog), no ledger `approved`, lock
    unchanged, old folder's bytes unchanged. UNSAFE new copy without the
    typed name: `refused`, same checks.
 5. The dialog block: `add.dialog_text(summary)` contains the two lines
@@ -699,8 +735,9 @@ Each test names the seam it uses to inject a fault. New tests live in
    store folder, `record_decision` written as for any conflict): `--host
    claude` against a two-host record (subset sentence); a different-name
    record listing the destination; a link to a folder outside the
-   destinations; a folder without `SKILL.md`; a plain file at the
-   destination.
+   destinations; a link to the other destination of the same run when
+   that destination is empty (link-only group refused); a folder without
+   `SKILL.md`; a plain file at the destination.
 7. Different disk: seam `unittest.mock.patch.object(replace, "_device")`
    returning a different number for paths under the store; the sentence,
    nothing moved; the same seam on a restore gives the `Still set aside:`
@@ -708,10 +745,13 @@ Each test names the seam it uses to inject a fault. New tests live in
 8. Changed while deciding: the approver creates the second destination
    (or writes a lock record) during the dialog; the under-lock re-plan
    refuses with the sentence; the first destination's old copy is still in
-   place; no store folder.
-9. Second rename-in fails: seam `patch.object(add.os, "rename")` wrapping
-   the real `os.rename` and raising `OSError` on the second call whose
-   target is a destination. Both destinations hold the old bytes; no store
+   place; no group folder.
+9. Second rename-in fails: seam `patch.object(add.os, "rename")` (the
+   global `os.rename`, because `add._install` has no wrapper) with a
+   counting wrapper that raises `OSError` exactly once, on the second call
+   whose source basename starts with `.canary-staging-`, and passes every
+   other call (so the put-back renames, which go through `replace._rename`,
+   are untouched). Both destinations hold the old bytes; no group
    folder; the lock is unchanged; the last ledger events for each path are
    the compensating ones (`approved` with the old digest and `how: replace
    undo` for a checked old copy; `arrived` for an untracked one) and they
@@ -746,7 +786,7 @@ Each test names the seam it uses to inject a fault. New tests live in
     folder and link in place, the link resolving to the new folder, one
     lock record with `replaced`; the installer ran once (`mac.runs()`).
 16. `canary install --replace` refusals: two names (spec with two skills):
-    the sentence, installer ran once, nothing recorded, no store folder; a
+    the sentence, installer ran once, nothing recorded, no group folder; a
     project install (`PROJECT_ADD`): the sentence; `claude plugin install`
     and `claude plugin marketplace add` with `replace=True`: `InstallError`
     with the sentences and `mac.runs() == []`.
@@ -781,12 +821,16 @@ Each test names the seam it uses to inject a fault. New tests live in
 23. `cli`: `_add(["x", "--replace"])` and `_install(["--replace", "--",
     …])` pass `replace=True` (seam `patch.object(add, "add")` and
     `patch.object(install, "install")`, asserting kwargs); `--replace` on
-    `canary scan` is a usage error; `USAGE` names it; `_restore` prints the
-    returned line.
-24. Older data: a lock record with `replaced` and a ledger with `replaced`,
-    `restored` and `how: replace undo` events: `guestlist.scan` lists the
-    skill as `checked`, `add.plan_key` and `setup.old_records` behave as
-    before, and `watcher.held()` ignores the store.
+    `canary scan` is a usage error; `USAGE` names it; `_restore` with
+    `watcher.restore` patched to return `(True, "Put back where it was; the
+    copy that was there is set aside as X.")` prints that line and exits 0,
+    and `(True, None)` still prints `Put back where it was.` (extends the
+    existing `test_canary_restore_prints_the_reason_or_the_success_line`).
+24. Older data, a pin (green at base, listed with test 27): a lock record
+    with `replaced` and a ledger with `replaced`, `restored` and `how:
+    replace undo` events: `guestlist.scan` lists the skill as `checked`,
+    `add.plan_key` and `setup.old_records` behave as before, and
+    `watcher.held()` ignores the store.
 25. Nothing at the destinations with `--replace`: a fresh install, no
     group, no `replaced` field, the ordinary dialog.
 26. Partial presence: the old copy at one host only, `canary add` to both:
@@ -800,9 +844,11 @@ Each test names the seam it uses to inject a fault. New tests live in
     `replaced.json` and no entry; both destinations still hold the old
     copies; no ledger event, lock unchanged; `canary list` lists the group
     with `kept == []`; `canary restore <id>` answers "nothing of it is left".
-29. `choose_key` returns `None` under the lock (two old records deleted,
-    then the lock re-read by a racing writer; seam
-    `patch.object(add, "choose_key", return_value=None)`): the old copies
+29. `choose_key` returns `None` under the lock: seam `patch.object(add,
+    "choose_key", return_value=None)`, standing in for a lock whose bare
+    key and hashed key are both held by live records of this name in other
+    places (a state the in-memory lock can reach only through earlier
+    writes, never through a race, since `_Commit` is held): the old copies
     are back, no group folder, no ledger event at all, the "Another install
     got there first" sentence.
 30. Restore after a death between 4.4 and 4.6 (seam: `patch.object(replace,
@@ -810,10 +856,25 @@ Each test names the seam it uses to inject a fault. New tests live in
     second restore without the seam): the second restore finds the dead
     displaced record, the old copies return, the lock holds the old record
     only, and the first `G2` is still listed.
+31. Restore lock write fails: seam `patch.object(add, "_write_lock",
+    side_effect=OSError)` on a restore with a yes: the old copies are back
+    at their origins, the current copies are in `G2`, the ledger has the
+    restore's approvals, the lock file is byte-for-byte unchanged, the old
+    group folder is kept, and the result is `(True, "Put back where it was,
+    but SkillCanary could not update its lock file; …")`; a following
+    `--replace` of the same name succeeds and corrects the lock.
+32. The watcher between a restore's rename and its record: seam
+    `patch.object(replace, "_rename")` wrapping the real rename and, right
+    after the first old entry lands at its origin, running
+    `test_watcher.Mac`'s `Watcher.step` across the settle window (mock
+    clock 0, 5, 10) and recording what it held; with approval recorded
+    first (4.5 before 4.6) it holds nothing; the test asserts `[]`.
 
-Red first: tests 2–26 and 28–30 fail at `1465c3b` with the tests applied, on an
+Red first: tests 2–23, 25, 26 and 28–32 fail at `1465c3b` with the tests applied, on an
 assertion or on the missing interface (`TypeError` for `replace=`,
-`AttributeError` for `canary.replace`); test 1 fails on its assertion.
+`AttributeError` for `canary.replace`); test 1 fails on its assertion;
+tests 24 and 27 are pins, green at base, and are listed as such in
+`red.log`.
 
 ## 7. Done when
 
@@ -830,9 +891,11 @@ first line is `commit <full sha>` and its second the interpreter's
 3. Counterfactuals, full suite, each in `counterfactual-<letter>.log`
    naming the reverted line and the tests that went red; other reds listed
    and explained. The known collateral: any edit under `canary/` turns the
-   11 `tests/test_action.py` `CanaryActionTests` cases red through
-   `scanner/manifest.json`'s integrity check (`scripts/action.py`), as the
-   2026-10-16 audit recorded. At least:
+   6 `tests/test_action.py` `CanaryActionTests` cases red (the tree at
+   `1465c3b` has six) through `scanner/manifest.json`'s integrity check
+   (`scripts/action.py`), the mechanism the 2026-10-16 audit recorded; the
+   builder re-verifies the count and the mechanism in the first
+   counterfactual log. At least:
    a. `replace.undo` appends no compensating events → tests 9 and 11
       (their ledger assertions, and test 9's watcher step, which then
       holds the put-back copy);
@@ -841,17 +904,21 @@ first line is `commit <full sha>` and its second the interpreter's
    c. the under-lock re-plan is skipped → test 8;
    d. the subset refusal is dropped → test 6;
    e. the link-elsewhere refusal is dropped → test 6;
-   f. `record_install` runs before `set_aside` → test 12 (ledger order)
-      and 9;
-   g. `restore` records approval after the rename → test 17 (ledger order)
-      and the watcher step in 17;
+   f. `record_install` runs before `set_aside` → test 28 (a death inside
+      `set_aside` then leaves an `approved` event, and the test asserts
+      none) and test 29 (an event appears before step 10's failure);
+   g. `restore` records approval after the rename → test 32 (the watcher
+      step between the rename and the record holds the put-back copy);
    h. `session_line` counts replaced groups → test 14;
    i. the different-device preflight is dropped → test 7;
    j. the `InstallError` for plugins is dropped → test 16;
    k. the old sentence is restored → test 1;
    l. step 10 uses `undo` instead of `put_back_files` → test 29 (a ledger
       event appears);
-   m. `current_plan` matches live records only → test 30.
+   m. `current_plan` matches live records only → test 30;
+   n. the link target may be an empty destination → test 6's link-only
+      case;
+   o. `cli._restore` ignores the returned line → test 23.
 4. A Sol pre-merge review (`~/workspace/scripts/premerge-review`) before
    the full gate, findings folded or answered here.
 5. The done-when audit (milestone-auditor, Fable 5.1, `high`, done-when-
@@ -980,6 +1047,26 @@ step; (b) → test 28, the kill between record and rename (section 7). 7
 validation (4.2, section 3). 9 the restore-undo-incomplete sentence with
 paths and the `G2` id (section 2, 4.6, test 20). 10 `unlink` + `rmdir`
 in 4.9; the `(realpath(dirname), basename)` normalisation in 1.2 step 4.
+
+**V7** (`20261016-225056`, on `4aac0ca`; PROCEED-WITH-FIXES, thirteen).
+1 test 24 is a pin, green at base, listed with 27 (section 6, section 7
+bullet 1). 2 counterfactual (f) → test 28's no-event assertion and test
+29; (g) → new test 32, a `Watcher.step` seam between the rename and the
+record (section 7). 3 `states` keyed by origin, real path stored inside
+as `path`, every lookup by origin (1.1 step 8, 1.4, section 3). 4 a
+link's target must be an existing folder destination of the run; test 6
+gains the link-only case; counterfactual (n). 5 `cli._restore` prints the
+returned line (5.1, test 23, counterfactual (o)). 6 death after 4.4: no
+`G2` with empty origins, so the dead displaced record is dropped, its
+copy already in the first `G2` (section 4 death table, 4.7). 7 six
+`test_action` cases, mechanism re-verified by the builder (section 7
+bullet 3). 8 `ValueError` → exit 2 added (section 2). 9 test 9's seam is a
+counting wrapper raising once on the second staging rename. 10 test 29
+reworded: a pre-existing state, no race. 11 `plan(name=None)` runs the
+filesystem refusals before the classifier (1.1 step 3, 1.2 step 2). 12
+"no group folder" defined (test 4). 13 test 31 (`_write_lock` → `OSError`
+on restore); `rmdir` failure swallowed and invisible to the listing
+(4.9); temp copies under `canary-replaced-` removed in a `finally` (4.2).
 
 ## 10. Scope cuts, in one place
 
