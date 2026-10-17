@@ -41,6 +41,11 @@ CORPUS_FILES = 500
 CORPUS_BYTES = 2 * 1024 * 1024
 HELD_BACK = ("Its output is held back, because it can contain the package's own text; "
              "you can read the log at {log} yourself.")
+ERROR_START = ("error", "err!", "npm err!", "npm error", "fatal:", "warning:", "warn")
+ERROR_CODES = ("enotfound", "econnrefused", "econnreset", "etimedout", "eacces", "eperm",
+               "enoent", "e404", "e403", "404 not found", "403 forbidden",
+               "unknown option", "not found", "permission denied")
+HTTP_ERROR = re.compile(r"\bhttp [45]\d\d\b")
 CONTROL = re.compile(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-9;?]*[ -/]*[@-~]"
                      r"|\x1b[@-_]|[\x00-\x08\x0b-\x1f\x7f]")
 
@@ -125,51 +130,93 @@ def _run_output(argv, cwd, env, log_path, timeout=INSTALLER_SECONDS):
         return code, fh.read().decode("utf-8", errors="replace")
 
 
+def _norm(text):
+    """The one normalisation for output lines and corpus text: control and
+    ANSI characters removed, tabs and CR to spaces, whitespace runs collapsed,
+    casefolded."""
+    text = CONTROL.sub("", text.replace("\r", " ").replace("\t", " "))
+    return " ".join(text.split()).casefold()
+
+
+def _display(raw):
+    """A raw output line as it may be shown: control characters removed,
+    whitespace collapsed, cut to OUTPUT_LINE_CHARS."""
+    return " ".join(CONTROL.sub("", raw.replace("\r", " ").replace("\t", " ")).split()
+                    )[:OUTPUT_LINE_CHARS].rstrip()
+
+
 def _corpus(folders):
-    """The package's text: the files under `folders`, skipping SKIP_DIRS and
-    links, at most CORPUS_FILES files and CORPUS_BYTES bytes, UTF-8 with
-    errors ignored."""
-    parts, files, size = [], 0, 0
+    """(normalised package text, complete). The text is the files under
+    `folders`, skipping SKIP_DIRS and links. It is complete only when every
+    file was read within CORPUS_FILES and CORPUS_BYTES, and no folder failed
+    to list; a partial corpus is never used to scrub."""
+    parts, files, size, complete = [], 0, 0, True
+
+    def failed(_error):
+        nonlocal complete
+        complete = False
+
     for folder in folders:
-        for dirpath, dirnames, filenames in os.walk(folder, followlinks=False):
+        for dirpath, dirnames, filenames in os.walk(folder, followlinks=False, onerror=failed):
             dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)
             for name in sorted(filenames):
-                if files >= CORPUS_FILES or size >= CORPUS_BYTES:
-                    return "\n".join(parts)
                 path = os.path.join(dirpath, name)
                 if os.path.islink(path):
                     continue
+                if files >= CORPUS_FILES or size >= CORPUS_BYTES:
+                    return _norm("\n".join(parts)), False
                 try:
                     with open(path, "rb") as fh:
-                        data = fh.read(CORPUS_BYTES - size)
+                        data = fh.read(CORPUS_BYTES - size + 1)
                 except OSError:
+                    complete = False
                     continue
+                if size + len(data) > CORPUS_BYTES:
+                    return _norm("\n".join(parts)), False
                 files += 1
                 size += len(data)
                 parts.append(data.decode("utf-8", errors="ignore"))
-    return "\n".join(parts)
+    return _norm("\n".join(parts)), complete
 
 
-def _shares_run(line, corpus):
-    """True when some SHARED_RUN characters of `line` appear in `corpus`."""
-    return any(line[i:i + SHARED_RUN] in corpus
-               for i in range(len(line) - SHARED_RUN + 1))
+def _error_prefix(norm):
+    """The error prefix a normalised line starts with, or None."""
+    return next((p for p in ERROR_START if norm.startswith(p)), None)
 
 
-def _installer_output(run_output, folders):
-    """`installer_output` for one run: control characters removed, lines cut
-    to OUTPUT_LINE_CHARS, every line sharing a run with the package dropped
-    (and counted), then the last OUTPUT_LINES that fit in OUTPUT_BYTES."""
-    corpus = _corpus(folders)
+def _is_error_line(norm):
+    """The allowlist: only an installer's error-looking lines may be shown."""
+    return (_error_prefix(norm) is not None
+            or any(code in norm for code in ERROR_CODES)
+            or HTTP_ERROR.search(norm) is not None)
+
+
+def _leaks(norm, corpus):
+    """True when a normalised candidate line may quote the package. Long
+    enough: any SHARED_RUN characters of the line appear in the corpus. Short
+    once its error prefix is removed: the remainder appears in the corpus."""
+    prefix = _error_prefix(norm)
+    core = norm[len(prefix):].lstrip(" :") if prefix else norm
+    if len(core) < SHARED_RUN:
+        return core in corpus
+    return any(norm[i:i + SHARED_RUN] in corpus for i in range(len(norm) - SHARED_RUN + 1))
+
+
+def _installer_output(run_output, corpus):
+    """`installer_output` for one run: allowlisted error lines only, each
+    shown line cut to OUTPUT_LINE_CHARS, lines that may quote the package
+    dropped, and every line not shown counted as dropped. Then the last
+    OUTPUT_LINES that fit in OUTPUT_BYTES."""
     lines, dropped = [], 0
     for raw in run_output.replace("\r", "\n").split("\n"):
-        line = CONTROL.sub("", raw.replace("\t", " "))[:OUTPUT_LINE_CHARS].rstrip()
-        if not line.strip():
+        shown = _display(raw)
+        if not shown:
             continue
-        if _shares_run(line, corpus):
+        norm = _norm(shown)
+        if not _is_error_line(norm) or _leaks(norm, corpus):
             dropped += 1
         else:
-            lines.append(line)
+            lines.append(shown)
     tail, total = [], 0
     for line in reversed(lines[-OUTPUT_LINES:]):
         cost = len(line.encode("utf-8")) + 1
@@ -180,13 +227,15 @@ def _installer_output(run_output, folders):
     return {"lines": tail, "dropped": dropped}
 
 
-def _shown(out, run_output, folders, log_path):
+def _shown(out, run_output, folders, log_path, complete=True):
     """Attach `installer_output` when a package landed to scrub against, and
-    return the reason's sentence about the output. With no package, the output
-    is held back."""
-    if not folders:
+    return the reason's sentence about the output. The output is held back
+    when nothing landed, when the caller says the package is incomplete, or
+    when the corpus is partial (over the cap, or unreadable)."""
+    corpus, ok = _corpus(folders) if folders else ("", False)
+    if not complete or not ok:
         return HELD_BACK.format(log=log_path)
-    out["installer_output"] = _installer_output(run_output, folders)
+    out["installer_output"] = _installer_output(run_output, corpus)
     return f"Its output is in {log_path}."
 
 
@@ -331,7 +380,8 @@ def install(argv, *, home=None, cwd=None, support_dir=None, approve=None, backen
         code = _run(list(argv), cwd, _real_env(home), log_path)
         out["outcome"] = "done" if code == 0 else "not_installed"
         out["reasons"].append("Added the marketplace; nothing from it is installed yet."
-                              if code == 0 else "The installer failed. " + HELD_BACK.format(log=log_path))
+                              if code == 0 else
+                              f"The installer failed before anything landed; its output is in {log_path}, which the person can open.")
         return out
     run_dir = os.path.join(support_dir, "quarantine", run_id)
     os.makedirs(run_dir, mode=0o700)
@@ -424,7 +474,8 @@ def _skills(argv, home, cwd, support_dir, run_dir, run_id, log_path, out, approv
                          "letters, digits and dashes); nothing was installed.")
     if not plan:
         return _not(out, "The installer added no skills to its staging home, so there was "
-                         f"nothing to check or install. {HELD_BACK.format(log=log_path)}")
+                         f"nothing to check or install. The installer failed before any skill "
+                         f"landed; its output is in {log_path}, which the person can open.")
     by_stage = {os.path.realpath(f): dest for f, dest in plan}
     link_plan = []
     for link, real_root, stage_root in links:
@@ -616,8 +667,9 @@ def _plugin(parsed, home, cwd, support_dir, run_dir, run_id, log_path, out, appr
         return _not(out, f"SkillCanary could not find the marketplace {marketplace}. Add it "
                          "first: claude plugin marketplace add <source>.")
     if _run([argv[0], "plugin", "marketplace", "add", source], stage_project, env, log_path) != 0:
-        return _not(out, "SkillCanary could not stage the marketplace. "
-                         + HELD_BACK.format(log=log_path))
+        return _not(out, "SkillCanary could not stage the marketplace. The installer failed "
+                         f"before anything landed; its output is in {log_path}, which the "
+                         "person can open.")
     code, run_output = _run_output(list(argv), stage_project, env, log_path)
     if code != 0:
         staged_now = _install_path(stage_config, plugin_id, scope)
@@ -652,7 +704,10 @@ def _plugin(parsed, home, cwd, support_dir, run_dir, run_id, log_path, out, appr
         got = _digest_of(real, os.path.join(run_dir, "installed")) if real else None
         if code != 0:
             # Nothing of ours to undo: a failed update keeps what was there.
-            shown = _shown(out, run_output, [staged], log_path)
+            # A real install folder that exists but cannot be read leaves the
+            # package partly seen, so its output is withheld.
+            shown = _shown(out, run_output, [staged], log_path,
+                           complete=not (real and got is None))
             return _not(out, f"The installer failed. {shown}")
         if got != items[0]["digest"]:
             removed = _run([argv[0], "plugin", "uninstall", plugin_id, "--scope", scope], cwd,

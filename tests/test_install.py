@@ -358,6 +358,40 @@ class FailedInstallShowsItsOutput(unittest.TestCase):
         self.assertIn(REGISTRY_ERROR, text)
         self.assertNotIn(WIDGET, text)
 
+    def test_a_short_skill_line_echoed_with_an_error_prefix_is_dropped(self):
+        mac = Mac()
+        out = mac.install(ADD, spec={"skills": [{"name": "helper", "body": "Use the cache.\n"}],
+                                     "fail": True, "print": ["Error: Use the cache.", REGISTRY_ERROR]})
+        self.assertIn(REGISTRY_ERROR, out["installer_output"]["lines"])
+        self.assertNotIn("Error: Use the cache.", out["installer_output"]["lines"])
+        self.assertGreaterEqual(out["installer_output"]["dropped"], 1)
+
+    def test_a_skill_line_echoed_with_tabs_or_doubled_spaces_is_dropped(self):
+        mac = Mac()
+        echoed = "error: Rotate  the\twidget cache every night,  then reload."
+        out = mac.install(ADD, spec={"skills": [{"name": "helper", "body": WIDGET + "\n"}],
+                                     "fail": True, "print": [echoed, REGISTRY_ERROR]})
+        lines = out["installer_output"]["lines"]
+        self.assertIn(REGISTRY_ERROR, lines)
+        self.assertFalse(any("widget" in line for line in lines), lines)
+
+    def test_a_progress_line_never_appears(self):
+        mac = Mac()
+        out = mac.install(ADD, spec={"skills": [{"name": "helper", "body": WIDGET + "\n"}],
+                                     "fail": True,
+                                     "print": ["Installing helper (42%)", REGISTRY_ERROR]})
+        lines = out["installer_output"]["lines"]
+        self.assertEqual(lines, [REGISTRY_ERROR])
+
+    def test_a_corpus_over_the_cap_withholds_the_output(self):
+        mac = Mac()
+        with unittest.mock.patch.object(install, "CORPUS_FILES", 0):
+            out = mac.install(ADD, spec={"skills": [{"name": "helper", "body": WIDGET + "\n"}],
+                                         "fail": True, "print": [REGISTRY_ERROR]})
+        self.assertNotIn("installer_output", out)
+        self.assertIn("is held back, because it can contain the package's own text",
+                      " ".join(out["reasons"]))
+
     def test_a_failure_that_landed_nothing_holds_its_output_back(self):
         mac = Mac()
         out = mac.install(ADD, spec={"skills": [], "fail": True, "print": [REGISTRY_ERROR]})
