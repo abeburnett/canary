@@ -515,7 +515,7 @@ class RecordsKnowWhereTheyAre(unittest.TestCase):
         self.assertEqual(approve.seen, [])
         self.assertIn("A skill named notes is already installed at ~/.claude/skills/notes and "
                       "~/.agents/skills/notes (recorded 2026-10-05). Nothing was installed. "
-                      "To replace it, remove those folders and run this again.",
+                      "To replace it, run this again with --replace.",
                       result["reasons"])
         self.assertEqual(env.lock(), before)
 
@@ -524,13 +524,13 @@ class RecordsKnowWhereTheyAre(unittest.TestCase):
         env.folder(env.home, ".claude", "skills", "notes")
         result = env.add(URL, Approver(True), fetch=FakeGitHub(self.archive()))
         self.assertIn("~/.claude/skills/notes already exists. Nothing was installed. "
-                      "To replace it, remove it and run this again.", result["reasons"])
+                      "To replace it, run this again with --replace.", result["reasons"])
         lone = env.folder(env.home, ".agents", "skills", "lone")
         env.write_lock({"notes": {"installed": [lone]}})
         result = env.add(URL, Approver(True), fetch=FakeGitHub(self.archive()))
         self.assertIn("A skill named notes is already installed at ~/.agents/skills/lone. "
-                      "Nothing was installed. To replace it, remove that folder and run this "
-                      "again.", result["reasons"])
+                      "Nothing was installed. To replace it, run this again with --replace.",
+                      result["reasons"])
 
     def test_a_record_whose_paths_vanish_during_the_check_is_no_blocker(self):
         env = Env()
@@ -573,8 +573,8 @@ class RecordsKnowWhereTheyAre(unittest.TestCase):
         result = env.add(URL, approve, fetch=FakeGitHub(self.archive()))
         self.assertEqual(result["outcome"], "not_installed")
         self.assertIn("A skill named notes is already installed at ~/.claude/skills/notes "
-                      "(recorded 2026-10-06). Nothing was installed. To replace it, remove "
-                      "that folder and run this again.", result["reasons"])
+                      "(recorded 2026-10-06). Nothing was installed. To replace it, run this "
+                      "again with --replace.", result["reasons"])
         self.assertEqual(env.installed(), [racer])
 
     def test_nothing_the_tool_says_points_to_a_command_it_does_not_have(self):

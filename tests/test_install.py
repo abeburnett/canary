@@ -469,7 +469,7 @@ class RecordsKnowWhereTheyAre(unittest.TestCase):
         self.assertEqual((out["outcome"], mac.asked), ("not_installed", []))
         self.assertIn(f"A skill named helper is already installed at ~/.agents/skills/helper "
                       f"and ~/.claude/skills/helper (recorded {stamp[:10]}). Nothing was "
-                      "installed. To replace it, remove those folders and run this again.",
+                      "installed. To replace it, run this again with --replace.",
                       out["reasons"])
 
     def test_the_checked_name_decides_not_the_staged_folder_name(self):
@@ -486,7 +486,7 @@ class RecordsKnowWhereTheyAre(unittest.TestCase):
         os.makedirs(os.path.join(mac.home, ".agents", "skills", "helper"))
         out = mac.install(ADD, spec=ONE)
         self.assertIn("~/.agents/skills/helper already exists. Nothing was installed. To "
-                      "replace it, remove it and run this again.", out["reasons"])
+                      "replace it, run this again with --replace.", out["reasons"])
 
     def test_a_record_that_turns_up_during_the_dialog_is_refused_in_the_same_words(self):
         mac = Mac()
@@ -505,8 +505,8 @@ class RecordsKnowWhereTheyAre(unittest.TestCase):
             patch.stop()
         self.assertEqual(out["outcome"], "not_installed")
         self.assertIn("A skill named helper is already installed at ~/.agents/skills/other "
-                      "(recorded 2026-10-06). Nothing was installed. To replace it, remove "
-                      "that folder and run this again.", out["reasons"])
+                      "(recorded 2026-10-06). Nothing was installed. To replace it, run this "
+                      "again with --replace.", out["reasons"])
 
 
 FLAGGED = {"skills": [{"name": "helper", "link": True,
