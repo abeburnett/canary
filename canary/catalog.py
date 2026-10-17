@@ -105,10 +105,9 @@ CHECKS = [
       (r"\b(delete|remove|rm(\s+-\w+)*)\s+(\S+\s+){0,1}?['\"`]?(~/\.claude|~/\.codex|~/\.cursor|~/\.agents)/skills", False, "agent-config", True),
       # Writes into a skills folder by form: a redirect or tee, sed -i, or cp, mv, ln or rsync onto another skill's file.
       (r">>?\s*['\"]?(~/\.claude|~/\.codex|~/\.cursor|~/\.agents)/skills", False, "agent-config"),
-      # "continued" patterns also run on lines joined at a backslash line ending (scan._continuations).
-      (r"\btee\b[^\n|;&]{0,200}?(~/\.claude|~/\.codex|~/\.cursor|~/\.agents)/skills", False, "agent-config", "continued"),
-      (r"\bsed\b.{0,200}?\s-i\S*\s.{0,200}?(~/\.claude|~/\.codex|~/\.cursor|~/\.agents)/skills", False, "agent-config", "continued"),
-      (r"\b(cp|mv|ln|rsync)\b(\s+-\S+)*\s+.{0,200}?(~/\.claude|~/\.codex|~/\.cursor|~/\.agents)/skills/[^\s/]+/\S+", False, "agent-config", "continued"),
+      (r"\btee\b[^\n|;&]{0,200}?(~/\.claude|~/\.codex|~/\.cursor|~/\.agents)/skills", False, "agent-config", True),
+      (r"\bsed\b.{0,200}?\s-i\S*\s.{0,200}?(~/\.claude|~/\.codex|~/\.cursor|~/\.agents)/skills", False, "agent-config", True),
+      (r"\b(cp|mv|ln|rsync)\b(\s+-\S+)*\s+.{0,200}?(~/\.claude|~/\.codex|~/\.cursor|~/\.agents)/skills/[^\s/]+/\S+", False, "agent-config", True),
       (r"launchctl\s+(load|bootstrap|bootout|unload)|LaunchAgents/|crontab\s", False, "schedule")]),
     ("stealth", "STEALTH", "medium",
      "Instructs the agent to hide behavior from the user", True,
@@ -201,19 +200,6 @@ def match_paragraph(path, start_line, joined, raw_joined):
             continue
         for matches, doc, key, line_only in patterns:
             if not doc and not line_only and matches(joined):
-                out.append(finding(cid, path, start_line, raw_joined, detail=key))
-                break
-    return out
-
-
-def match_continuation(path, start_line, joined, raw_joined):
-    """Only the "continued" patterns, on lines joined at backslash line endings."""
-    out = []
-    for cid, _, _, _, para, patterns in _COMPILED:
-        if not para:
-            continue
-        for matches, doc, key, scope in patterns:
-            if scope == "continued" and not doc and matches(joined):
                 out.append(finding(cid, path, start_line, raw_joined, detail=key))
                 break
     return out

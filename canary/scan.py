@@ -533,20 +533,17 @@ def _findings(rel, text):
     seen = set()
     raw_lines = text.splitlines()
     lines = [normalize(l) for l in raw_lines]
-    for n, line in enumerate(lines, start=1):
-        for f in catalog.match_line(rel, n, line, raw_lines[n - 1]):
+    logical = list(_logical_lines(lines, raw_lines))
+    # Every rule sees each logical line (a backslash continuation joined), and is
+    # reported at the logical line's first physical line.
+    for first, last, line, raw in logical:
+        for f in catalog.match_line(rel, first, line, raw):
             if f["severity"] != "info":
-                seen.add((f["check_id"], n))
+                seen.update((f["check_id"], n) for n in range(first, last + 1))
             findings.append(f)
     # Second pass over paragraphs, so a phrase split across lines still matches.
-    for start, end, joined, raw in _paragraphs(lines, raw_lines):
+    for start, end, joined, raw in _paragraphs(logical):
         for f in catalog.match_paragraph(rel, start, joined, raw):
-            if not any((f["check_id"], n) in seen for n in range(start, end + 1)):
-                seen.add((f["check_id"], start))
-                findings.append(f)
-    # Third pass over runs of lines joined at a backslash line ending, as a shell reads them.
-    for start, end, joined, raw in _continuations(lines, raw_lines):
-        for f in catalog.match_continuation(rel, start, joined, raw):
             if not any((f["check_id"], n) in seen for n in range(start, end + 1)):
                 seen.add((f["check_id"], start))
                 findings.append(f)
@@ -556,43 +553,44 @@ def _findings(rel, text):
     return findings
 
 
-def _continuations(lines, raw_lines):
-    """Each run of lines that a backslash line ending joins to the line after it,
-    as (first line, last line, joined text, raw text). The backslash is dropped and
-    the next line follows directly. A run ends at the first line with no backslash;
-    a final line that still ends in one ends the file. Runs of one line are skipped."""
-    n, total = 0, len(lines)
+def _logical_lines(lines, raw_lines):
+    """One entry per logical line: (first physical line, last physical line, text, raw).
+    A line that ends in a backslash continues onto the next line, as a shell reads
+    it: the backslash is dropped and the pieces are joined with a space. A line
+    with no continuation is its own entry, unchanged. A backslash on the file's
+    last line stays in the text."""
+    total, n = len(lines), 0
     while n < total:
-        if not lines[n].endswith("\\"):
+        first, parts = n, []
+        while lines[n].endswith("\\") and n + 1 < total:
+            parts.append(lines[n][:-1].strip())
             n += 1
-            continue
-        start, pieces = n, []
-        while n < total and lines[n].endswith("\\"):
-            pieces.append(lines[n][:-1])
-            n += 1
-        if n < total:
-            pieces.append(lines[n])
-        end = min(n, total - 1)
-        if end > start:
-            yield (start + 1, end + 1, "".join(pieces),
-                   " ".join(r.strip() for r in raw_lines[start:end + 1]))
-        n = end + 1
+        if parts:
+            parts.append(lines[n].strip())
+            text = " ".join(p for p in parts if p)
+            raw = " ".join(r.strip() for r in raw_lines[first:n + 1])
+        else:
+            text, raw = lines[n], raw_lines[n]
+        yield first + 1, n + 1, text, raw
+        n += 1
 
 
-def _paragraphs(lines, raw_lines):
-    start, buf, raw = None, [], []
-    for n, line in enumerate(lines, start=1):
-        if line.strip():
+def _paragraphs(logical):
+    """Runs of two or more non-blank logical lines, as (first line, last line, joined, raw)."""
+    start, end, buf, raw = None, None, [], []
+    for first, last, text, line_raw in logical:
+        if text.strip():
             if start is None:
-                start = n
-            buf.append(line.strip())
-            raw.append(raw_lines[n - 1].strip())
+                start = first
+            end = last
+            buf.append(text.strip())
+            raw.append(line_raw.strip())
         elif buf:
             if len(buf) > 1:
-                yield start, n - 1, " ".join(buf), " ".join(raw)
-            start, buf, raw = None, [], []
+                yield start, end, " ".join(buf), " ".join(raw)
+            start, end, buf, raw = None, None, [], []
     if len(buf) > 1:
-        yield start, len(lines), " ".join(buf), " ".join(raw)
+        yield start, end, " ".join(buf), " ".join(raw)
 
 
 def _threat_verdict(score):
