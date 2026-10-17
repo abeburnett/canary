@@ -147,11 +147,16 @@ none until step 11.
    back the kept members whose origins are empty (section 4); the watcher
    leaves a put-back `checked` or `yours` copy alone because the ledger
    still says so.
-10. **Delete the old keys** from the in-memory lock (`for key in
-    plan["records"]: del lock["skills"][key]`), then `key = choose_key(lock,
-    name, places)` — the existing rule, with no special case, because the
-    old keys are gone and the destinations are empty. `None` refuses as
-    today after putting the old copies back (step 12's undo).
+10. **The new record's key.** Delete the old keys from the in-memory lock
+    (`for key in plan["records"]: del lock["skills"][key]`). With exactly
+    one old record, the new record reuses its key (so a `name@hash` key
+    stays what it was and a restore writes the old record back under it).
+    With none, or with several (a bare and a hashed key both live for this
+    name), `key = choose_key(lock, name, places)`: the existing rule, with
+    the old keys gone and the destinations empty. `None` refuses with the
+    "Another install got there first" sentence after
+    `replace.put_back_files(support, group)` (section 1.4): file moves
+    only, no ledger write, because no approval has been recorded yet.
 11. **Record approval** (unchanged): `_record(guestlist.record_install, …,
     source=snapshot, origin=…)` appends `checked` and one `approved` per
     destination with the snapshot's digest. Death after: approval for paths
@@ -201,7 +206,8 @@ none until step 11.
 4. With `--replace`, refusals once names and destinations are known, with
    nothing recorded (no `record_decision`) and the installer not run again:
    more than one name in `names`; any path in `taken` whose
-   `os.path.dirname(os.path.realpath(...))` is not in
+   `os.path.realpath(os.path.dirname(p))` (the normalisation of 1.1 step 3,
+   which never collapses a link onto its target) is not in
    `guestlist.user_roots(home)` (a project destination); then
    `replace.plan(lock, name, taken, roots, home, support)` with its own
    refusals. The destinations of an install are `taken`: the real folder
@@ -224,10 +230,19 @@ none until step 11.
 `_blocked_sentence` and `conflict_reason` keep their shape and change their
 last sentence (section 2). Nothing else changes.
 
-### 1.4 Undo (`replace.undo`)
+### 1.4 Undo (`replace.undo`) and `replace.put_back_files`
 
-Runs under `_Commit`, after `_install` or the lock write failed and the
-existing code has removed the new copies it put in place. In this order:
+`replace.put_back_files(support, group)` is the file-only half: it renames
+each kept entry back to its origin, removes the group folder when every
+entry went back (`os.unlink` of the record, then `os.rmdir`, which refuses
+while any entry remains), and returns the paths left in the store. It
+writes nothing to the ledger. Step 10 of 1.1 uses it alone, because no
+approval exists yet to compensate.
+
+`replace.undo(home, support, group, states, name)` runs under `_Commit`
+after `_install` or the lock write failed (an approval for the new digest
+is in the ledger) and the existing code has removed the new copies it put
+in place. In this order:
 
 1. **Compensating ledger events first**, through `add._record(
    guestlist.record_events, support, events)`, one per member, chosen
@@ -245,13 +260,16 @@ existing code has removed the new copies it put in place. In this order:
    A link member gets no event (its target member gets one).
    The events are written before the files reappear, the same rule as
    every install: the watcher reads the ledger after an entry settles.
-2. **Rename each entry back** to its origin. An origin that is no longer
-   empty (something raced in) or a rename that fails leaves that entry in
-   the store; the others still go back.
-3. If every entry went back: remove the group folder (`os.unlink` of the
-   record, then `os.rmdir`, which refuses while any entry remains). Else
-   keep it, and return the paths left in the store; the caller's reason
-   names them and the group id. No code path deletes an entry.
+2. **`put_back_files`**: each entry back to its origin. An origin that is
+   no longer empty (something raced in) or a rename that fails leaves that
+   entry in the store; the others still go back.
+3. Return the paths left in the store; the caller's reason names them and
+   the group id. No code path deletes an entry.
+
+Every rename of an entry (set-aside, put-back, restore) goes through
+`replace._rename(src, dst)`, a one-line wrapper over `os.rename`, and every
+device read through `replace._device(path)` (`os.stat(path).st_dev`); both
+exist as test seams, so no test patches the global `os` module for them.
 
 Residual, stated in the architecture text: at Guard, an old copy that was
 `unchecked` or had no ledger state comes back as a new arrival when a
@@ -284,10 +302,13 @@ Events written by a replace, in order of appearance:
  "skill": "<origin>", "kind": "folder" | "link", "how": "canary add" | "canary install" | "restore"}   one per member, after the lock write
 ```
 
-Events written by a restore (section 4): `checked` and `approved` with
-`"how": "restore"` and the old origin (or `{"kind": "watcher"}`), one per
-folder member; then `replaced` for the new group's members with `"how":
-"restore"`; then `{"at": …, "event": "restored", "id": "<old group id>"}`.
+Events written by a restore (section 4): one `record_install` call per
+kept folder member, so `checked` and `approved` once each per member
+(`checked × n`, `approved × n` for n folder members), each with that
+member's own verdict and `override`, `"how": "restore"` and the old origin
+(or `{"kind": "watcher"}`); then `replaced` for the new group's members
+with `"how": "restore"`; then `{"at": …, "event": "restored", "id": "<old
+group id>"}`.
 
 `_state` treats `replaced` as unknown and ignores it; `restored` has no
 `skill` and is skipped, as the watcher's is today.
@@ -323,6 +344,7 @@ recorded and nothing moved (`replace.plan`):
 - A link elsewhere: `<path> is a link to a folder this install would not replace, so SkillCanary did not replace it. Nothing was installed.`
 - Not a skill: `<path> exists but holds no SKILL.md, so SkillCanary does not know what it is and left it alone. Nothing was installed.`
 - Different disk: `SkillCanary keeps replaced copies under <store>, which is on a different disk from <path>, so it cannot set the old copy aside. Nothing was installed.`
+  (on restore: `Still set aside: SkillCanary keeps replaced copies under <store>, which is on a different disk from <path>, so it cannot set the copy that is there now aside. canary list shows where it is.`)
 
 With the flag, `canary install` only, after the check, nothing recorded:
 
@@ -343,6 +365,7 @@ After a failed install or lock write (added to the existing sentence):
 
 - Undo complete: `The earlier copy is back in place.`
 - Undo incomplete: `SkillCanary could not put the earlier copy of <name> back at <paths>; it is kept as <group id>. canary restore <group id> tries again.`
+- Restore undo incomplete (section 4.6): `Still set aside: SkillCanary could not move it back, and could not put the copy that was there back at <paths>; that copy is kept as <G2 id>. canary list shows where it is.`
 
 Outcomes and exit codes are unchanged: every refusal above is
 `not_installed` (exit 10) except the two `InstallError`s (exit 2).
@@ -382,8 +405,9 @@ record the replace removed (`{}` for an untracked folder). `how` is
 Listing (`replace.groups(support, roots)`), read from the store like
 `watcher.held` reads holds, never from the ledger: a group counts when its
 folder name matches `HOLD_ID`, `replaced.json` parses with `schema`,
-`id` equal to the folder name, `name`, `at` and a `members` list whose
-every `origin` is a string whose `dirname` is in `roots`. Each listed group
+`id` equal to the folder name, a `name` that `add.NAME.fullmatch` accepts
+(so the restore dialog's phrase is never blank), `at` and a `members` list
+whose every `origin` is a string whose `dirname` is in `roots`. Each listed group
 is `{"id", "name", "paths": [origins], "kept": [origins whose entry
 lexists], "at", "how", "restore": "canary restore <id>"}`, oldest first.
 `canary list --json` adds `"replaced": [...]` to `canary.list/1` (an
@@ -428,7 +452,8 @@ Steps:
    `classify.check` (one classifier call per folder; a `canary add` group
    has two identical folders and costs two). `SourceError`/`OSError`:
    `(False, "Still set aside: it holds links or special files SkillCanary will not copy. canary list shows where it is.")`
-   and `record_decision(... "refused")`. Links are not checked; the plan
+   and `record_decision(home, name, "UNSAFE", "refused", support=support)`,
+   as `watcher.review` does. Links are not checked; the plan
    guaranteed each link's target is another member.
 3. One dialog (`replace.dialog_text`), worst verdict of the members,
    through `add.ask`; `UNSAFE` adds the text field with the name as the
@@ -459,33 +484,49 @@ Steps:
 4. Under `add._Commit`:
    1. Re-load the group; refuse if a kept entry vanished (step 1's
       sentence).
-   2. The *current* plan for the origins, with `replace.plan`'s rules but
-      with names ignored: each origin must be empty, a link whose target
-      is another origin of this group, or a folder with `SKILL.md`; else
-      `(False, "Still set aside: something SkillCanary does not move is at <path>. canary list shows where it is.")`. Every live lock record (any
-      name) listing an origin must have all its live paths among the
-      origins (paths compared as in 1.1 step 3); else `(False, "Still set aside: the copy at <path> is also installed at <others>; replace all of them in one run first. canary list shows where it is.")`. Same-device preflight; else the different-disk
-      sentence in `Still set aside:` form.
+   2. `replace.current_plan(lock, origins, roots, home, support)` →
+      `(reason, plan)`, a separate function from `replace.plan` with no
+      name rule: `existing` is each origin that `lexists`, which must be a
+      link whose target is another origin of this group or a folder with
+      `SKILL.md`; else `(False, "Still set aside: something SkillCanary does not move is at <path>. canary list shows where it is.")`.
+      `records` is every lock record, **live or not**, any name, whose
+      `record_paths` include an origin (paths compared as in 1.1 step 3);
+      a record left behind by a death after 4.4 lists empty origins and is
+      dead, and must still be found. Every path of every such record must
+      be among the origins; else `(False, "Still set aside: the copy at <path> is also installed at <others>; replace all of them in one run first. canary list shows where it is.")`.
+      Same-device preflight through `replace._device` for each existing
+      origin; else the different-disk sentence in `Still set aside:` form
+      (section 2). Then the keys for 4.7 are decided now, before any move:
+      delete `records`' keys from the in-memory lock; for each record in
+      the old group's `records`, its key is its stored key when that key is
+      absent or holds a dead record, else `choose_key(lock, name,
+      record_places(record))`; `None` refuses with
+      `(False, "Still set aside: another install got there first. canary list shows where it is.")`.
    3. Capture the current ledger states for the origins (as 1.1 step 8).
    4. `replace.set_aside(support, name, "restore", current plan, states)`
       → new group `G2`, or `None` when every origin is empty. Failure:
       `(False, "Still set aside: SkillCanary could not move the copy that is there now. canary list shows where it is.")`.
    5. Approval first: for each kept folder member,
-      `guestlist.record_install(home, [origin], name, verdict,
-      support=support, source=<its temp copy>, how="restore",
-      override=(verdict == "UNSAFE"), origin=<states[origin]["origin"] from
-      the old group when its status was checked and it had one, else
-      {"kind": "watcher"}>)`. One call per folder, each with its own
-      digest, so two diverged copies each get the right approval.
+      `guestlist.record_install(home, [origin], name, <that member's own
+      verdict>, support=support, source=<its temp copy>, how="restore",
+      override=(<that member's verdict> == "UNSAFE"),
+      origin=<states[origin]["origin"] from the old group when its status
+      was checked and it had one, else {"kind": "watcher"}>)`. One call per
+      folder member, so the ledger gets `checked` and `approved` once per
+      member, each with its own digest, verdict and override (the dialog
+      asked with the worst verdict; the record keeps each member's).
    6. `os.rename(entry, origin)` for each kept member. On a failure:
       rename back the members already moved into the old group, append
       compensating events for the current copies (1.4, from the states of
-      4.3), put `G2`'s entries back at their origins, remove `G2` only when
-      every entry went back (else keep it and name the paths left), and return
-      `(False, "Still set aside: SkillCanary could not move it back. canary list shows where it is.")`.
-   7. Lock: delete the keys found in 4.2 (they go into `G2`'s `records`);
-      write each record from the old group's `records` back under
-      `choose_key(lock, name, record_places(record))` with `"replaced":
+      4.3), then `put_back_files(support, G2)`. When every `G2` entry went
+      back (and `G2` is gone):
+      `(False, "Still set aside: SkillCanary could not move it back. canary list shows where it is.")`;
+      else the restore-undo-incomplete sentence of section 2 with the
+      paths left and the `G2` id.
+   7. Lock: the keys found in 4.2 are already deleted in memory (their
+      records go into `G2`'s `records`, dead ones included); write each
+      record from the old group's `records` back under the key decided in
+      4.2 (its own key whenever that key was free) with `"replaced":
       "<G2 id>"` when `G2` exists (the field is dropped when it does not).
       An untracked original had no record and gets none. `add._write_lock`.
       On `OSError`: the files stay as moved (the ledger is right about
@@ -496,17 +537,22 @@ Steps:
    8. `record_replaced(support, G2, "restore")` when `G2` exists, then
       `{"event": "restored", "id": <old group id>}`, both through
       `add._record`.
-   9. Remove the old group's folder (only `replaced.json` is left in it,
-      as `watcher.put_back` removes an emptied hold).
+   9. Remove the old group's folder: `os.unlink` of `replaced.json`, then
+      `os.rmdir`, which refuses while any entry remains; never
+      `shutil.rmtree` (unlike `watcher.put_back`, which may `rmtree` an
+      emptied hold).
 5. `(True, "Put back where it was; the copy that was there is set aside as <G2 id>.")`, or `(True, None)` when nothing was there.
 
 Death points: after 4.4, before 4.6: the origins are empty, both groups
-complete; `canary restore <old id>` again puts the old back (a second `G2`
-is not created because the origins are empty), and the first `G2` stays
-listed and restorable. After 4.6, before 4.7: files right, lock stale
-(the displaced record still present and now pointing at the old copy);
-`canary list` is right (ledger); a later `--replace` or restore treats
-that record as the current one, which it is, by path. Accepted and said.
+complete, and the lock still holds the displaced record (dead now). A
+second `canary restore <old id>` finds that record in 4.2 (live or not),
+moves it into the new group's `records` (that group has no entries, since
+the origins are empty), puts the old copies back and writes the old
+record; the first `G2` stays listed and restorable. After 4.6, before
+4.7: files right, lock stale (the displaced record still present and now
+pointing at the old copy); `canary list` is right (ledger); a later
+`--replace` or restore finds that record by path and corrects the lock.
+Accepted and said.
 
 Recovery after a replace that died mid-way (1.1, steps 9 to 13) is this
 same command: `kept` members whose origin is empty go back without a
@@ -655,9 +701,10 @@ Each test names the seam it uses to inject a fault. New tests live in
    record listing the destination; a link to a folder outside the
    destinations; a folder without `SKILL.md`; a plain file at the
    destination.
-7. Different disk: seam `unittest.mock.patch.object(replace.os, "stat")`
-   wrapping the real `os.stat` and returning a `stat_result` with
-   `st_dev + 1` for paths under the store; the sentence, nothing moved.
+7. Different disk: seam `unittest.mock.patch.object(replace, "_device")`
+   returning a different number for paths under the store; the sentence,
+   nothing moved; the same seam on a restore gives the `Still set aside:`
+   form.
 8. Changed while deciding: the approver creates the second destination
    (or writes a lock record) during the dialog; the under-lock re-plan
    refuses with the sentence; the first destination's old copy is still in
@@ -668,9 +715,12 @@ Each test names the seam it uses to inject a fault. New tests live in
    folder; the lock is unchanged; the last ledger events for each path are
    the compensating ones (`approved` with the old digest and `how: replace
    undo` for a checked old copy; `arrived` for an untracked one) and they
-   precede nothing else; outcome `not_installed` with both sentences.
-10. Undo rename-back fails too: the seam of test 9 plus a raise on the
-    rename whose target is the second origin; outcome `not_installed`; the
+   precede nothing else; outcome `not_installed` with both sentences; a
+   `Watcher.step` over the settle window afterwards holds nothing for the
+   checked old copy.
+10. Undo rename-back fails too: the seam of test 9 plus
+    `patch.object(replace, "_rename")` raising on the rename whose target
+    is the second origin; outcome `not_installed`; the
     reason names the path and the group id; the store keeps the group with
     `kept == [that origin]`; `canary list` lists it; `canary restore <id>`
     then puts it back (no `G2`, the origin is empty).
@@ -702,9 +752,11 @@ Each test names the seam it uses to inject a fault. New tests live in
     with the sentences and `mac.runs() == []`.
 17. Restore with a yes (group from test 2): old copies back at both
     origins; the new copies in `G2` with the new lock record under `G2`'s
-    `records`; the lock has the old record back under its old key with
-    `replaced == G2`; ledger order: `checked`, `approved` (`how: restore`,
-    old origin carried), `replaced` ×2 (`how: restore`), `restored`;
+    `records`; the lock has the old record back under its old key
+    (`name@hash` in a variant of the test where the old record sat under a
+    hashed key) with `replaced == G2`; ledger order: `checked`, `approved`,
+    `checked`, `approved` (one pair per folder member, `how: restore`, old
+    origin carried), `replaced` ×2 (`how: restore`), `restored`;
     `canary list` lists `G2` only; the watcher's next `step` holds nothing.
 18. Restore when both origins are empty: no `G2`; `(True, None)`; the
     old record back without `replaced`.
@@ -713,10 +765,13 @@ Each test names the seam it uses to inject a fault. New tests live in
     and no answer (sentences, `record_decision` for the unsafe case); an
     unknown id (`ValueError` sentence); a group whose entries were removed
     by hand (`nothing of it is left`).
-20. Restore rename fails on the second member: seam as test 9 on
-    `replace.os.rename`; the current copies are back at their origins, the
-    old group intact, no `G2`, compensating events for the current copies,
+20. Restore rename fails on the second member: seam
+    `patch.object(replace, "_rename")` raising on the second old entry's
+    move; the current copies are back at their origins, the old group
+    intact, no `G2`, compensating events for the current copies,
     `(False, "Still set aside: SkillCanary could not move it back. …")`.
+    A variant also raises on the `G2` put-back: the restore-undo-incomplete
+    sentence with the path and the `G2` id, and `G2` kept with that entry.
 21. Restore of an UNSAFE old copy needs the typed name: `ask` is called
     with `confirm == name`; `False` keeps it set aside.
 22. Restore checks every folder member: a two-folder group whose members
@@ -739,8 +794,24 @@ Each test names the seam it uses to inject a fault. New tests live in
 27. The pin `test_nothing_the_tool_says_points_to_a_command_it_does_not_have`
     stays green after the docs change (no new test; named so the builder
     runs it first).
+28. The process dies between the record write and the first rename: seam
+    `patch.object(replace, "_rename", side_effect=RuntimeError)` on a
+    replace; `assertRaises(RuntimeError)`; the group folder holds
+    `replaced.json` and no entry; both destinations still hold the old
+    copies; no ledger event, lock unchanged; `canary list` lists the group
+    with `kept == []`; `canary restore <id>` answers "nothing of it is left".
+29. `choose_key` returns `None` under the lock (two old records deleted,
+    then the lock re-read by a racing writer; seam
+    `patch.object(add, "choose_key", return_value=None)`): the old copies
+    are back, no group folder, no ledger event at all, the "Another install
+    got there first" sentence.
+30. Restore after a death between 4.4 and 4.6 (seam: `patch.object(replace,
+    "_rename")` raising `RuntimeError` on the first old entry's move, then a
+    second restore without the seam): the second restore finds the dead
+    displaced record, the old copies return, the lock holds the old record
+    only, and the first `G2` is still listed.
 
-Red first: tests 2–26 fail at `1465c3b` with the tests applied, on an
+Red first: tests 2–26 and 28–30 fail at `1465c3b` with the tests applied, on an
 assertion or on the missing interface (`TypeError` for `replace=`,
 `AttributeError` for `canary.replace`); test 1 fails on its assertion.
 
@@ -762,10 +833,11 @@ first line is `commit <full sha>` and its second the interpreter's
    11 `tests/test_action.py` `CanaryActionTests` cases red through
    `scanner/manifest.json`'s integrity check (`scripts/action.py`), as the
    2026-10-16 audit recorded. At least:
-   a. `replace.undo` appends no compensating events → tests 9, 12 (the
-      watcher holds the put-back copy);
-   b. `set_aside` writes `replaced.json` after the renames → test 12
-      (the group is unlisted) and 10;
+   a. `replace.undo` appends no compensating events → tests 9 and 11
+      (their ledger assertions, and test 9's watcher step, which then
+      holds the put-back copy);
+   b. `set_aside` writes `replaced.json` after the renames → test 28 (the
+      group has no record and is unlisted);
    c. the under-lock re-plan is skipped → test 8;
    d. the subset refusal is dropped → test 6;
    e. the link-elsewhere refusal is dropped → test 6;
@@ -776,7 +848,10 @@ first line is `commit <full sha>` and its second the interpreter's
    h. `session_line` counts replaced groups → test 14;
    i. the different-device preflight is dropped → test 7;
    j. the `InstallError` for plugins is dropped → test 16;
-   k. the old sentence is restored → test 1.
+   k. the old sentence is restored → test 1;
+   l. step 10 uses `undo` instead of `put_back_files` → test 29 (a ledger
+      event appears);
+   m. `current_plan` matches live records only → test 30.
 4. A Sol pre-merge review (`~/workspace/scripts/premerge-review`) before
    the full gate, findings folded or answered here.
 5. The done-when audit (milestone-auditor, Fable 5.1, `high`, done-when-
@@ -795,7 +870,7 @@ and answered in section 9.
 | Lock nesting | `_Commit` held across the commit; `guestlist._Lock` only inside `record_install` and the new `record_events`; `replace.py` never enters it; test 13 fails on re-entry | 1.5; `guestlist.record_events`, `watcher._record` |
 | Staging across volumes; the watcher and staged or moved folders | Staging unchanged (beside the destination, same volume); the only cross-tree move is the set-aside rename, preflighted by `st_dev` before the dialog and undone on failure; the watcher never sees the store (outside its roots) and leaves the new copy alone because approval precedes it, as today | 1.1 steps 3, 9, 11, 12; `replace.plan`, `set_aside` |
 | Symlinked destinations (npx layout) | A link at a destination is set aside as an entry, as `watcher.hold` does, and put back as `watcher.put_back` does; its target must be another destination of the run, else refused; no digest of links anywhere | 1.1 step 3, 1.2 step 4, section 2 |
-| Which lock record and key is the old one | Every live same-name record overlapping the new places, each required to lie within the destinations; keys deleted in memory before `choose_key`, so the new key follows the existing rule; records kept in the group and written back through `choose_key` | 1.1 steps 3, 10; 4.7 |
+| Which lock record and key is the old one | Every live same-name record overlapping the new places, each required to lie within the destinations; one old record lends its key to the new record, several are deleted and `choose_key` decides; records kept in the group and written back under their own key when it is free, else `choose_key`; a restore finds the displaced record whether live or dead | 1.1 steps 3, 10; 4.2, 4.7 |
 | Crash and undo ordering | No ledger or lock write before every set-aside rename is done; approval before files, as today; compensating events before the rename-back; one recovery path (`canary restore`) for every death point, each named | 1.1 (every step), 1.4, section 4 |
 | Restore of a multi-destination group | One group, `entry-<n>` per member; restore moves every kept member, checks every folder member, and sets aside whatever is at the origins into one new group; all or nothing with undo | section 4 |
 | Approval before move | Unchanged for the new copy (`record_install` then `_install`); the restore records approval before its rename; undo records the compensating state before its rename | 1.1 steps 11–12, 1.4, 4.5–4.6 |
@@ -852,8 +927,9 @@ held throughout; `_Lock` never held across moves (1.1, 1.5). 5
 `SourceError` from `tree_digest`: no digest of old copies; the new copy's
 check is the existing one; the restore's `_copy_local` failure has its own
 sentence (4.2). 6 record keys: `records` keyed by lock key, `states` per
-origin, members with origins (section 3); no `old_key`/`new_key` needed
-because restore uses `choose_key`. 7 refusal timing in `_skills`: after
+origin, members with origins (section 3); the old keys are the `records`
+keys, and the new key is in the lock record's `replaced` pairing (1.1 step
+10, 4.2). 7 refusal timing in `_skills`: after
 `_snapshot_and_check`, nothing recorded, no re-run (1.2 step 4). 8
 `held()` and `session_line`: untouched; the listing is its own field
 (section 3). 9 stale pointers: this document names sites by function; the
@@ -887,6 +963,23 @@ untouched watcher code and docs-first: section 3 names what is untouched;
 5.3 gives the architecture, USAGE and line formats. 13 counterfactual
 scope and the rename seam: section 7 bullet 3 and tests 9, 10, 20. 14
 retention and lock-write failure: section 3; 1.1 step 13 and 4.7.
+
+**V6** (`20261016-224439`, on this document at `b148f9a`; REWORK, all ten
+local). 1 step-10 failure with no approval yet: `put_back_files`, file
+moves only (1.1 step 10, 1.4). 2 `replace.current_plan` named with its
+rules, and the `Still set aside:` different-disk sentence (4.2, section
+2). 3 `checked × n`, `approved × n`, per-member verdict and override (1.5,
+4.5, test 17). 4 keys preserved: one old record lends its key, several go
+through `choose_key`, restore writes back under the stored key when free,
+`None` refused before any move (1.1 step 10, 4.2, 4.7, tests 17, 29). 5
+restore matches records listing an origin live or dead (4.2, 4.7, the
+death table, test 30). 6 counterfactual (a) → tests 9, 11 with a watcher
+step; (b) → test 28, the kill between record and rename (section 7). 7
+`replace._device` and `replace._rename` seams (1.4, test 7). 8
+`record_decision(… "UNSAFE", "refused")`; `NAME.fullmatch` in group
+validation (4.2, section 3). 9 the restore-undo-incomplete sentence with
+paths and the `G2` id (section 2, 4.6, test 20). 10 `unlink` + `rmdir`
+in 4.9; the `(realpath(dirname), basename)` normalisation in 1.2 step 4.
 
 ## 10. Scope cuts, in one place
 
