@@ -80,7 +80,13 @@ CHECKS = [
      "Reaches for secrets, keys, or credentials on the machine", True,
      [(r"~/\.ssh|/\.ssh/|\bid_(rsa|ed25519|ecdsa|dsa)\b", False, "ssh"),
       (r"~/\.aws|aws_secret_access_key|~/\.config/gcloud|~/\.kube/config|~/\.netrc|~/\.docker/config\.json", False, "cloud"),
-      (r"(keychain|security\s+find-(generic|internet)-password|login\.keychain)", False, "keychain"),
+      # Line-only (the fourth element): a keychain word split across lines is prose.
+      (r"\bsecurity\s+(find-generic-password|find-internet-password|dump-keychain|export)\b", False, "keychain", True),
+      (r"login\.keychain|Library/Keychains", False, "keychain", True),
+      (r"\bSecItemCopyMatching\b|\bSecKeychain\w*|\bkSecClass\w*", False, "keychain", True),
+      (r"\b(dump|export|extract|steal|exfiltrate)\b(\W+\w+){0,3}?\W+keychains?\b", False, "keychain", True),
+      (r"\bread\s+(\w+\s+){0,2}?from\s+(the\s+|your\s+|their\s+)?(\w+\s+)?keychain\b", False, "keychain", True),
+      (r"\bread\s+(the|your|their)\s+(\w+\s+)?keychain\b", False, "keychain", True),
       (r"\.pem\b", True, "pem"),
       (r"\.env\b.{0,200}?(read|load|cat|send|upload)", True, "env"),
       (r"(api[_-]?key|secret[_-]?key|auth[_-]?token|password).{0,30}(send|post|upload|exfiltrate)", True, "secret-send"),
@@ -92,7 +98,10 @@ CHECKS = [
       (r"add\s+(yourself|a|an)\s+(cron|scheduled|launch\s*agent|login\s+item)", False, "schedule"),
       (r"run\s+on\s+(startup|login|boot)", False, "schedule"),
       (r"write\s+to\s+~/\.(config|ssh|aws|zshrc|bashrc|profile)", False, "dotfiles"),
-      (r"(~/\.claude|~/\.codex|~/\.cursor|~/\.agents)/(settings[\w.]*\.json|hooks\.json|config\.toml|skills)", False, "agent-config"),
+      (r"(~/\.claude|~/\.codex|~/\.cursor|~/\.agents)/(settings[\w.]*\.json|hooks\.json|config\.toml)", False, "agent-config"),
+      # A skills folder only as the object of a changing verb, and only on one line.
+      (r"\b(write|edit|modify|overwrite|append|patch)\w*\s+(to\s+|into\s+|in\s+)?(\S+\s+){0,2}?(~/\.claude|~/\.codex|~/\.cursor|~/\.agents)/skills", False, "agent-config", True),
+      (r"\b(delete|remove|rm(\s+-\w+)*)\s+(\S+\s+){0,1}?(~/\.claude|~/\.codex|~/\.cursor|~/\.agents)/skills", False, "agent-config", True),
       (r"launchctl\s+(load|bootstrap|bootout|unload)|LaunchAgents/|crontab\s", False, "schedule")]),
     ("stealth", "STEALTH", "medium",
      "Instructs the agent to hide behavior from the user", True,
@@ -130,7 +139,8 @@ def _matcher(pattern):
 
 
 _COMPILED = [(cid, cat, sev, desc, para,
-              [(_matcher(p[0]), p[1], p[2] if len(p) > 2 else None) for p in pats])
+              [(_matcher(p[0]), p[1], p[2] if len(p) > 2 else None, len(p) > 3 and p[3])
+               for p in pats])
              for cid, cat, sev, desc, para, pats in CHECKS]
 
 
@@ -165,7 +175,7 @@ def match_line(path, line_no, line, raw_line):
     for cid, _, sev, _, _, patterns in _COMPILED:
         hit = dampened = False
         detail = None
-        for matches, doc, key in patterns:
+        for matches, doc, key, _line_only in patterns:
             if matches(line):
                 if doc and doc_context:
                     dampened, detail = True, detail or key
@@ -182,8 +192,8 @@ def match_paragraph(path, start_line, joined, raw_joined):
     for cid, _, _, _, para, patterns in _COMPILED:
         if not para:
             continue
-        for matches, doc, key in patterns:
-            if not doc and matches(joined):
+        for matches, doc, key, line_only in patterns:
+            if not doc and not line_only and matches(joined):
                 out.append(finding(cid, path, start_line, raw_joined, detail=key))
                 break
     return out

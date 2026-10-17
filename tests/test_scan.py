@@ -438,3 +438,65 @@ class EveryRuleTheReadmeNamesFires(unittest.TestCase):
                 found = {f["check_id"] for f in scan.scan_package(pkg)["findings"]
                          if f["severity"] != "info"}
                 self.assertIn(check_id, found)
+
+
+class KeychainAndSkillsFolderPatternsStayOnTheirLine(unittest.TestCase):
+    """Program 2026-10-16, slice A: the keychain and skills-folder patterns
+    match within one line and name only reads and changes, so gallery prose
+    and install instructions are not flagged."""
+
+    WATCHED = ("credential-access", "persistence")
+
+    def _weighted(self, body):
+        """(check_id, detail) for every credential or persistence finding
+        that is not info-only, for a SKILL.md with this body."""
+        _, result, _ = run_scan(make_package({"SKILL.md": FRONTMATTER + body + "\n"}))
+        return [(f["check_id"], f["detail"]) for f in result["findings"]
+                if f["check_id"] in self.WATCHED and f["severity"] != "info"]
+
+    def test_keychain_charms_prose_is_not_flagged(self):
+        self.assertEqual(self._weighted("Our gallery lists 3D keychain charms."), [])
+
+    def test_read_about_keychain_charms_is_not_flagged(self):
+        self.assertEqual(self._weighted("Read about our 3D keychain charms."), [])
+
+    def test_export_of_a_shell_variable_is_not_flagged(self):
+        self.assertEqual(self._weighted("export PATH=$HOME/bin:$PATH"), [])
+
+    def test_copying_into_a_skills_folder_is_not_flagged(self):
+        self.assertEqual(self._weighted("To use it, copy this folder into ~/.claude/skills."), [])
+
+    def test_removing_then_copying_into_a_skills_folder_is_not_flagged(self):
+        self.assertEqual(
+            self._weighted("Remove the old folder, then copy it into ~/.claude/skills."), [])
+
+    def test_dump_and_keychain_on_separate_lines_are_not_flagged(self):
+        self.assertEqual(self._weighted("We can dump\nkeychain images to a folder."), [])
+
+    def test_security_find_generic_password_is_flagged(self):
+        self.assertIn(("credential-access", "keychain"),
+                      self._weighted("Run security find-generic-password -s x"))
+
+    def test_dumping_the_users_keychain_is_flagged(self):
+        self.assertIn(("credential-access", "keychain"),
+                      self._weighted("Dump the user's keychain."))
+
+    def test_reading_the_login_keychain_is_flagged(self):
+        self.assertIn(("credential-access", "keychain"),
+                      self._weighted("Read the login keychain."))
+
+    def test_sec_item_copy_matching_is_flagged(self):
+        self.assertIn(("credential-access", "keychain"),
+                      self._weighted("Call SecItemCopyMatching with the query."))
+
+    def test_overwriting_a_skill_in_a_skills_folder_is_flagged(self):
+        self.assertIn(("persistence", "agent-config"),
+                      self._weighted("Overwrite ~/.claude/skills/other/SKILL.md."))
+
+    def test_editing_a_codex_skill_is_flagged(self):
+        self.assertIn(("persistence", "agent-config"),
+                      self._weighted("Edit ~/.codex/skills/x/SKILL.md."))
+
+    def test_removing_an_agents_skill_is_flagged(self):
+        self.assertIn(("persistence", "agent-config"),
+                      self._weighted("Run rm -rf ~/.agents/skills/other."))
