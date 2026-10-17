@@ -507,3 +507,33 @@ watcher are untouched (8, 13); sites found by name (9); restore dialog,
 all-or-nothing group rule and empty-destination sentence (10); superseded
 A and B text labelled history (11); bench bullet as regression guard and
 an auditor fallback (12).
+
+## Sol pre-merge reviews of slices A to C (2026-10-16)
+
+1. Slice A alone (`~/.cache/reviews/20261016-183902-premerge-gpt-6.1-sol-program-2026-10-16-skill-updates-p7IoKO/review.md`),
+   MERGE-AFTER-FIXES, three should-fix, all folded with tests: a
+   backticked or quoted path in the verb windows; backslash continuations
+   (first as a third pass, then, after the automated security review, by
+   joining logical lines before every rule, `94de561`); a possessive or
+   plural before "keychain".
+2. Slices A to C (`~/.cache/reviews/20261016-185254-premerge-gpt-6.1-sol-program-2026-10-16-skill-updates-1OMtFg/review.md`),
+   MERGE-AFTER-FIXES, three should-fix, all folded in `2320a5b` with tests:
+   physical lines are matched as before and joined lines only add or
+   tighten findings, so a doc word on a continuation line cannot downgrade
+   one; `canary list` shows an installer origin as `{"kind": "installer"}`
+   only, since a command can carry a token (the ledger keeps the command);
+   a failed run's output is scanned for error codes in 64 KB pieces with a
+   256-character carry, and a successful run reads nothing back.
+
+## Done-when audit of slices A to C, first pass (2026-10-16)
+
+milestone-auditor (Fable 5.1, high), range d6c8491..712a13e: BLOCKED on
+A3, A4, B3, C3 (and so A5, B5, C5). Bullets 1 and 2 SHOWN for all three
+slices, with recorded deviations: pin tests that guard existing behaviour
+cannot be red at base, and B's red log ran against B's own intermediate
+source. The blocks are missing counterfactuals (paragraph pass for the
+tight keychain forms, the `security` options, the redirect, `sed -i` and
+cp-onto-file alternatives, the tee broadening, `render_text`'s error
+block, `_came_from` and add's origin kind), counterfactuals that ran one
+module rather than the suite, and an unstamped final benchmark. A worker
+is producing that evidence on the final code; the audit reruns after.
