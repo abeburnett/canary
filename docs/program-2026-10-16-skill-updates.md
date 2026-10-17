@@ -537,3 +537,15 @@ cp-onto-file alternatives, the tee broadening, `render_text`'s error
 block, `_came_from` and add's origin kind), counterfactuals that ran one
 module rather than the suite, and an unstamped final benchmark. A worker
 is producing that evidence on the final code; the audit reruns after.
+
+Audit evidence produced (`docs/proof/2026-10-16-skill-updates/audit-fix/`,
+merged at the commit after `4434a51`): one test that only the broadened
+tee alternative catches, red under the prior tee form; full-suite
+counterfactuals a to h, each turning its named tests red. Every scan-rule
+counterfactual also turns `tests/test_action.py` `CanaryActionTests`
+cases red (verdict, fail threshold, private repo, escaping): those tests
+run the scanner on fixture skills and assert verdicts, so losing any
+pattern those fixtures exercise moves them. They are expected collateral
+reds, not unrelated breakage. Final bench at `8ffed53` (scanner `2320a5b`,
+stamped): misses identical to the before run (36), all four rates
+unchanged; `bench/baseline.json` names scanner `2320a5b`.
