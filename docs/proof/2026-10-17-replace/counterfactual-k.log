@@ -1,0 +1,229 @@
+commit ce66c5fdcb2e24fae49750f9deff518220dc91f4
+Python 3.10.3
+stamp: HEAD ce66c5f adds only the gate logs to 16a645f (manifest regenerated at code commit da11c9e), so the code under test is 16a645f's.
+counterfactual (k): reverted line canary/add.py add._blocked_sentence and add.conflict_reason: the old sentences ("remove that folder|those folders|it and run this again") are restored
+run: python3.10 -m unittest discover -s tests (full suite), duration 101s, exit=1
+
+--- the edit (git diff)
+diff --git a/canary/add.py b/canary/add.py
+index ecbbea4..30911b2 100644
+--- a/canary/add.py
++++ b/canary/add.py
+@@ -405,8 +405,9 @@ def _blocked_sentence(name, rec, home):
+         return None
+     stamp = rec.get("installed_at")
+     date = f" (recorded {stamp[:10]})" if isinstance(stamp, str) and DATE.match(stamp) else ""
++    them = "that folder" if len(paths) == 1 else "those folders"
+     return (f"A skill named {name} is already installed at {_join(paths)}{date}. "
+-            "Nothing was installed. To replace it, run this again with --replace.")
++            f"Nothing was installed. To replace it, remove {them} and run this again.")
+ 
+ 
+ def choose_key(lock, name, places):
+@@ -433,7 +434,7 @@ def conflict_reason(lock, names, places, destinations, home):
+                 if sentence:
+                     return sentence
+         return (f"{_short(existing[0], home)} already exists. Nothing was installed. "
+-                "To replace it, run this again with --replace.")
++                "To replace it, remove it and run this again.")
+     return None
+ 
+ 
+
+--- every red
+FAIL: test_each_skill_folder_is_one_package_and_the_strictest_wins (test_action.CanaryActionTests)
+FAIL: test_files_outside_skill_folders_are_still_scanned (test_action.CanaryActionTests)
+FAIL: test_invalid_escaping_and_incomplete_inputs_are_rejected (test_action.CanaryActionTests) (name='incomplete-coverage-fails')
+FAIL: test_invalid_escaping_and_incomplete_inputs_are_rejected (test_action.CanaryActionTests) (name='workflow-command-path')
+FAIL: test_private_repository_requires_token_presence_without_disclosure (test_action.CanaryActionTests)
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='safe')
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='review')
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='unsafe')
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='review-fails')
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='never')
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests)
+FAIL: test_a_folder_with_no_record_is_named_and_the_date_is_dropped_when_missing (test_add.RecordsKnowWhereTheyAre)
+FAIL: test_a_live_record_blocks_with_a_refusal_that_names_what_is_in_the_way (test_add.RecordsKnowWhereTheyAre)
+FAIL: test_a_record_that_turns_up_during_the_dialog_is_refused_in_the_same_words (test_add.RecordsKnowWhereTheyAre)
+FAIL: test_a_folder_with_no_record_is_named (test_install.RecordsKnowWhereTheyAre)
+FAIL: test_a_live_record_blocks_with_a_refusal_that_names_what_is_in_the_way (test_install.RecordsKnowWhereTheyAre)
+FAIL: test_a_record_that_turns_up_during_the_dialog_is_refused_in_the_same_words (test_install.RecordsKnowWhereTheyAre)
+Ran 417 tests in 100.118s
+FAILED (failures=17)
+exit=1
+
+--- explained
+Target reds: test 1, the six sentence pins in tests/test_add.py and tests/test_install.py. No other red.
+Collateral: the 11 tests/test_action.py CanaryActionTests FAIL lines from the manifest integrity check (mechanism and count re-verified in counterfactual-a.log).
+
+--- after the revert: git status --porcelain (only the untracked proof logs may be listed; no source file)
+?? docs/proof/2026-10-17-replace/counterfactual-a.log
+?? docs/proof/2026-10-17-replace/counterfactual-b.log
+?? docs/proof/2026-10-17-replace/counterfactual-c.log
+?? docs/proof/2026-10-17-replace/counterfactual-d.log
+?? docs/proof/2026-10-17-replace/counterfactual-e.log
+?? docs/proof/2026-10-17-replace/counterfactual-f.log
+?? docs/proof/2026-10-17-replace/counterfactual-g.log
+?? docs/proof/2026-10-17-replace/counterfactual-h.log
+?? docs/proof/2026-10-17-replace/counterfactual-i.log
+?? docs/proof/2026-10-17-replace/counterfactual-j.log
+?? docs/proof/2026-10-17-replace/counterfactual-k.log
+
+--- full unittest output
+.FFFF....................FFF........................................................................................................../Users/abrahamburnett/.pyenv/versions/3.10.3/lib/python3.10/unittest/case.py:549: ResourceWarning: unclosed file <_io.TextIOWrapper name=5 encoding='UTF-8'>
+  method()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+....................................................................FF.F.....................................................................................................................................................canary: skipped /private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-unlock-g_f_o_c9/home/.claude/skills: it is reached through a link
+......................................................canary watch: OSError: disk trouble
+.......
+======================================================================
+FAIL: test_each_skill_folder_is_one_package_and_the_strictest_wins (test_action.CanaryActionTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_action.py", line 108, in test_each_skill_folder_is_one_package_and_the_strictest_wins
+    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_files_outside_skill_folders_are_still_scanned (test_action.CanaryActionTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_action.py", line 129, in test_files_outside_skill_folders_are_still_scanned
+    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_invalid_escaping_and_incomplete_inputs_are_rejected (test_action.CanaryActionTests) (name='incomplete-coverage-fails')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_action.py", line 184, in test_invalid_escaping_and_incomplete_inputs_are_rejected
+    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_invalid_escaping_and_incomplete_inputs_are_rejected (test_action.CanaryActionTests) (name='workflow-command-path')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_action.py", line 197, in test_invalid_escaping_and_incomplete_inputs_are_rejected
+    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+AssertionError: 2 != 0 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_private_repository_requires_token_presence_without_disclosure (test_action.CanaryActionTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_action.py", line 224, in test_private_repository_requires_token_presence_without_disclosure
+    self.assertEqual(present.returncode, 0, present.stdout + present.stderr)
+AssertionError: 2 != 0 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='safe')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_action.py", line 79, in test_verdicts_and_fail_thresholds_follow_the_public_contract
+    self.assertEqual(result.returncode, expected_code, result.stderr)
+AssertionError: 2 != 0 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='review')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_action.py", line 79, in test_verdicts_and_fail_thresholds_follow_the_public_contract
+    self.assertEqual(result.returncode, expected_code, result.stderr)
+AssertionError: 2 != 0 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='unsafe')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_action.py", line 79, in test_verdicts_and_fail_thresholds_follow_the_public_contract
+    self.assertEqual(result.returncode, expected_code, result.stderr)
+AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='review-fails')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_action.py", line 79, in test_verdicts_and_fail_thresholds_follow_the_public_contract
+    self.assertEqual(result.returncode, expected_code, result.stderr)
+AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='never')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_action.py", line 79, in test_verdicts_and_fail_thresholds_follow_the_public_contract
+    self.assertEqual(result.returncode, expected_code, result.stderr)
+AssertionError: 2 != 0 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_action.py", line 96, in test_verdicts_and_fail_thresholds_follow_the_public_contract
+    self.assertEqual(result.returncode, 1, result.stderr)
+AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_a_folder_with_no_record_is_named_and_the_date_is_dropped_when_missing (test_add.RecordsKnowWhereTheyAre)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_add.py", line 526, in test_a_folder_with_no_record_is_named_and_the_date_is_dropped_when_missing
+    self.assertIn("~/.claude/skills/notes already exists. Nothing was installed. "
+AssertionError: '~/.claude/skills/notes already exists. Nothing was installed. To replace it, run this again with --replace.' not found in ['~/.claude/skills/notes already exists. Nothing was installed. To replace it, remove it and run this again.']
+
+======================================================================
+FAIL: test_a_live_record_blocks_with_a_refusal_that_names_what_is_in_the_way (test_add.RecordsKnowWhereTheyAre)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_add.py", line 516, in test_a_live_record_blocks_with_a_refusal_that_names_what_is_in_the_way
+    self.assertIn("A skill named notes is already installed at ~/.claude/skills/notes and "
+AssertionError: 'A skill named notes is already installed at ~/.claude/skills/notes and ~/.agents/skills/notes (recorded 2026-10-05). Nothing was installed. To replace it, run this again with --replace.' not found in ['A skill named notes is already installed at ~/.claude/skills/notes and ~/.agents/skills/notes (recorded 2026-10-05). Nothing was installed. To replace it, remove those folders and run this again.']
+
+======================================================================
+FAIL: test_a_record_that_turns_up_during_the_dialog_is_refused_in_the_same_words (test_add.RecordsKnowWhereTheyAre)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_add.py", line 575, in test_a_record_that_turns_up_during_the_dialog_is_refused_in_the_same_words
+    self.assertIn("A skill named notes is already installed at ~/.claude/skills/notes "
+AssertionError: 'A skill named notes is already installed at ~/.claude/skills/notes (recorded 2026-10-06). Nothing was installed. To replace it, run this again with --replace.' not found in ['A skill named notes is already installed at ~/.claude/skills/notes (recorded 2026-10-06). Nothing was installed. To replace it, remove that folder and run this again.']
+
+======================================================================
+FAIL: test_a_folder_with_no_record_is_named (test_install.RecordsKnowWhereTheyAre)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_install.py", line 488, in test_a_folder_with_no_record_is_named
+    self.assertIn("~/.agents/skills/helper already exists. Nothing was installed. To "
+AssertionError: '~/.agents/skills/helper already exists. Nothing was installed. To replace it, run this again with --replace.' not found in ['~/.agents/skills/helper already exists. Nothing was installed. To replace it, remove it and run this again.']
+
+======================================================================
+FAIL: test_a_live_record_blocks_with_a_refusal_that_names_what_is_in_the_way (test_install.RecordsKnowWhereTheyAre)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_install.py", line 470, in test_a_live_record_blocks_with_a_refusal_that_names_what_is_in_the_way
+    self.assertIn(f"A skill named helper is already installed at ~/.agents/skills/helper "
+AssertionError: 'A skill named helper is already installed at ~/.agents/skills/helper and ~/.claude/skills/helper (recorded 2026-10-17). Nothing was installed. To replace it, run this again with --replace.' not found in ['A skill named helper is already installed at ~/.agents/skills/helper and ~/.claude/skills/helper (recorded 2026-10-17). Nothing was installed. To replace it, remove those folders and run this again.']
+
+======================================================================
+FAIL: test_a_record_that_turns_up_during_the_dialog_is_refused_in_the_same_words (test_install.RecordsKnowWhereTheyAre)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_install.py", line 507, in test_a_record_that_turns_up_during_the_dialog_is_refused_in_the_same_words
+    self.assertIn("A skill named helper is already installed at ~/.agents/skills/other "
+AssertionError: 'A skill named helper is already installed at ~/.agents/skills/other (recorded 2026-10-06). Nothing was installed. To replace it, run this again with --replace.' not found in ['A skill named helper is already installed at ~/.agents/skills/other (recorded 2026-10-06). Nothing was installed. To replace it, remove that folder and run this again.']
+
+----------------------------------------------------------------------
+Ran 417 tests in 100.118s
+
+FAILED (failures=17)

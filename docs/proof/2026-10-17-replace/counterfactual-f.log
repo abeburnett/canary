@@ -1,0 +1,296 @@
+commit ce66c5fdcb2e24fae49750f9deff518220dc91f4
+Python 3.10.3
+stamp: HEAD ce66c5f adds only the gate logs to 16a645f (manifest regenerated at code commit da11c9e), so the code under test is 16a645f's.
+counterfactual (f): reverted line canary/add.py add._replace_committed: record_install runs before set_aside
+run: python3.10 -m unittest discover -s tests (full suite), duration 89s, exit=1
+
+--- the edit (git diff)
+diff --git a/canary/add.py b/canary/add.py
+index ecbbea4..1baa0eb 100644
+--- a/canary/add.py
++++ b/canary/add.py
+@@ -791,6 +791,9 @@ def _replace_committed(replacing, out, lock, before, home, support, snapshot, di
+         out["outcome"] = "not_installed"
+         out["reasons"].append(reason)
+         return out
++    # Recorded before the files appear, so the watcher leaves them alone.
++    _record(guestlist.record_install, home, destinations, name, verdict,
++            support=support, source=snapshot, override=unsafe, origin=origin)
+     states = replacing.ledger_states(support, [d for d, kind in plan["existing"]
+                                                if kind == "folder"])
+     try:
+@@ -815,9 +818,6 @@ def _replace_committed(replacing, out, lock, before, home, support, snapshot, di
+         if left:
+             out["reasons"].append(replacing.undo_incomplete(name, left, group["id"], home))
+         return out
+-    # Recorded before the files appear, so the watcher leaves them alone.
+-    _record(guestlist.record_install, home, destinations, name, verdict,
+-            support=support, source=snapshot, override=unsafe, origin=origin)
+     done = _install(snapshot, destinations, digest, run_id, name, out)
+     if done is None:
+         _undo_replace(replacing, out, home, support, group, states, name)
+
+--- every red
+FAIL: test_each_skill_folder_is_one_package_and_the_strictest_wins (test_action.CanaryActionTests)
+FAIL: test_files_outside_skill_folders_are_still_scanned (test_action.CanaryActionTests)
+FAIL: test_invalid_escaping_and_incomplete_inputs_are_rejected (test_action.CanaryActionTests) (name='incomplete-coverage-fails')
+FAIL: test_invalid_escaping_and_incomplete_inputs_are_rejected (test_action.CanaryActionTests) (name='workflow-command-path')
+FAIL: test_private_repository_requires_token_presence_without_disclosure (test_action.CanaryActionTests)
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='safe')
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='review')
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='unsafe')
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='review-fails')
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='never')
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests)
+FAIL: test_02_a_yes_replaces_both_copies_and_keeps_the_old_ones (test_replace.AReplaceSetsTheOldCopyAside)
+FAIL: test_03_a_folder_and_its_link_are_set_aside_and_restored_as_a_unit (test_replace.AReplaceSetsTheOldCopyAside)
+FAIL: test_28_a_death_between_the_record_and_the_first_rename (test_replace.RestoringAReplacedGroup)
+FAIL: test_29_no_key_under_the_lock_puts_the_files_back_and_writes_nothing (test_replace.RestoringAReplacedGroup)
+FAIL: test_09_a_failed_rename_in_puts_the_old_copies_back (test_replace.UnderTheCommitLock)
+FAIL: test_09_an_untracked_old_copy_comes_back_as_arrived (test_replace.UnderTheCommitLock)
+FAIL: test_11_a_failed_lock_write_puts_the_old_copies_back (test_replace.UnderTheCommitLock)
+Ran 417 tests in 88.361s
+FAILED (failures=18)
+exit=1
+
+--- explained
+Target reds: test 28 (an approved event exists although the death came inside set_aside) and test 29 (approval events exist although step 10 failed). Also red, with one cause: ledger_states now runs after the new approval, so the captured states hold the new digest. Test 2 asserts the group's states carry the old digest; test 3 asserts the folder's state is yours (it reads checked); tests 9 (both) and 11 assert the compensating events restore the old digest or status, which they no longer do.
+Collateral: the 11 tests/test_action.py CanaryActionTests FAIL lines from the manifest integrity check (mechanism and count re-verified in counterfactual-a.log).
+
+--- after the revert: git status --porcelain (only the untracked proof logs may be listed; no source file)
+?? docs/proof/2026-10-17-replace/counterfactual-a.log
+?? docs/proof/2026-10-17-replace/counterfactual-b.log
+?? docs/proof/2026-10-17-replace/counterfactual-c.log
+?? docs/proof/2026-10-17-replace/counterfactual-d.log
+?? docs/proof/2026-10-17-replace/counterfactual-e.log
+?? docs/proof/2026-10-17-replace/counterfactual-f.log
+
+--- full unittest output
+.FFFF................................................................................................................................./Users/abrahamburnett/.pyenv/versions/3.10.3/lib/python3.10/unittest/case.py:549: ResourceWarning: unclosed file <_io.TextIOWrapper name=5 encoding='UTF-8'>
+  method()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+..................................................................................................FF...................FF........FF.F........................................................................................canary: skipped /private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-unlock-d_jqyy1i/home/.claude/skills: it is reached through a link
+......................................................canary watch: OSError: disk trouble
+.......
+======================================================================
+FAIL: test_each_skill_folder_is_one_package_and_the_strictest_wins (test_action.CanaryActionTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_action.py", line 108, in test_each_skill_folder_is_one_package_and_the_strictest_wins
+    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_files_outside_skill_folders_are_still_scanned (test_action.CanaryActionTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_action.py", line 129, in test_files_outside_skill_folders_are_still_scanned
+    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_invalid_escaping_and_incomplete_inputs_are_rejected (test_action.CanaryActionTests) (name='incomplete-coverage-fails')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_action.py", line 184, in test_invalid_escaping_and_incomplete_inputs_are_rejected
+    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_invalid_escaping_and_incomplete_inputs_are_rejected (test_action.CanaryActionTests) (name='workflow-command-path')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_action.py", line 197, in test_invalid_escaping_and_incomplete_inputs_are_rejected
+    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+AssertionError: 2 != 0 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_private_repository_requires_token_presence_without_disclosure (test_action.CanaryActionTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_action.py", line 224, in test_private_repository_requires_token_presence_without_disclosure
+    self.assertEqual(present.returncode, 0, present.stdout + present.stderr)
+AssertionError: 2 != 0 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='safe')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_action.py", line 79, in test_verdicts_and_fail_thresholds_follow_the_public_contract
+    self.assertEqual(result.returncode, expected_code, result.stderr)
+AssertionError: 2 != 0 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='review')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_action.py", line 79, in test_verdicts_and_fail_thresholds_follow_the_public_contract
+    self.assertEqual(result.returncode, expected_code, result.stderr)
+AssertionError: 2 != 0 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='unsafe')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_action.py", line 79, in test_verdicts_and_fail_thresholds_follow_the_public_contract
+    self.assertEqual(result.returncode, expected_code, result.stderr)
+AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='review-fails')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_action.py", line 79, in test_verdicts_and_fail_thresholds_follow_the_public_contract
+    self.assertEqual(result.returncode, expected_code, result.stderr)
+AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='never')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_action.py", line 79, in test_verdicts_and_fail_thresholds_follow_the_public_contract
+    self.assertEqual(result.returncode, expected_code, result.stderr)
+AssertionError: 2 != 0 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_action.py", line 96, in test_verdicts_and_fail_thresholds_follow_the_public_contract
+    self.assertEqual(result.returncode, 1, result.stderr)
+AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_02_a_yes_replaces_both_copies_and_keeps_the_old_ones (test_replace.AReplaceSetsTheOldCopyAside)
+No seam.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 197, in test_02_a_yes_replaces_both_copies_and_keeps_the_old_ones
+    self.assertEqual((state["path"], state["status"], state["digest"], state["approved"],
+AssertionError: Tuples differ: ('/pr[112 chars]a256:e6be541337f4c3b55edce28948e369f916174dc55[121 chars]al'}) != ('/pr[112 chars]a256:a5b73b29d4d46a1fb96c9bf17fe8efc8e6fb5f5b7[121 chars]al'})
+
+First differing element 2:
+'sha256:e6be541337f4c3b55edce28948e369f916174dc5554582fce8474fba96d1cca6'
+'sha256:a5b73b29d4d46a1fb96c9bf17fe8efc8e6fb5f5b700ac6e8530c71f5d1d48689'
+
+  ('/private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-home-cwbqcwpi/.claude/skills/notes',
+   'checked',
+-  'sha256:e6be541337f4c3b55edce28948e369f916174dc5554582fce8474fba96d1cca6',
+-  'sha256:e6be541337f4c3b55edce28948e369f916174dc5554582fce8474fba96d1cca6',
++  'sha256:a5b73b29d4d46a1fb96c9bf17fe8efc8e6fb5f5b700ac6e8530c71f5d1d48689',
++  'sha256:a5b73b29d4d46a1fb96c9bf17fe8efc8e6fb5f5b700ac6e8530c71f5d1d48689',
+   False,
+   {'kind': 'local'})
+
+======================================================================
+FAIL: test_03_a_folder_and_its_link_are_set_aside_and_restored_as_a_unit (test_replace.AReplaceSetsTheOldCopyAside)
+HireReach: an untracked folder plus a relative link, as the skills
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 237, in test_03_a_folder_and_its_link_are_set_aside_and_restored_as_a_unit
+    self.assertEqual(rec["states"][h.codex]["status"], "yours")
+AssertionError: 'checked' != 'yours'
+- checked
++ yours
+
+
+======================================================================
+FAIL: test_28_a_death_between_the_record_and_the_first_rename (test_replace.RestoringAReplacedGroup)
+Seam: patch.object(replace, "_rename", side_effect=RuntimeError).
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 917, in test_28_a_death_between_the_record_and_the_first_rename
+    self.assertEqual(len(h.ledger()), before)
+AssertionError: 6 != 3
+
+======================================================================
+FAIL: test_29_no_key_under_the_lock_puts_the_files_back_and_writes_nothing (test_replace.RestoringAReplacedGroup)
+Seam: patch.object(add, "choose_key", return_value=None).
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 933, in test_29_no_key_under_the_lock_puts_the_files_back_and_writes_nothing
+    self.assertEqual(h.ledger(), [])
+AssertionError: Lists differ: [{'at': '2026-10-17T05:44:16Z', 'event': '[680 chars]es'}] != []
+
+First list contains 3 additional elements.
+First extra element 0:
+{'at': '2026-10-17T05:44:16Z', 'event': 'checked', 'name': 'notes', 'verdict': 'LIKELY_SAFE'}
+
+Diff is 801 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_09_a_failed_rename_in_puts_the_old_copies_back (test_replace.UnderTheCommitLock)
+Seam: patch.object(add.os, "rename") with a wrapper that raises once,
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 475, in test_09_a_failed_rename_in_puts_the_old_copies_back
+    self.assertEqual([(e["event"], e["how"], e["skill"], e["digest"]) for e in tail],
+AssertionError: Lists differ: [('ap[130 chars]a256:e6be541337f4c3b55edce28948e369f916174dc55[228 chars]a6')] != [('ap[130 chars]a256:a5b73b29d4d46a1fb96c9bf17fe8efc8e6fb5f5b7[228 chars]89')]
+
+First differing element 0:
+('app[129 chars]a256:e6be541337f4c3b55edce28948e369f916174dc55[20 chars]ca6')
+('app[129 chars]a256:a5b73b29d4d46a1fb96c9bf17fe8efc8e6fb5f5b7[20 chars]689')
+
+  [('approved',
+    'replace undo',
+    '/private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-home-6catb40v/.claude/skills/notes',
+-   'sha256:e6be541337f4c3b55edce28948e369f916174dc5554582fce8474fba96d1cca6'),
++   'sha256:a5b73b29d4d46a1fb96c9bf17fe8efc8e6fb5f5b700ac6e8530c71f5d1d48689'),
+   ('approved',
+    'replace undo',
+    '/private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-home-6catb40v/.agents/skills/notes',
+-   'sha256:e6be541337f4c3b55edce28948e369f916174dc5554582fce8474fba96d1cca6')]
++   'sha256:a5b73b29d4d46a1fb96c9bf17fe8efc8e6fb5f5b700ac6e8530c71f5d1d48689')]
+
+======================================================================
+FAIL: test_09_an_untracked_old_copy_comes_back_as_arrived (test_replace.UnderTheCommitLock)
+Seam: patch.object(add.os, "rename"), as above.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 492, in test_09_an_untracked_old_copy_comes_back_as_arrived
+    self.assertEqual([(e["event"], e["how"], e["skill"], e["digest"]) for e in tail],
+AssertionError: Lists differ: [('approved', 'replace undo', '/private/var/f[364 chars]a6')] != [('arrived', 'replace undo', '/private/var/fo[362 chars]89')]
+
+First differing element 0:
+('approved', 'replace undo', '/private/var/f[156 chars]ca6')
+('arrived', 'replace undo', '/private/var/fo[155 chars]689')
+
+Diff is 680 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_11_a_failed_lock_write_puts_the_old_copies_back (test_replace.UnderTheCommitLock)
+Seam: patch.object(add.os, "replace", side_effect=OSError).
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-a69ed71ed5fc4d361/tests/test_replace.py", line 537, in test_11_a_failed_lock_write_puts_the_old_copies_back
+    self.assertEqual([(e["event"], e["how"], e["digest"]) for e in h.ledger()[-2:]],
+AssertionError: Lists differ: [('ap[28 chars]a256:e6be541337f4c3b55edce28948e369f916174dc55[126 chars]a6')] != [('ap[28 chars]a256:a5b73b29d4d46a1fb96c9bf17fe8efc8e6fb5f5b7[126 chars]89')]
+
+First differing element 0:
+('app[27 chars]a256:e6be541337f4c3b55edce28948e369f916174dc55[20 chars]ca6')
+('app[27 chars]a256:a5b73b29d4d46a1fb96c9bf17fe8efc8e6fb5f5b7[20 chars]689')
+
+  [('approved',
+    'replace undo',
+-   'sha256:e6be541337f4c3b55edce28948e369f916174dc5554582fce8474fba96d1cca6'),
++   'sha256:a5b73b29d4d46a1fb96c9bf17fe8efc8e6fb5f5b700ac6e8530c71f5d1d48689'),
+   ('approved',
+    'replace undo',
+-   'sha256:e6be541337f4c3b55edce28948e369f916174dc5554582fce8474fba96d1cca6')]
++   'sha256:a5b73b29d4d46a1fb96c9bf17fe8efc8e6fb5f5b700ac6e8530c71f5d1d48689')]
+
+----------------------------------------------------------------------
+Ran 417 tests in 88.361s
+
+FAILED (failures=18)
