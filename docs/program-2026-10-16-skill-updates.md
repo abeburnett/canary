@@ -255,3 +255,32 @@ events, lock and wording specified; 10 old-sentence tests and docs listed;
 11 red allows a missing interface, counterfactual lists other reds; 12
 logs named by interpreter, stamp defined, floor described as the baseline
 comparison.
+
+## Slice A amendment (automated security review, 2026-10-16)
+
+The security-guidance plugin reviewed slice A's first commits and found
+three ways the narrowed rules lose detection. All three are adopted:
+
+1. **Line-only is for the loose windows only.** The `security …`
+   subcommands, `login.keychain`, `Library/Keychains` and the Sec* API
+   names keep the paragraph pass, so splitting them across lines does not
+   hide them. Only the verb-then-"keychain" windows and the verb-then-path
+   windows are line-only.
+2. **The `security` CLI allows options before the subcommand** and covers
+   more of the reading and access-granting subcommands:
+   `\bsecurity(\s+-\w+)*\s+(find-generic-password|find-internet-password|find-certificate|find-identity|dump-keychain|export|unlock-keychain|set-key-partition-list)\b`.
+3. **Writes into a skills folder are caught by their form, not only by a
+   verb list.** Also flag, under any of the four roots: a shell redirect or
+   `tee` into a skills path (`>`, `>>`, `tee`, `tee -a`); `sed -i` on a
+   skills path; and any write verb, redirect, `cp`, `mv`, `ln` or `rsync`
+   whose target is another skill's file (`ROOT/skills/<name>/<file>`). A
+   plain folder copy into the skills folder itself (`cp -r <dir>
+   ~/.claude/skills/` or "copy this folder into ~/.claude/skills") stays
+   unflagged; that is the false alarm this slice removes.
+
+Tests added for each: `security -i find-generic-password` and a
+`security` subcommand split across two lines still flag;
+`echo x >> ~/.claude/skills/other/SKILL.md`, `tee -a
+~/.codex/skills/x/SKILL.md`, `sed -i '' s/a/b/ ~/.agents/skills/x/SKILL.md`
+and `cp evil.md ~/.claude/skills/other/SKILL.md` flag; `cp -r taste-skill
+~/.claude/skills/` does not.
