@@ -135,61 +135,106 @@ every new alternative. Matching stays case-insensitive.
   restore render their words; a pre-0.1.5 ledger lists cleanly; the
   origin survives a `changed` event.
 
-## Slice D: updating an installed skill (Tier 2, fail-closed)
+## Slice D: updating an installed skill (Tier 2 on Opus, fail-closed)
 
-- CLI: `--replace` joins USAGE and the allowed flags of `_add` and
-  `_install` in `canary/cli.py`, and is passed to `add.add(..., replace=)`
-  and `install.install(..., replace=)`. Skills only: with a plugin command
-  it is refused, pointing to `claude plugin update` (`install.py:520`).
-- Without the flag, both conflict sentences (`_blocked_sentence`,
-  `conflict_reason`) end "…run this again with --replace to update it".
-  Existing tests that pin the old sentence (`tests/test_add.py:518,527,
-  532,576`, `tests/test_install.py:387,423`) and `docs/architecture.md:
-  622-627` are updated in this slice, docs first.
-- Scope of `--replace`: it overrides only a blocker with the same skill
-  name in the same places: a lock record whose name equals the new skill's
-  name (any key form `plan_key` produces for that name), or an untracked
-  folder at the destination whose folder name is that name. A record for a
-  different name, a `name@hash` key for a different package name, a
-  symlink, or anything `add.tree_digest` refuses (`SourceError`) is refused
-  as today.
-- `--replace` changes nothing else: the new version is fetched, checked and
-  shown exactly as a fresh install, with the same verdicts and override.
-- The dialog adds: "This replaces the installed <name> (approved <date>,
-  from <installed_from when known>). Files: N added, N removed, N changed."
-  Counts only, in the dialog and the JSON; no file paths.
-- The installed folder's `add.tree_digest` is taken when the dialog is
-  built and again under `_Commit`; any difference refuses ("changed while
-  you were deciding").
-- The swap, all destinations as one unit under `_Commit`: for each, rename
-  the installed folder into a new hold slot `quarantine/held/<id>/entry`
-  (same `HOLD_ID` format and `hold.json` as the watcher's, plus `"reason":
-  "replaced"`, the new copy's digest, and the old lock record), then rename
-  the staged copy in. If any step fails, undo every step taken (new copies
-  out, old copies back) and report that nothing changed. Ledger events and
-  the lock record are written only after every swap succeeded: `replaced`
-  (id, name, origin path, old digest) per destination, then `approved` for
-  the new copy, then the lock record.
-- `guestlist._state` ignores `replaced` for status. `session_line` does not
-  count replaced holds; the watcher's `_review_loop` and `review` skip a
-  hold whose reason is `replaced`. `canary list` shows them with their ids,
-  marked "replaced".
-- `canary restore <id>` on a replaced hold: checks it again and asks:
-  "Put back the earlier <name> you replaced on <date>? The current copy is
-  set aside the same way, so you can switch back." It proceeds only when
-  the destination holds the copy that replaced it (its `tree_digest`
-  equals the new-copy digest in `hold.json`); anything else is
-  `STILL_TAKEN`. On yes it swaps as one unit the same way, then writes
-  `replaced` for the current copy, `restored` for the hold, `approved`
-  (how "restore") for the old copy, and the old lock record back.
-  Nothing is deleted; `canary doctor --prune` does not touch holds.
-- Tests (red first): without the flag, the new sentence; with the flag and
-  a yes, new files in place and the old copy a replaced hold; a no leaves
-  everything; the installed copy changing between dialog and swap refuses;
-  a different-name record refuses; a second destination's rename failing
-  leaves both destinations on the old copy and writes no `approved`; the
-  watcher and `session_line` ignore a replaced hold; restore swaps back and
-  rewrites the lock; a plugin command with `--replace` is refused.
+This section is the whole contract for D; it folds the third refutation's
+"Slice D, rescoped" notes, which are kept below only as history.
+
+**Command line.** `--replace` joins USAGE and the allowed flags of `_add`
+and `_install` (`canary/cli.py`) and is passed as `replace=` to `add.add`
+and `install.install`. It is refused, with a sentence saying why and
+nothing changed, when: the command installs a plugin (point to `claude
+plugin update`, `install.py:520`); the install would place more than one
+skill name; or any destination is outside the user's skill roots (a
+project folder).
+
+**Without the flag.** `_blocked_sentence` and `conflict_reason` end "To
+update it, run this again with --replace." in place of the "remove …"
+sentence. Tests that pin the old wording (`tests/test_add.py:518,527,532,
+576`, `tests/test_install.py:387,404,423`) and `docs/architecture.md:
+622-627` change in this slice, docs first.
+
+**What can be replaced.** Only a skill with the same name, in the same
+places: a lock record whose name equals the new skill's name (any key form
+`plan_key` gives that name), or an untracked folder at the destination
+named that name. Refused as today: a record for a different name; a
+`name@hash` key of a different package name; an unlisted symlink at a
+destination; anything `add.tree_digest` refuses (`SourceError`).
+Destinations the lock record lists as links move with the unit without a
+digest, and only when their target is another destination in the same
+unit.
+
+**Same check, same dialog.** With `--replace` the new version is fetched,
+checked and asked about exactly as a fresh install, with the same verdicts
+and override. The dialog adds one line: "This replaces the installed
+<name> (approved <date>, from <installed_from, when known>). Files: N
+added, N removed, N changed." The counts compare the checked snapshot in
+quarantine with the installed folder by relative path and file digest. No
+file paths appear. The JSON gets the same three counts. Nothing is staged
+inside a watched root before the dialog.
+
+**Digest at both ends.** The installed folder's `add.tree_digest` is taken
+when the dialog is built and again under `_Commit`. Any difference refuses
+with "It changed while you were deciding; nothing was replaced."
+
+**The swap, one unit, under `_Commit`.** One replace-group id (the
+`HOLD_ID` format) names the unit. For each destination: rename the
+installed folder into `quarantine/held/<id>/entry` with a `hold.json` of
+`{"reason": "replaced", "group", "origin", "name", "at", "new_digest",
+"old_lock_record" (or null for an untracked folder), "old_origin"
+(slice C's origin, or null)}`; then rename the staged copy in. If any step
+fails, undo every step taken (new copies out, old copies back) and report
+"nothing was replaced". If an undo step itself fails, report the actual
+state of each destination and leave the slots. Slots emptied by a
+successful undo are removed.
+
+**After every swap succeeded, and only then:** ledger `replaced` (group,
+id, name, origin path, old digest) for each destination; `approved` for
+the new copy, carrying the new source's origin (slice C); the lock record
+(the old record's key when there was one, else `choose_key`).
+
+**Holds.** `watcher.held()` returns each hold's `reason` and `group`.
+`guestlist._state` ignores `replaced` for status. `session_line` does not
+count replaced holds. The watcher's `_review_loop` and `Watcher.review`
+skip and refuse a replaced hold. `canary list` shows replaced holds with
+their group id, marked "replaced".
+
+**Restore.** `canary restore <id>` with a replaced hold's id or group id
+goes to a new `restore_replaced` path. It checks the held copy again and
+asks: "Put back the earlier <name> you replaced on <date>? The current
+copy is set aside the same way, so you can switch back." It proceeds only
+when every destination holds the copy that replaced it (`tree_digest`
+equals the hold's `new_digest`). A destination that is now empty answers
+"The folder it came from is empty now; run canary add or canary install
+again to reinstall." Anything else is `STILL_TAKEN`. On yes, the group
+swaps back as one unit with the same undo rules; the current copy becomes
+a new replaced group. Then: `replaced` for the current copy, `restored`
+for the old hold, `approved` (how "restore", carrying `old_origin`) for
+the old copy, and the lock: `old_lock_record` written back, or the new
+record removed when it was null. Nothing is deleted; `canary doctor
+--prune` does not touch holds.
+
+**Tests (red first).**
+1. Without the flag: the new sentence, for a recorded skill and an
+   untracked folder.
+2. With the flag and a yes: the new files are in place; the old copy is a
+   replaced hold with a correct `hold.json`; the ledger and lock are
+   updated; `installed_from` shows the new source.
+3. A no leaves files, ledger and lock untouched.
+4. The installed copy changing between dialog and swap refuses.
+5. A different-name record, a project destination, two skill names and a
+   plugin command each refuse.
+6. A second destination's rename failing leaves both destinations on the
+   old copy, writes no `approved`, and removes the emptied slots.
+7. The watcher and `session_line` ignore a replaced hold.
+8. The dialog counts are right for one file added, one removed and one
+   changed.
+9. Restore swaps the group back, restores the lock record (and removes it
+   for an untracked original), carries the old origin, and turns the
+   current copy into a new replaced group.
+10. Restore with a destination missing gives the empty-folder sentence.
+11. A listed link destination moves with the unit; an unlisted symlink
+    refuses.
 
 ## Order and routing
 
@@ -341,8 +386,7 @@ allowlist and scrub, which are a narrowing, not a guarantee.
 the default the plugin call relies on; the watcher's `put_back` path
 (`watcher.py:337`) passes `{"kind": "watcher"}`.
 
-**Slice D, rescoped** (its section above is superseded where these differ;
-D gets its own refutation before it is built):
+**Slice D, rescoped** (history: folded into the Slice D section above):
 - `--replace` is refused when the install would place more than one skill
   name, or when any destination is outside the user's skill roots (a
   project folder), with a sentence saying so.
