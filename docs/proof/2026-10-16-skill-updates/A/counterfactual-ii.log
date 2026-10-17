@@ -1,0 +1,24 @@
+commit 0f8daa37b7dbfa1eed813f5e16391e42e037da5d
+Python 3.10.3
+counterfactual (ii): reverted line canary/catalog.py match_paragraph condition "not doc and not line_only and matches(joined)" back to "not doc and matches(joined)"
+.........................F.....................
+======================================================================
+FAIL: test_dump_and_keychain_on_separate_lines_are_not_flagged (tests.test_scan.KeychainAndSkillsFolderPatternsStayOnTheirLine)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-acd541b30fb1b9c06/tests/test_scan.py", line 474, in test_dump_and_keychain_on_separate_lines_are_not_flagged
+    self.assertEqual(self._weighted("We can dump\nkeychain images to a folder."), [])
+AssertionError: Lists differ: [('credential-access', 'keychain')] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+('credential-access', 'keychain')
+
+- [('credential-access', 'keychain')]
++ []
+
+----------------------------------------------------------------------
+Ran 47 tests in 6.818s
+
+FAILED (failures=1)
+exit=1

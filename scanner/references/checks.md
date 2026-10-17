@@ -22,9 +22,9 @@ it. That is a review, not an accusation.
 | SAFEGUARD_BYPASS | high | "never ask the user for confirmation", `disableAllHooks`, `--dangerously-skip-permissions` |
 | EXFILTRATION | high | webhook and tunnel hosts, "send … to https://…", `curl` with `-d`, `-F` or `-T` |
 | SHELL_PIPE | high | `curl … \| sh` (and zsh, python, node, sudo), `bash <(curl …)`, `$(curl …)`, `eval "$(…)"` |
-| CREDENTIAL_ACCESS | high | `~/.ssh`, `id_ed25519`, `~/.aws`, keychain reads, "paste your private key" |
+| CREDENTIAL_ACCESS | high | `~/.ssh`, `id_ed25519`, `~/.aws`, reads of the keychain (`security find-generic-password`, "dump the keychain", "read the login keychain"), "paste your private key" |
 | IDENTITY_REWRITE | medium | "you are now a…", "from now on, you are" |
-| PERSISTENCE | medium | writes to agent config (`~/.claude/settings.json`, `~/.codex/hooks.json`), `launchctl`, cron |
+| PERSISTENCE | medium | writes to agent config (`~/.claude/settings.json`, `~/.codex/hooks.json`), an instruction to write, edit or delete a file in a skills folder (`~/.claude`, `~/.codex`, `~/.cursor`, `~/.agents`; "overwrite ~/.claude/skills/…"), `launchctl`, cron. A plain mention of a skills folder, such as "copy this folder into ~/.claude/skills", is not flagged |
 | STEALTH | medium | "do not tell the user", "without the user knowing" |
 | PROMPT_LEAK | medium | "reveal your system prompt" |
 | OBFUSCATION | high | a zero-width character inside a word, a bidirectional override or Unicode tag character, a Latin word containing a Cyrillic or Greek look-alike letter; medium for a long base64 run. Soft hyphens, bidi isolates and non-look-alike letters (Δx) are normal text and are only removed before matching |
@@ -112,6 +112,9 @@ two lines, which the paragraph pass now catches. The planted attack fixture scor
   The scanner flags the capability; it cannot see the future bytes.
 - **Multi-package attacks**: a clean skill that tells the agent to install a
   second one. The gate, not the scanner, has to stop that install.
+- **Whole-folder overwrite**: a skill that copies a whole folder over another
+  skill is not caught by the skills-folder pattern. The guest list reports
+  the overwritten skill as changed since approval at the next scan or session.
 
 ## Context labels
 
