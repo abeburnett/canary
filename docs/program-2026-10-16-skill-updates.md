@@ -541,11 +541,31 @@ is producing that evidence on the final code; the audit reruns after.
 Audit evidence produced (`docs/proof/2026-10-16-skill-updates/audit-fix/`,
 merged at the commit after `4434a51`): one test that only the broadened
 tee alternative catches, red under the prior tee form; full-suite
-counterfactuals a to h, each turning its named tests red. Every scan-rule
-counterfactual also turns `tests/test_action.py` `CanaryActionTests`
-cases red (verdict, fail threshold, private repo, escaping): those tests
-run the scanner on fixture skills and assert verdicts, so losing any
-pattern those fixtures exercise moves them. They are expected collateral
-reds, not unrelated breakage. Final bench at `8ffed53` (scanner `2320a5b`,
+counterfactuals a to h, each turning its named tests red. Every one of
+them also turns the same 11 `tests/test_action.py` `CanaryActionTests`
+cases red, and the cause is the bundled scanner's integrity check
+(`scripts/action.py:65-67`): `scanner/manifest.json` hashes every
+`canary/*.py`, so any working-tree edit there fails the check before a
+scan runs. A counterfactual that edits only `tests/` leaves them green
+(`baseline-green.log`). They are expected collateral reds, not unrelated
+breakage, and not a sign of lost patterns. The full gate on the final code is stamped `6e90253` (same code as
+`5315d73`): 380 tests OK on both interpreters. Final bench at `8ffed53` (scanner `2320a5b`,
 stamped): misses identical to the before run (36), all four rates
 unchanged; `bench/baseline.json` names scanner `2320a5b`.
+
+## Done-when audit of slices A to C, second pass (2026-10-16): PASS
+
+milestone-auditor (Fable 5.1, high), tip 6dfeb3f: every bullet SHOWN for
+A, B and C, with recorded deviations (pin tests outside bullet 1; B's red
+log against B's intermediate source; some earlier counterfactuals ran a
+module rather than the suite, covered by the nine full-suite runs). It
+corrected two records, fixed above and here: the collateral reds are the
+integrity check, not lost patterns; and the tests never seen red are the
+pins "dump the user's keychain", "read the login keychain", the
+overwrite/edit/rm -rf skills paths, `export PATH`, `tee --append`, the two
+no-backslash decoys, the curl continuation, C's pre-0.1.5 ledger and B's
+over-1-MB chunk test (the first-pass list wrongly included `tee -i` and the
+folder-copy tests, which counterfactuals iv and iii turn red).
+
+Slices A to C merge to `main`. Slice D is not built; it waits on the
+owner's decision whether to ship 0.1.5 without it.
