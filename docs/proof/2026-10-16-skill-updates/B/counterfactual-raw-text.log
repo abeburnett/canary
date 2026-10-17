@@ -1,0 +1,91 @@
+commit 76594eb2a10dfed1d6602346de4e5d427b6ed20c
+counterfactual: _installer_error codes line replaced by raw non-blank output lines (canary/install.py, the 'codes' line in _installer_error)
+Python 3.10.3
+FFFFFFF
+======================================================================
+FAIL: test_a_marketplace_add_failure_reports_its_codes (tests.test_install.FailedInstallReportsCodes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-ab7d599c1d5550ce3/tests/test_install.py", line 379, in test_a_marketplace_add_failure_reports_its_codes
+    self.assertEqual(out["installer_error"], {"exit": 1, "codes": ["E404"]})
+AssertionError: {'exit': 1, 'codes': ['npm ERR! code E404']} != {'exit': 1, 'codes': ['E404']}
+- {'codes': ['npm ERR! code E404'], 'exit': 1}
+?             --------------
+
++ {'codes': ['E404'], 'exit': 1}
+
+======================================================================
+FAIL: test_a_plugin_marketplace_stage_failure_reports_its_codes (tests.test_install.FailedInstallReportsCodes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-ab7d599c1d5550ce3/tests/test_install.py", line 385, in test_a_plugin_marketplace_stage_failure_reports_its_codes
+    self.assertEqual(out["installer_error"], {"exit": 1, "codes": ["E404"]})
+AssertionError: {'exit': 1, 'codes': ['npm ERR! code E404']} != {'exit': 1, 'codes': ['E404']}
+- {'codes': ['npm ERR! code E404'], 'exit': 1}
+?             --------------
+
++ {'codes': ['E404'], 'exit': 1}
+
+======================================================================
+FAIL: test_a_plugin_staging_failure_reports_its_codes (tests.test_install.FailedInstallReportsCodes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-ab7d599c1d5550ce3/tests/test_install.py", line 391, in test_a_plugin_staging_failure_reports_its_codes
+    self.assertEqual(out["installer_error"], {"exit": 1, "codes": ["E404"]})
+AssertionError: {'exit': 1, 'codes': ['npm ERR! code E404']} != {'exit': 1, 'codes': ['E404']}
+- {'codes': ['npm ERR! code E404'], 'exit': 1}
+?             --------------
+
++ {'codes': ['E404'], 'exit': 1}
+
+======================================================================
+FAIL: test_a_real_plugin_install_failure_reports_its_codes (tests.test_install.FailedInstallReportsCodes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-ab7d599c1d5550ce3/tests/test_install.py", line 398, in test_a_real_plugin_install_failure_reports_its_codes
+    self.assertEqual(out["installer_error"], {"exit": 1, "codes": ["E404"]})
+AssertionError: {'exit': 1, 'codes': ['npm ERR! code E404']} != {'exit': 1, 'codes': ['E404']}
+- {'codes': ['npm ERR! code E404'], 'exit': 1}
+?             --------------
+
++ {'codes': ['E404'], 'exit': 1}
+
+======================================================================
+FAIL: test_a_skill_line_and_an_error_code_report_the_code_only (tests.test_install.FailedInstallReportsCodes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-ab7d599c1d5550ce3/tests/test_install.py", line 359, in test_a_skill_line_and_an_error_code_report_the_code_only
+    self.assertEqual(out["installer_error"], {"exit": 1, "codes": ["E404"]})
+AssertionError: {'exi[13 chars]': ['Rotate the widget cache every night, then[28 chars]04']} != {'exi[13 chars]': ['E404']}
++ {'codes': ['E404'], 'exit': 1}
+- {'codes': ['Rotate the widget cache every night, then reload.',
+-            'npm ERR! code E404'],
+-  'exit': 1}
+
+======================================================================
+FAIL: test_an_installer_that_adds_no_skills_reports_its_codes (tests.test_install.FailedInstallReportsCodes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-ab7d599c1d5550ce3/tests/test_install.py", line 404, in test_an_installer_that_adds_no_skills_reports_its_codes
+    self.assertEqual(out["installer_error"], {"exit": 0, "codes": ["E404"]})
+AssertionError: {'exit': 0, 'codes': ['npm ERR! code E404']} != {'exit': 0, 'codes': ['E404']}
+- {'codes': ['npm ERR! code E404'], 'exit': 0}
+?             --------------
+
++ {'codes': ['E404'], 'exit': 0}
+
+======================================================================
+FAIL: test_output_with_no_known_code_has_no_codes (tests.test_install.FailedInstallReportsCodes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-ab7d599c1d5550ce3/tests/test_install.py", line 371, in test_output_with_no_known_code_has_no_codes
+    self.assertEqual(out["installer_error"], {"exit": 1, "codes": []})
+AssertionError: {'exit': 1, 'codes': ['something odd happened']} != {'exit': 1, 'codes': []}
+- {'codes': ['something odd happened'], 'exit': 1}
++ {'codes': [], 'exit': 1}
+
+----------------------------------------------------------------------
+Ran 7 tests in 1.155s
+
+FAILED (failures=7)
+exit=1
