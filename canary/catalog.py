@@ -80,10 +80,11 @@ CHECKS = [
      "Reaches for secrets, keys, or credentials on the machine", True,
      [(r"~/\.ssh|/\.ssh/|\bid_(rsa|ed25519|ecdsa|dsa)\b", False, "ssh"),
       (r"~/\.aws|aws_secret_access_key|~/\.config/gcloud|~/\.kube/config|~/\.netrc|~/\.docker/config\.json", False, "cloud"),
-      # Line-only (the fourth element): a keychain word split across lines is prose.
-      (r"\bsecurity\s+(find-generic-password|find-internet-password|dump-keychain|export)\b", False, "keychain", True),
-      (r"login\.keychain|Library/Keychains", False, "keychain", True),
-      (r"\bSecItemCopyMatching\b|\bSecKeychain\w*|\bkSecClass\w*", False, "keychain", True),
+      # Paragraph pass: these are tight forms, so a split across lines still matches.
+      (r"\bsecurity(\s+-\w+)*\s+(find-generic-password|find-internet-password|find-certificate|find-identity|dump-keychain|export|unlock-keychain|set-key-partition-list)\b", False, "keychain"),
+      (r"login\.keychain|Library/Keychains", False, "keychain"),
+      (r"\bSecItemCopyMatching\b|\bSecKeychain\w*|\bkSecClass\w*", False, "keychain"),
+      # Line-only (the fourth element): loose verb-then-keychain windows stay on one line.
       (r"\b(dump|export|extract|steal|exfiltrate)\b(\W+\w+){0,3}?\W+keychains?\b", False, "keychain", True),
       (r"\bread\s+(\w+\s+){0,2}?from\s+(the\s+|your\s+|their\s+)?(\w+\s+)?keychain\b", False, "keychain", True),
       (r"\bread\s+(the|your|their)\s+(\w+\s+)?keychain\b", False, "keychain", True),
@@ -102,6 +103,10 @@ CHECKS = [
       # A skills folder only as the object of a changing verb, and only on one line.
       (r"\b(write|edit|modify|overwrite|append|patch)\w*\s+(to\s+|into\s+|in\s+)?(\S+\s+){0,2}?(~/\.claude|~/\.codex|~/\.cursor|~/\.agents)/skills", False, "agent-config", True),
       (r"\b(delete|remove|rm(\s+-\w+)*)\s+(\S+\s+){0,1}?(~/\.claude|~/\.codex|~/\.cursor|~/\.agents)/skills", False, "agent-config", True),
+      # Writes into a skills folder by form: a redirect or tee, sed -i, or cp, mv, ln or rsync onto another skill's file.
+      (r"(>>?\s*|\btee(\s+-\w+)*\s+)['\"]?(~/\.claude|~/\.codex|~/\.cursor|~/\.agents)/skills", False, "agent-config"),
+      (r"\bsed\b.{0,200}?\s-i\S*\s.{0,200}?(~/\.claude|~/\.codex|~/\.cursor|~/\.agents)/skills", False, "agent-config", True),
+      (r"\b(cp|mv|ln|rsync)\b(\s+-\S+)*\s+.{0,200}?(~/\.claude|~/\.codex|~/\.cursor|~/\.agents)/skills/[^\s/]+/\S+", False, "agent-config", True),
       (r"launchctl\s+(load|bootstrap|bootout|unload)|LaunchAgents/|crontab\s", False, "schedule")]),
     ("stealth", "STEALTH", "medium",
      "Instructs the agent to hide behavior from the user", True,

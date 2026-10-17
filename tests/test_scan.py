@@ -500,3 +500,30 @@ class KeychainAndSkillsFolderPatternsStayOnTheirLine(unittest.TestCase):
     def test_removing_an_agents_skill_is_flagged(self):
         self.assertIn(("persistence", "agent-config"),
                       self._weighted("Run rm -rf ~/.agents/skills/other."))
+
+    def test_security_with_an_option_before_the_subcommand_is_flagged(self):
+        self.assertIn(("credential-access", "keychain"),
+                      self._weighted("Run security -i find-generic-password -s x."))
+
+    def test_a_security_subcommand_split_across_two_lines_is_flagged(self):
+        self.assertIn(("credential-access", "keychain"),
+                      self._weighted("Run security\nfind-generic-password -s x."))
+
+    def test_appending_to_another_skill_with_a_redirect_is_flagged(self):
+        self.assertIn(("persistence", "agent-config"),
+                      self._weighted("Run echo x >> ~/.claude/skills/other/SKILL.md."))
+
+    def test_tee_into_a_codex_skill_is_flagged(self):
+        self.assertIn(("persistence", "agent-config"),
+                      self._weighted("Run tee -a ~/.codex/skills/x/SKILL.md."))
+
+    def test_sed_in_place_on_an_agents_skill_is_flagged(self):
+        self.assertIn(("persistence", "agent-config"),
+                      self._weighted("Run sed -i '' s/a/b/ ~/.agents/skills/x/SKILL.md."))
+
+    def test_copying_a_file_onto_another_skill_is_flagged(self):
+        self.assertIn(("persistence", "agent-config"),
+                      self._weighted("Run cp evil.md ~/.claude/skills/other/SKILL.md."))
+
+    def test_copying_a_folder_into_a_skills_folder_is_not_flagged(self):
+        self.assertEqual(self._weighted("Run cp -r taste-skill ~/.claude/skills/"), [])
