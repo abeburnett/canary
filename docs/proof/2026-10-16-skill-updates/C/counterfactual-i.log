@@ -1,0 +1,21 @@
+commit f227b6bf68eb076afbe4e3f458ec1a61a59ccd90
+Python 3.10.3
+counterfactual (i): reverted line canary/guestlist.py record_install: the approved event no longer gets **({"origin": origin} if origin else {})
+
+--- tests.test_guestlist exit=1
+ERROR: test_a_local_folder_renders_as_local_folder (tests.test_guestlist.WhereASkillCameFrom)
+ERROR: test_add_from_github_lists_owner_repo_and_commit (tests.test_guestlist.WhereASkillCameFrom)
+ERROR: test_origin_survives_a_changed_event (tests.test_guestlist.WhereASkillCameFrom)
+Ran 25 tests in 0.742s
+FAILED (errors=3)
+--- tests.test_install exit=1
+ERROR: test_the_list_shows_the_install_came_from_the_installer (tests.test_install.SkillsComeFromStaging)
+Ran 45 tests in 7.888s
+FAILED (errors=1)
+--- tests.test_watcher exit=1
+ERROR: test_a_restored_skill_lists_as_restored (tests.test_watcher.ThePersonDecides)
+Ran 35 tests in 0.343s
+FAILED (errors=1)
+--- tests.test_add exit=0
+Ran 35 tests in 0.408s
+OK
