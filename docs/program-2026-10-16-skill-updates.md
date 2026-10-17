@@ -317,3 +317,64 @@ Tests added: a short skill line under 24 characters echoed with an
 `Error:` prefix is dropped; a skill line echoed with tabs or doubled
 spaces is dropped; a corpus over the cap withholds the output; an ordinary
 progress line (not an error form) never appears.
+
+## Third refutation (2026-10-16): REWORK, mostly slice D
+
+`~/.cache/reviews/20261016-181635-refute-program-2026-10-16-skill-updates/verdict.md`.
+Slices A to C hold up apart from the notes below. Folded:
+
+**Slice A.** The skills-path regex is the amendment's; the benchmark cannot
+show recall for these two rules (no malicious sample names a keychain or a
+skills path), so the must-flag unit tests carry it. Why 5's
+agent-config line is `catalog.py:95`.
+
+**Slice B.** `install.py:335` is reached only when nothing landed: it gets
+no output and a sentence that fits ("The installer failed before any
+skill landed; its output is in <log>, which the person can open."). The
+marketplace sites (`244`, `527`) say the same without "skill". The
+architecture text keeps "the log never goes to the agent" and adds: the
+`installer_output` lines are untrusted installer text, filtered by the
+allowlist and scrub, which are a narrowing, not a guarantee.
+
+**Slice C.** The commit is the resolved SHA from `fetch`
+(`SHA.fullmatch`), not the link text. `record_install(origin=None)` stays
+the default the plugin call relies on; the watcher's `put_back` path
+(`watcher.py:337`) passes `{"kind": "watcher"}`.
+
+**Slice D, rescoped** (its section above is superseded where these differ;
+D gets its own refutation before it is built):
+- `--replace` is refused when the install would place more than one skill
+  name, or when any destination is outside the user's skill roots (a
+  project folder), with a sentence saying so.
+- Replace covers a lock-recorded skill of the same name and an untracked
+  folder of the same name (HireReach's case had no lock record). The lock
+  key: the old record's key when there is one, else `choose_key`. The hold
+  stores the old lock record, or null for an untracked folder; restoring a
+  null hold removes the new record.
+- Links: destinations the lock record lists as links move as part of the
+  unit without `tree_digest`; their target must be another destination in
+  the same unit. An unlisted symlink at a destination is refused.
+- One replace-group id spans all destinations of one replace; each
+  destination's slot records the group. `canary restore` takes the group
+  id (or any member id) and swaps the whole group as one unit.
+- `watcher.held()` returns each hold's `reason`. `Watcher.review` refuses a
+  replaced hold; `restore()` branches on the reason to a new
+  `restore_replaced` path.
+- Origin: the replace's `approved` carries the new source's origin (slice
+  C); `hold.json` stores the old origin; the restore's `approved` carries
+  it back.
+- Counts compare the checked snapshot (in quarantine) with the installed
+  folder, by relative path and file digest: added, removed, changed.
+  Nothing is staged inside a watched root before the dialog. Tested.
+- Sentences: `_blocked_sentence` and `conflict_reason` end "To update it,
+  run this again with --replace." (no "remove"). Pinned tests to update
+  include `tests/test_install.py:404`.
+- Restore with the destination missing says "The folder it came from is
+  empty now; run canary add or canary install again to reinstall", not
+  `STILL_TAKEN`'s wording.
+- Undo: when an undo step itself fails, report the actual state of each
+  destination and leave the slots; slots emptied by a successful undo are
+  removed.
+
+**Order.** A and B merge one after the other; whichever merges second
+reruns the full gate on its rebased tree before merging.
