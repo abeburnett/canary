@@ -544,10 +544,39 @@ def _findings(rel, text):
             if not any((f["check_id"], n) in seen for n in range(start, end + 1)):
                 seen.add((f["check_id"], start))
                 findings.append(f)
+    # Third pass over runs of lines joined at a backslash line ending, as a shell reads them.
+    for start, end, joined, raw in _continuations(lines, raw_lines):
+        for f in catalog.match_continuation(rel, start, joined, raw):
+            if not any((f["check_id"], n) in seen for n in range(start, end + 1)):
+                seen.add((f["check_id"], start))
+                findings.append(f)
     code = _code_lines(raw_lines)
     for f in findings:
         f["context"] = _context(f["line"], code, raw_lines)
     return findings
+
+
+def _continuations(lines, raw_lines):
+    """Each run of lines that a backslash line ending joins to the line after it,
+    as (first line, last line, joined text, raw text). The backslash is dropped and
+    the next line follows directly. A run ends at the first line with no backslash;
+    a final line that still ends in one ends the file. Runs of one line are skipped."""
+    n, total = 0, len(lines)
+    while n < total:
+        if not lines[n].endswith("\\"):
+            n += 1
+            continue
+        start, pieces = n, []
+        while n < total and lines[n].endswith("\\"):
+            pieces.append(lines[n][:-1])
+            n += 1
+        if n < total:
+            pieces.append(lines[n])
+        end = min(n, total - 1)
+        if end > start:
+            yield (start + 1, end + 1, "".join(pieces),
+                   " ".join(r.strip() for r in raw_lines[start:end + 1]))
+        n = end + 1
 
 
 def _paragraphs(lines, raw_lines):
