@@ -882,6 +882,15 @@ Each test names the seam it uses to inject a fault. New tests live in
     entries, no `G2`, no `approved` event. Red at the implementation commit
     before the fix: `docs/proof/2026-10-17-replace/red-toctou.log`.
 
+34–37. Sol pre-merge review, findings 1 to 4 (section 9): a saved link
+    through a repointed alias refuses before the dialog, with no move and no
+    `approved` (34); an untracked clone with `.git`, replaced and restored
+    unchanged, succeeds (35); a two-folder restore killed after its first
+    folder returns completes on retry with the lock right (36); a
+    folder-and-link restore killed after the folder returns recovers the
+    link on retry (37). Red at `fcb4222`:
+    `docs/proof/2026-10-17-replace/red-sol.log`.
+
 Red first: tests 2–23, 25, 26 and 28–32 fail at `1465c3b` with the tests applied, on an
 assertion or on the missing interface (`TypeError` for `replace=`,
 `AttributeError` for `canary.replace`); test 1 fails on its assertion;
@@ -932,7 +941,11 @@ first line is `commit <full sha>` and its second the interpreter's
       case;
    o. `cli._restore` ignores the returned line → test 23;
    p. the restore's tree-digest comparison is removed → test 33 (the
-      automated review's TOCTOU fix).
+      automated review's TOCTOU fix);
+   q. saved links are not revalidated → test 34;
+   r. the restore snapshot drops `.git` → test 35;
+   s. lock coverage uses the kept origins only → test 36;
+   t. a link-only remainder is reported as nothing left → test 37.
 4. A Sol pre-merge review (`~/workspace/scripts/premerge-review`) before
    the full gate, findings folded or answered here.
 5. The done-when audit (milestone-auditor, Fable 5.1, `high`, done-when-
@@ -1089,6 +1102,38 @@ between the check and the rename. Answered in 4.1: under `_Commit`, before
 any move or approval, each folder member's entry must have the
 `tree_digest` of its checked copy, else the changed-after-check refusal;
 test 33, counterfactual (p).
+
+**Sol pre-merge review** (`premerge-review`, GPT-6.1 Sol at `high`, on
+`fcb4222`; MERGE-AFTER-FIXES, four should-fix findings, all folded in
+`5cf820d`, fail closed; tests 34 to 37 red first in
+`docs/proof/2026-10-17-replace/red-sol.log`):
+
+1. *Restore can reinstate an unchecked symlink target* (an indirect link
+   through an alias repointed after the replace). Before anything moves,
+   before the dialog and again under `_Commit`, each kept link is read from
+   where it was found and must resolve to the place of a folder member of
+   the group that is being restored or is already back; else `Still set
+   aside: the link saved from <path> no longer leads to a copy SkillCanary
+   checked. canary list shows where it is.` Test 34, counterfactual (q).
+2. *Unchanged Git clones cannot be restored* (the snapshot dropped `.git`,
+   the comparison did not). The restore copies the complete tree, `.git`
+   included (`replace._copy_tree`, which still refuses links and special
+   files), and checks and compares that same copy. Test 35,
+   counterfactual (r).
+3. *Recovery rejects a partially completed restore.* `replaced.json` gains
+   two additive fields written at set-aside, `digests` (each folder
+   member's `tree_digest`) and `links` (each link member's text). A retry
+   treats a member no longer in the store but back at its origin exactly
+   as set aside as done; links and lock coverage are judged against the
+   complete group (`current_plan(..., group_origins=...)`); only the kept
+   entries move; any other member whose origin holds something refuses with
+   the "something SkillCanary does not move" sentence. Test 36,
+   counterfactual (s).
+4. *A remaining saved link is reported as "nothing left".* With only links
+   kept, the folders they lead to (already back, digests matching) are
+   checked and the person asked; the links then go back, after finding 1's
+   check. Only a group with no kept entry is "nothing left". Test 37,
+   counterfactual (t).
 
 ## 10. Scope cuts, in one place
 
