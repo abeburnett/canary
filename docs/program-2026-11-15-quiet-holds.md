@@ -1,18 +1,15 @@
 # Program: quiet holds (ask once per hold, decide once per content)
 
-Open questions for the owner, before refutation:
+Owner decisions (2026-11-15). The owner accepted all three recommendations:
 
-1. **Who refutes this document?** Answered by the owner on 2026-11-15:
-   Spark 1.3 Contributor at `max`, through `refute-plan`.
-2. **Do approvals given before this version, or through `canary add` and
-   `canary install`, count as remembered answers?** I recommend no (section
-   2.2). Those dialogs never said that an answer covers other copies. With
-   yes, the seven "install anyway" approvals already on this Mac become
-   standing approvals for their content in every skills folder.
-3. **Does a hold the person refused leave the session-start notice?** I
-   recommend yes (section 2.6). It stays in `canary list` with a note. With
-   no, a refused hold is counted in every session until the person deletes
-   it.
+1. **Refuter.** Spark 1.3 Contributor at `max`, through `refute-plan`.
+2. **Older approvals are not remembered answers.** An approval made before
+   this version, or through `canary add` or `canary install`, does not count
+   as a remembered answer (section 2.2). Those dialogs never said that an
+   answer covers other copies, so the seven "install anyway" approvals
+   already on this Mac do not become standing approvals.
+3. **A refused hold leaves the session-start notice.** It stays in `canary
+   list` with a note (section 2.6).
 
 Status: design, written for refutation. Base: `main` at `94a2f80` (0.1.5
 released). Two slices; each builds in a short-lived worktree branched from
@@ -336,7 +333,7 @@ Then it notifies: `SkillCanary put {name} back in {folder}: it has the same
 content as a skill you chose to install.` The skill lists as `installed
 anyway` when P does, and as `restored`.
 
-Decision (open question 2): an approval without `covers` is not a
+Decision (owner decision 2): an approval without `covers` is not a
 remembered yes. That is every approval from `canary add` and `canary
 install`, and every approval made before this version. The cost is one more
 question when content approved that way arrives in another folder. A skill
@@ -428,7 +425,7 @@ program adds no new trust in the ledger.
 
 ### 2.6 Where a refused hold shows
 
-Decision (open question 3): `guestlist.scan` marks a hold `refused` when
+Decision (owner decision 3): `guestlist.scan` marks a hold `refused` when
 the ledger has a `declined` or `refused` event with that hold's `id` and a
 `digest`, and that fingerprint is still refused. `render_text` adds `(you
 chose not to install it)` to its line. `session_line` counts only the holds
@@ -754,7 +751,7 @@ Empty until the refutation runs.
 ## 10. Scope cuts, in one place
 
 - A remembered answer is keyed by content only, not by folder name or host.
-- Only answers in the held-skill dialog are remembered (open question 2).
+- Only answers in the held-skill dialog are remembered (owner decision 2).
 - A hold whose held copy is a link, and a place that is a link, get no
   automatic action. `canary restore` and `canary drop` still work.
 - Holds from different places are never dropped as duplicates of each
