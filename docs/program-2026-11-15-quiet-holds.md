@@ -98,8 +98,9 @@ Verified against the tree at `94a2f80` while writing (file:function):
   an agent can run `canary restore` today and `canary drop` after this
   program. Only the person's answer in SkillCanary's dialog acts.
 - `canary/add.py:ask` returns `True` only for the yes button (and the typed
-  name when `confirm` is given), `False` for Cancel, and `None` for no
-  screen, no `osascript`, a timeout or an error.
+  name when `confirm` is given), `False` for Cancel and for the yes button
+  with a name that does not match, and `None` for no screen, no
+  `osascript`, a timeout or an error.
 - `docs/architecture.md`, "The guest list", says the ledger is a report, not
   proof: a shell command or other software running as the person can change
   it.
@@ -154,14 +155,21 @@ session-start notice, and `canary restore <id>` asks again.
 applies:
 
 1. The hold is gone (`held` no longer lists it): nothing.
-2. The held copy is a link: `Watcher.review`, exactly as today. A link gets
+2. The held copy is a link: `Watcher.review`, which refuses a taken place
+   first (section 1.3) and otherwise checks and asks as today. A link gets
    no automatic drop and no automatic put-back in either slice.
 3. An older hold from the same place is an exact copy of this one: drop
-   this one (`how: "same as waiting hold"`, section 1.4) and go on with the
-   older hold from step 4. If the drop's ledger record fails, both holds
-   stay and handling goes on with this one.
+   this one (`how: "same as waiting hold"`, section 1.4), notify, and stop.
+   The older hold stays held and listed. The watcher asked about it when it
+   made it, so it does not ask again. The notification: `SkillCanary deleted
+   a second held copy of {name}: it is the same as the copy it is already
+   holding. canary list shows where it is.` If the drop's ledger record
+   fails, both holds stay and the watcher asks nothing.
 4. The place is taken: apply the sweep's rule for a taken place (section
-   1.2) to this hold. No question either way.
+   1.2) to this hold. No question either way. If the hold stays, notify:
+   `SkillCanary is holding {name}, which arrived in {folder} without its
+   check. Its place is taken now, so SkillCanary did not ask about it.
+   canary list shows where it is.`
 5. `Watcher.review(hold id)`. After a put-back, run the sweep.
 
 Step 3 keeps two holds from one place when their content differs. Dropping
@@ -346,6 +354,18 @@ no (`answer is False`) and the held copy is not a link. An unsafe verdict
 with no answer still records `refused`, as today, but with no `digest`, so
 silence is never remembered.
 
+For an unsafe verdict the dialog asks the person to type the folder name.
+`add.ask` returns `False` both for Cancel and for the yes button with a name
+that does not match, so the watcher cannot tell the two apart; today
+`Watcher.review` reports both as `STILL_CANCELLED`. Decision: both are a
+remembered no. The cost is that a mistyped name is remembered as a no for
+every copy of that content. To make that visible, after `False` on an
+unsafe verdict the watcher notifies: `SkillCanary did not install {name}:
+the dialog was cancelled, or the folder name was not typed exactly. It
+stays held. canary restore {id} asks again.` A yes there ends the
+remembered no. Telling the two apart needs a change to `add.ask`, which the
+check also uses; that change is cut from this program (section 10).
+
 `guestlist.refused(events, fingerprint)` is true when the latest event that
 carries that `digest`, among `approved`, `declined` and `refused`, is a
 `declined` or a `refused`. A later approval of the same content ends the
@@ -377,7 +397,7 @@ run. `handle(hold id)` keeps steps 1 to 4 of section 1.1 and replaces step
 8. Add the fingerprint to `asked`, then `Watcher.review(hold id)`. After a
    put-back, run the sweep.
 
-A fingerprint that cannot be read skips steps 3 and 5 to 7.
+A fingerprint that cannot be read skips steps 5 to 7.
 
 The sweep, for a hold whose place is free, applies steps 5 and 6 and
 nothing else: it never asks. Holds are taken oldest first, so a hold that
@@ -453,13 +473,15 @@ Install puts it back where it was. Cancel keeps it held and deletes nothing.
 Your answer covers every copy with exactly the same content that arrives in your skills folders, now or later: SkillCanary will not ask about it again.
 ```
 
-The notifications are quoted where they are used (1.2, 2.2, 2.3, 2.4). The
+The notifications are quoted where they are used (1.1, 1.2, 2.2, 2.3, 2.4). The
 list lines are in 1.6 and 2.6.
 
 ## 4. The eight holds already on this Mac
 
 `canary list` on 2026-11-15 showed eight holds. Each one's place is taken
-by a later copy that the watcher put back and recorded as approved.
+by another copy of the skill, which the watcher put back afterwards and
+recorded as approved. For six of the eight, that other copy arrived before
+the held one.
 
 | Hold id | Skill | Place | Arrived |
 |---|---|---|---|
@@ -507,6 +529,7 @@ nothing is installed. Every path:
 | The removal after the rename, or a stop between them | The slot keeps a `dropped` entry and is not listed; the next sweep removes it | 1.2, 1.4 |
 | A stop between the record and the rename | A `dropped` record for a hold that is still held and listed; nothing was deleted | 1.4 |
 | The dialog cannot show, times out or is closed | No answer: nothing is deleted and nothing is put back | 1.5 |
+| The person presses the yes button with a folder name that does not match | Nothing is installed; it is recorded as a no and, in slice 2, remembered; a notification says so and names `canary restore` | 2.3 |
 | An exception anywhere in `handle` | Caught; the hold stays held and listed | 1.1 |
 | The watcher stops before it asks | The hold is not asked about again automatically; it is listed and counted in the notice | 1.1 |
 | The place is taken | No check and no question; `STILL_TAKEN` from `canary restore` | 1.3 |
@@ -605,6 +628,12 @@ adds three behavioural scenarios, at the public boundaries `Watcher.begin`,
 `Watcher.handle`, `watcher.drop`, `cli._drop`, `guestlist.scan`,
 `guestlist.render_text` and `guestlist.session_line`.
 
+Tests 2 and 3 of slice 1 each carry several cases of one behaviour: when a
+held copy may be deleted. Each case is a distinct way to delete the wrong
+copy or to delete without a record, which is this program's main risk. An
+auditor who counts cases and not scenarios finds more than three in slice
+1; that risk is the justification `TESTING.md` asks for.
+
 ### Slice 1
 
 1. **A restart asks nothing and the hold still shows.** Hold a skill with
@@ -617,8 +646,9 @@ adds three behavioural scenarios, at the public boundaries `Watcher.begin`,
    `dropped` event (`how: "same as installed"`). (b) A hold whose installed
    copy differs only in a file under `.git` (same fingerprint, not an exact
    copy) stays. (c) A second hold from one place that is an exact copy of
-   the first is dropped by `handle` (`how: "same as waiting hold"`) and the
-   first stays; a second hold with different content stays too. (d) With
+   the first is dropped by `handle` (`how: "same as waiting hold"`), the
+   first stays, and the watcher asks no second question about it; a second
+   hold with different content is kept. (d) With
    `guestlist.record_events` patched to raise `OSError`, case (a) drops
    nothing. Seam: `mock.patch` on `guestlist.record_events`.
 3. **`canary drop` deletes only on the person's yes.** `watcher.drop` with
@@ -709,10 +739,12 @@ the slice's own tests and counterfactuals:
 6. Merge to `main` and push. No version bump and no tag: the release is the
    owner's step.
 
-Slice 1 also needs, in `slice-1/this-mac.log`, the output of `canary list`
-before and after the new watcher's first start on this Mac, run by the
-owner or with the owner's go-ahead, since that start may delete held
-copies. An agent-run check is not evidence for this bullet.
+One owner check sits outside bullets 1 to 6 and does not gate the merge,
+because it needs the new version installed, which is the owner's release
+step. After that install, the owner saves the output of `canary list`
+before and after the new watcher's first start on this Mac in
+`slice-1/this-mac.log`. That start may delete held copies, so an agent does
+not run it without the owner's go-ahead.
 
 Process: this document is refuted through `refute-plan` by the refuter the
 owner picks (open question 1) before any code; findings are folded into
@@ -734,6 +766,8 @@ Empty until the refutation runs.
   it has no undo, and there is no command that drops several holds at once.
 - Nothing prunes old holds by age.
 - No change to `canary/gate.py`, to the check, or to `frontdoor.SKILL_TEXT`.
+- `add.ask` is unchanged, so Cancel and a mistyped folder name stay
+  indistinguishable (section 2.3).
 - No version bump, changelog entry or release.
 
 ## 11. Later
