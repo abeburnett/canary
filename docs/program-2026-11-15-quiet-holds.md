@@ -11,9 +11,10 @@ Owner decisions (2026-11-15). The owner accepted all three recommendations:
 3. **A refused hold leaves the session-start notice.** It stays in `canary
    list` with a note (section 2.6).
 
-Status: design, written for refutation. Base: `main` at `94a2f80` (0.1.5
-released). Two slices; each builds in a short-lived worktree branched from
-`main` and merges when its "Done when" list is shown. Slice 1 starts from
+Status: design, refuted on 2026-11-15 with the verdict PROCEED-WITH-FIXES;
+the nine findings are folded and answered in section 9. No code is written.
+Base: `main` at `94a2f80` (0.1.5 released). Two slices; each builds in a
+short-lived worktree branched from `main` and merges when its "Done when" list is shown. Slice 1 starts from
 the commit on `main` that carries this document, whose code is identical to
 `94a2f80`; slice 2 starts from the merge of slice 1. The coordinator writes
 the start commit into each worker's contract, and the worker checks it with
@@ -111,7 +112,11 @@ Terms, each used with one meaning throughout:
   limits, so this program never deletes or installs on a fingerprint alone.
 - **Exact copy**: two real folders (neither is a link) whose
   `add.tree_digest` values are equal. A `SourceError` or an `OSError` while
-  reading either one means they are not an exact copy.
+  reading either one means they are not an exact copy. One new function
+  decides it everywhere: `watcher.same_tree(a, b)` returns true only when
+  `os.path.islink` is false for both, `os.path.isdir` is true for both, and
+  `add.tree_digest(a) == add.tree_digest(b)`; it catches `add.SourceError`
+  and `OSError` and returns false.
 - **Approved**: `watcher._approved(path, support)` is true now, which means
   the ledger has the path as checked or yours and its content has not
   changed since.
@@ -130,8 +135,9 @@ Terms, each used with one meaning throughout:
 
 - `Watcher.begin()` runs one sweep. It puts no hold on the review queue.
 - `Watcher.handle(item)` handles one queue item: the sweep sentinel
-  `watcher.SWEEP`, or a hold id. It catches every exception, as the loop
-  does today, so a failure leaves the hold held.
+  `watcher.SWEEP`, which runs the sweep (section 1.2), or a hold id. It
+  catches every exception, as the loop does today, so a failure leaves the
+  hold held.
 - `_review_loop` calls `begin()`, then `handle(self.reviews.get())` forever.
 
 `Watcher.hold` is unchanged: it puts the new hold's id on the queue. So the
@@ -143,7 +149,8 @@ through `watcher-seen.json` and calls `hold`.
 The cost: a hold whose question was lost is never asked about again
 automatically. That happens when the watcher stops between the hold and the
 dialog, or when nobody answers. The hold stays in `canary list` and in the
-session-start notice, and `canary restore <id>` asks again.
+session-start notice, and `canary restore <id>` asks again while the hold's
+place is free (section 1.3).
 
 `handle(hold id)` does these steps in order and stops at the first that
 applies:
@@ -152,13 +159,14 @@ applies:
 2. The held copy is a link: `Watcher.review`, which refuses a taken place
    first (section 1.3) and otherwise checks and asks as today. A link gets
    no automatic drop and no automatic put-back in either slice.
-3. An older hold from the same place is an exact copy of this one: drop
-   this one (`how: "same as waiting hold"`, section 1.4), notify, and stop.
-   The older hold stays held and listed. The watcher asked about it when it
-   made it, so it does not ask again. The notification: `SkillCanary deleted
-   a second held copy of {name}: it is the same as the copy it is already
-   holding. canary list shows where it is.` If the drop's ledger record
-   fails, both holds stay and the watcher asks nothing.
+3. An older hold from the same place is an exact copy of this one
+   (`same_tree` of the two held copies): drop this one (`how: "same as
+   waiting hold"`, section 1.4), notify, and stop. The older hold stays held
+   and listed. The watcher asked about it when it made it, so it does not
+   ask again. The notification: `SkillCanary deleted a second held copy of
+   {name}: it is the same as the copy it is already holding. canary list
+   shows what is still held.` If the drop's ledger record fails, both holds
+   stay and the watcher asks nothing.
 4. The place is taken: apply the sweep's rule for a taken place (section
    1.2) to this hold. No question either way. If the hold stays, notify:
    `SkillCanary is holding {name}, which arrived in {folder} without its
@@ -177,30 +185,49 @@ place and content.
 never run at once in one watcher. It runs in three situations:
 
 - at start, from `begin()`;
-- when `Watcher.step` leaves a new entry alone because it is approved
-  (`step` puts `watcher.SWEEP` on the review queue), which covers installs
-  by `canary add`, `canary install` and `canary restore`;
-- after `handle` puts a hold back.
+- when `handle` takes `watcher.SWEEP` from the review queue. `Watcher.step`
+  puts it there when it leaves a new entry alone because it is approved,
+  which covers installs by `canary add`, `canary install` and `canary
+  restore`;
+- after `handle` puts a hold back, as a direct call and not a queue item.
+
+At most one `watcher.SWEEP` waits on the queue. `Watcher` gains
+`sweep_waiting`, a `threading.Event`. `step` puts `SWEEP` on the queue only
+when the event is clear, and then sets it. `handle` clears it before it
+runs the sweep, so an approval that settles during a sweep queues one more.
+Only `step` sets the event and only `handle` clears it. A burst of approved
+arrivals therefore costs one running sweep and at most one waiting sweep.
 
 The sweep makes one pass over `held(self.support, self.roots)`, oldest
 first, and skips a hold whose held copy is a link. For a hold whose place is
-taken it applies one rule:
+taken it applies one rule. It tests the three conditions in the order
+written and stops at the first that fails:
 
 > Drop the hold when the place is a real folder, the place is approved, and
-> the held copy is an exact copy of the folder at the place. Record `how:
-> "same as installed"` and `same_as`: the place.
+> `same_tree(held copy, place)` is true. Record `how: "same as installed"`
+> and `same_as`: the place.
 
 Any other hold whose place is taken stays held and listed. In slice 1 the
 sweep does nothing for a hold whose place is free.
+
+The cost: `same_tree` reads both folders in full and has no size limit,
+because a limit would hide a difference past it. The order above runs it
+only for a hold whose place is taken by an approved real folder. A hold
+that fails it is read again at every sweep; this program caches no
+comparison (section 10). On this Mac that is at most eight holds.
 
 The way back for a hold dropped by this rule is the installed folder, which
 held the same bytes when the sweep compared them. The comparison and the
 drop are not one atomic step: a change to the installed folder after the
 comparison is reported by the guest list as `changed since approval`.
 
-The sweep also removes a slot that holds a `dropped` entry and no `entry`,
-which a drop leaves behind when it stops between its rename and its
-removal (section 1.4).
+After that pass the sweep lists `held_dir(self.support)` itself and
+removes, with `shutil.rmtree(slot, ignore_errors=True)`, every slot whose
+name matches `HOLD_ID` and that has a `dropped` entry and no `entry`. The
+pass over `held` cannot find such a slot, because `held` skips a slot with
+no `entry`. A drop leaves one behind when it stops between its rename and
+its removal (section 1.4). Only `_drop_hold` makes a `dropped` entry, and
+only after its ledger record, so this removal deletes nothing unrecorded.
 
 A sweep that dropped something sends one notification: `SkillCanary deleted
 {n} held copy that matches a skill you already installed: {names}. canary
@@ -231,9 +258,13 @@ every drop: the person's, the sweep's and step 3's.
    `held` stops listing the hold, and `put_back`'s own rename of `entry`
    now fails, so exactly one of a drop and a put-back wins. If the rename
    fails, append `{"at", "event": "drop_failed", "id"}` through
-   `watcher._record` and return false: the hold stays.
+   `watcher._record` and return false: nothing was deleted.
 4. `shutil.rmtree(<slot>, ignore_errors=True)`. A held link is removed as a
-   link; its target is never touched.
+   link; its target is never touched. Return true.
+
+`_drop_hold` returns true only after step 3 succeeds. After a false, the
+caller tests `os.path.lexists(<slot>/entry)`: when it is there the hold
+stays held, and when it is gone a put-back won.
 
 A stop between steps 2 and 3 leaves a `dropped` record for a hold that is
 still held and listed; nothing was deleted, and a later drop writes a
@@ -257,9 +288,10 @@ quarantine exists to prevent.
   add.ask(text, verdict, yes="Delete")`, called with `"NEEDS_REVIEW"`, the
   shape `guestlist.trust` uses for "Mark as mine". The dialog text is in
   section 3.
-- Yes: `_drop_hold(support, h, "person")`, then `(True, DROPPED)`, exit 0.
-  A failed rename returns `(False, STILL_GONE)` when the held copy is no
-  longer there and `(False, STILL_NOT_DROPPED)` otherwise, exit 10.
+- Yes: `_drop_hold(support, h, "person")`. True gives `(True, DROPPED)`,
+  exit 0. False gives `(False, STILL_NOT_DROPPED)` when
+  `os.path.lexists(<slot>/entry)` is true and `(False, STILL_GONE)` when it
+  is false, exit 10. `STILL_GONE` is the existing sentence.
 - No: `(False, STILL_KEPT)`, exit 10. Silence or no dialog:
   `(False, STILL_SILENT)`, exit 10.
 - A ledger failure: `cli._drop` prints `canary: <strerror>; it stays held.`
@@ -306,11 +338,19 @@ a later `approved` event without it removes it.
 A held copy is put back without a question only when all of these hold:
 
 1. the held copy is a real folder and its place is free;
-2. some path P in the ledger has status checked with `covers`, and P's
-   approved fingerprint equals the held copy's fingerprint (a fast filter,
-   through the new `guestlist.covering(events, fingerprint)`);
-3. P is directly in a watched folder and is approved now;
-4. the held copy is an exact copy of P.
+2. the new `guestlist.covering(events, fingerprint)` returns a path P. It
+   replays the ledger with `guestlist._state` and returns, sorted, the
+   paths whose state now has status checked, `covers` equal to `"content"`,
+   and an approved fingerprint equal to the held copy's fingerprint. It
+   reads the current state and never a past event, so it does not return a
+   path that was removed or a path whose covering approval a later approval
+   without `covers` replaced. It is a fast filter;
+3. P is directly in a watched folder and `watcher._approved(P, support)` is
+   true now;
+4. `same_tree(held copy, P)` is true.
+
+The watcher tries the returned paths in order and uses the first that
+passes 3 and 4.
 
 So nothing reaches a skills folder this way unless the same bytes are
 already installed, approved and unchanged in another one.
@@ -368,35 +408,45 @@ refusal, whichever command gave it.
 A hold whose fingerprint is refused stays held with no check and no dialog.
 The watcher writes, through `watcher._record`, `{"at", "event": <the kind
 of the remembered event>, "name", "id", "digest", "replay": true}` once per
-hold, and notifies once per content per run: `SkillCanary is holding
+hold, and notifies once per content per run (the `notified` set, section
+2.4, with the key `"refused"`): `SkillCanary is holding
 {name}, which arrived in {folder}: it has the same content as a skill you
 chose not to install. canary list shows where it is.`
 
 The fingerprint is enough here because a wrong match only withholds a
-question; it never installs or deletes. `canary restore <id>` always checks
-and asks again, and a yes there is a later approval.
+question; it never installs or deletes. The remembered no lives in `handle`
+and in the sweep, not in `Watcher.review`. So `canary restore <id>` checks
+and asks again whenever the hold's place is free, and a yes there is a later
+approval. When the place is taken it refuses with `STILL_TAKEN` (section
+1.3), and `canary drop <id>` ends the hold.
 
 ### 2.4 The order in `handle` and in the sweep
 
-`Watcher` gains `asked`, a set of fingerprints it has asked about in this
-run. `handle(hold id)` keeps steps 1 to 4 of section 1.1 and replaces step
-5 with:
+`Watcher` gains two sets that last for one run. `asked` holds the
+fingerprints it has asked about. `notified` holds `(key, fingerprint)`
+pairs: a notification that this document limits to once per content per
+run is sent only when its pair is absent, and the watcher then adds the
+pair. The keys are `"refused"` (section 2.3) and `"asked"` (step 7 below).
+`handle(hold id)` keeps steps 1 to 4 of section 1.1 and replaces step 5
+with:
 
 5. The fingerprint is refused (2.3): the hold stays, with no question.
 6. A remembered yes applies (2.2): put the hold back, then run the sweep.
 7. The fingerprint is in `asked`: the hold stays, with no question, and one
-   notification per content per run: `SkillCanary is holding {name}, which
-   arrived in {folder}: it has the same content as a skill it already asked
-   you about. canary list shows where it is.`
+   notification per content per run (key `"asked"`): `SkillCanary is
+   holding {name}, which arrived in {folder}: it has the same content as a
+   skill it already asked you about. canary list shows where it is.`
 8. Add the fingerprint to `asked`, then `Watcher.review(hold id)`. After a
    put-back, run the sweep.
 
 A fingerprint that cannot be read skips steps 5 to 7.
 
 The sweep, for a hold whose place is free, applies steps 5 and 6 and
-nothing else: it never asks. Holds are taken oldest first, so a hold that
-becomes droppable because the same pass put an older hold back at its place
-is dropped later in that pass.
+nothing else: it never asks. For each such hold it computes the
+fingerprint, which the fingerprint's own limits bound, and it runs
+`same_tree` only when `covering` returns a path. Holds are taken oldest
+first, so a hold that becomes droppable because the same pass put an older
+hold back at its place is dropped later in that pass.
 
 Three copies that arrive together get one question. `handle` asks about
 the first. On a yes, `put_back` records the covering approval and the
@@ -626,7 +676,35 @@ Tests 2 and 3 of slice 1 each carry several cases of one behaviour: when a
 held copy may be deleted. Each case is a distinct way to delete the wrong
 copy or to delete without a record, which is this program's main risk. An
 auditor who counts cases and not scenarios finds more than three in slice
-1; that risk is the justification `TESTING.md` asks for.
+1; that risk is the justification the workspace testing policy asks for
+(`~/workspace/TESTING.md`, which is outside this repository).
+
+The builder writes each lettered case, and each half of a test that this
+section separates, as its own test method, so a log shows one result per
+case.
+
+Some cases assert that something stays held or is asked about. Those cases
+are pins: at the slice's start commit nothing drops a hold and nothing is
+put back without a question, so such a case passes there or fails only on
+the missing interface, which shows nothing. The testing policy accepts a
+safety invariant only when a small temporary change shows it can fail, so
+each pin names its counterfactual in section 8:
+
+| Pin | Counterfactual |
+|---|---|
+| Slice 1, test 2 (b): a `.git`-only difference stays held | b |
+| Slice 1, test 2 (c): different content from one place is kept | d |
+| Slice 1, test 2 (d): a failed record drops nothing | e |
+| Slice 1, test 3: a no keeps the hold | g |
+| Slice 1, test 3: a ledger fault removes nothing | e |
+| Slice 2, test 2: `watcher.restore` asks again | n |
+| Slice 2, test 3: all four cases | i, j, k, l |
+
+Every other case is red at the start commit.
+
+Not tested, on purpose: the limit of one waiting `watcher.SWEEP` (section
+1.2). It bounds cost and changes no outcome; the pre-merge review reads it
+in the diff.
 
 ### Slice 1
 
@@ -644,7 +722,10 @@ auditor who counts cases and not scenarios finds more than three in slice
    first stays, and the watcher asks no second question about it; a second
    hold with different content is kept. (d) With
    `guestlist.record_events` patched to raise `OSError`, case (a) drops
-   nothing. Seam: `mock.patch` on `guestlist.record_events`.
+   nothing. Seam: `mock.patch` on `guestlist.record_events`. (e) A drop
+   that stops after its rename leaves a slot with `dropped` and no `entry`;
+   `begin()` on a second watcher removes the slot. Seam: `mock.patch` on
+   `watcher.shutil.rmtree` during the drop.
 3. **`canary drop` deletes only on the person's yes.** `watcher.drop` with
    an injected `ask`, the seam `watcher.restore` already has. No: the hold
    stays, `STILL_KEPT`. Ledger fault (the ledger path made a directory, as
@@ -673,11 +754,15 @@ The `STILL_*` pins stay green because no sentence changes.
    `session_line` does not count either hold. `watcher.restore` on the
    second hold asks again.
 3. **Changed content and older approvals are asked about.** After a
-   covering yes: a copy with one changed byte, and a copy that differs only
-   under `.git`, are each asked about. Content approved through
+   covering yes, a copy that differs only under `.git` is asked about. That
+   is the case only the exact-copy test stops; a changed byte in a scanned
+   file also fails the fingerprint filter, so it gets no case of its own.
+   Content approved through
    `guestlist.record_install` without `covers` (as `canary add` records it)
    and arriving elsewhere is asked about. After the approved copy is
-   removed, the same content is asked about.
+   removed, the same content is asked about. After an approval without
+   `covers` replaces the covering approval at the same path, the same
+   content is asked about.
 
 Existing test changed on purpose:
 `test_cancel_keeps_it_held_and_canary_list_says_how_to_restore` asserts
@@ -691,45 +776,66 @@ log is stamped when its first line is `commit <full sha>` and its second
 the interpreter's `--version`. The list is the same for each slice, with
 the slice's own tests and counterfactuals:
 
-1. `red.log`: every new test of the slice, and each changed existing test,
-   fails at the slice's start commit with the tests applied, on an
-   assertion or on the missing interface (`TypeError`, `AttributeError`).
-   A pin that cannot be red is listed as a pin.
+1. `red.log`: every case of the slice that section 7 does not list as a
+   pin, and each changed existing test, fails at the slice's start commit
+   with the tests applied, on an assertion or on the missing interface
+   (`TypeError`, `AttributeError`). The log lists each pin of section 7 by
+   name with its result at the start commit.
 2. `gate-python3.10.log` and `gate-usr-bin-python3.log`: the full gate
-   passes at the slice's final commit on both interpreters, stamped.
+   passes at the slice's final commit on both interpreters, stamped. The
+   final commit is a manifest commit. `scripts/action.py:scanner_manifest`
+   checks every file under `canary/` against `scanner/manifest.json`, so a
+   change there fails the `tests/test_action.py` `CanaryActionTests` cases
+   until the manifest is rewritten. The builder commits the slice's last
+   code change (the source commit), runs `scripts/update-manifest.py
+   <source commit>`, and commits `scanner/manifest.json` alone, as
+   `a55073b` did for 0.1.5. A later change under `bin/` or `canary/`, such
+   as a fold from bullet 4, repeats those steps before the gate logs.
 3. Counterfactuals, full suite, each in `counterfactual-<letter>.log`
    naming the reverted line and the tests that went red; other reds listed
-   and explained. Known collateral, recorded by the 2026-10-17 program: any
-   edit under `canary/` turns the `tests/test_action.py` `CanaryActionTests`
-   cases red through the integrity check of `scanner/manifest.json`
-   (`scripts/action.py`); the builder re-verifies the count and the
-   mechanism in the first log.
+   and explained. Known collateral, recorded by the 2026-10-17 program: a
+   counterfactual edits a file under `canary/` and does not rewrite the
+   manifest, so it turns the `tests/test_action.py` `CanaryActionTests`
+   cases red through the check named in bullet 2; the builder re-verifies
+   the count and the mechanism in the first log.
    Slice 1, at least:
    a. `_review_loop` queues every hold at start again → test 1;
-   b. `same_tree` compares fingerprints instead of `add.tree_digest` →
-      test 2 (b);
-   c. the same-place rule in `handle` is removed → test 2 (c);
-   d. `_drop_hold` renames before it records, or writes its record through
+   b. `watcher.same_tree` compares fingerprints instead of
+      `add.tree_digest` → test 2 (b);
+   c. the same-place rule in `handle` is removed → test 2 (c), the
+      exact-copy case;
+   d. the same-place rule drops the newer hold without calling `same_tree`
+      → test 2 (c), the different-content case;
+   e. `_drop_hold` renames before it records, or writes its record through
       `watcher._record` → test 2 (d) and test 3's ledger fault;
-   e. `watcher.drop` ignores the answer → test 3;
-   f. `review`'s test for a taken place is removed → the changed case in
+   f. the sweep no longer removes a slot with `dropped` and no `entry` →
+      test 2 (e);
+   g. `watcher.drop` ignores the answer → test 3's no;
+   h. `review`'s test for a taken place is removed → the changed case in
       `test_every_restore_failure_says_why`.
    Slice 2, at least:
-   g. a remembered yes no longer needs `covers` → test 3;
-   h. a remembered yes compares fingerprints only → test 3 (the `.git`
+   i. a remembered yes no longer needs `covers` → test 3 (the approval
+      without `covers`);
+   j. a remembered yes compares fingerprints only → test 3 (the `.git`
       copy);
-   i. a remembered yes no longer needs the installed copy to be approved →
+   k. a remembered yes no longer needs the installed copy to be approved →
       test 3 (the removed copy);
-   j. the remembered no is removed from `handle` → test 2;
-   k. `session_line` counts refused holds → test 2;
-   l. `Watcher.asked` is removed → test 1 with `Mac(answer=None)` asks
+   l. `guestlist.covering` searches every `approved` event and not the
+      current state → test 3 (the replaced approval);
+   m. the remembered no is removed from `handle` → test 2;
+   n. `Watcher.review` returns early for a refused fingerprint → test 2
+      (`watcher.restore` asks again);
+   o. `session_line` counts refused holds → test 2;
+   p. `Watcher.asked` is removed → test 1 with `Mac(answer=None)` asks
       three times; the builder adds that assertion to test 1.
-4. A Sol pre-merge review (`~/workspace/scripts/premerge-review`) on the
-   slice's diff before the full gate, findings folded or answered in
-   section 9.
-5. The done-when audit (milestone-auditor through the `done-when-audit`
-   skill; fallback an Opus read-only reviewer with the same prompt) returns
-   SHOWN for bullets 1 to 3.
+4. A Sol pre-merge review on the slice's diff before the full gate,
+   findings folded or answered in section 9. Its tool,
+   `~/workspace/scripts/premerge-review`, belongs to the owner's workspace
+   and is not in this repository.
+5. The done-when audit returns SHOWN for bullets 1 to 3. It runs through
+   the `done-when-audit` skill and its `milestone-auditor` agent, which
+   belong to the owner's Claude setup and are not in this repository. The
+   fallback is an Opus read-only reviewer with the same prompt.
 6. Merge to `main` and push. No version bump and no tag: the release is the
    owner's step.
 
@@ -740,13 +846,37 @@ before and after the new watcher's first start on this Mac in
 `slice-1/this-mac.log`. That start may delete held copies, so an agent does
 not run it without the owner's go-ahead.
 
-Process: this document is refuted through `refute-plan` by Spark 1.3
-Contributor at `max` (the owner's choice, 2026-11-15) before any code; findings are folded into
-sections 1 to 7 and answered in section 9.
+Process: this document was refuted through `refute-plan` by Spark 1.3
+Contributor at `max` (the owner's choice, 2026-11-15) before any code. The
+findings are folded into sections 0 to 8 and answered in section 9.
 
 ## 9. Where each refutation finding is answered
 
-Empty until the refutation runs.
+The refutation ran on 2026-11-15 against this document at `676def3`, which
+differs from the version the owner's decisions were recorded in (`9c50ecc`)
+only by that decisions block. Verdict: PROCEED-WITH-FIXES, nine findings.
+Each was checked against the tree at `94a2f80` before it was folded. The
+refuter's full text is in the owner's review cache, outside this
+repository, under `20261115-142525-refute-program-2026-11-15-quiet-holds`.
+
+| # | Severity | Finding | Checked against | Answer |
+|---|---|---|---|---|
+| 1 | blocks | The full gate cannot pass: a change under `canary/` fails the manifest check, and the list never rewrites the manifest | `scripts/action.py:scanner_manifest`; `scripts/update-manifest.py`; commit `a55073b` | Accepted. Section 8, bullet 2 makes the final commit a manifest commit; bullet 3 says why a counterfactual still shows the collateral |
+| 2 | blocks | "Every new test fails at the start commit" is false for the cases that assert something stays | `canary/watcher.py` at the base: nothing drops a hold | Accepted. Section 7 lists the pins with a counterfactual each; section 8, bullet 1 asks for red on the other cases only |
+| 3 | wrong if built | The sweep cannot remove a slot with `dropped` and no `entry`, because `held` skips it | `canary/watcher.py:held` | Accepted. Section 1.2: the sweep lists the held folder itself. Test 2 (e), counterfactual f |
+| 4 | wrong if built | `covering` must read the current state, or it returns a path that was removed or approved again without `covers` | `canary/guestlist.py:_state` (`removed` pops the path; `approved` replaces the state) | Accepted. Section 2.2, condition 2. A new case in slice 2 test 3, counterfactual l |
+| 5 | wrong if built | "`canary restore` always checks and asks again" contradicts the refusal for a taken place | Sections 1.3 and 2.3 of this document | Accepted. Sections 1.1 and 2.3 say "while the place is free"; counterfactual n pins that the remembered no is not in `review` |
+| 6 | wrong if built | A counterfactual names `same_tree`, which nothing defines | This document | Accepted. Terms defines `watcher.same_tree(a, b)`; sections 1.1, 1.2 and 2.2 use it |
+| 7 | wrong if built | Every approved arrival queues a sweep, and each sweep compares every hold with no limit | `canary/watcher.py:Watcher.step`; `canary/add.py:tree_digest` | Accepted in part. Section 1.2 limits the queue to one waiting sweep and orders the rule cheapest first. The comparison keeps no size limit and no cache; section 1.2 states the cost and section 10 records the cut |
+| 8 | cleanup | `TESTING.md`, the pre-merge review tool and the audit tools are not in the repository | `ls` in the repository and in `~/workspace` | Accepted, with one change to the proposed fix. The citation stays and names `~/workspace/TESTING.md`, because that policy is where the justification rule comes from. Section 8, bullets 4 and 5 name the tools as the owner's |
+| 9a | cleanup | `_drop_hold`'s false cannot tell `STILL_GONE` from `STILL_NOT_DROPPED` | `canary/watcher.py` (`STILL_GONE` exists) | Accepted. Sections 1.4 and 1.5: the caller tests `os.path.lexists` of the entry |
+| 9b | cleanup | "Once per content per run" has no store | This document | Accepted. Section 2.4 adds `Watcher.notified` |
+| 9c | cleanup | The duplicate-drop notification points at a deleted copy | This document | Accepted. Section 1.1, step 3: "shows what is still held" |
+
+The refuter also confirmed, against the code, the survey in section 0, the
+ask-once design, the early `STILL_TAKEN`, the three-copy flow in section
+2.4, the migration by sweep in section 4, the additive JSON fields and the
+scope cuts.
 
 ## 10. Scope cuts, in one place
 
@@ -759,6 +889,8 @@ Empty until the refutation runs.
 - `canary drop` takes one hold id. It does not take a replaced group's id,
   it has no undo, and there is no command that drops several holds at once.
 - Nothing prunes old holds by age.
+- The sweep caches no comparison: a hold that is not an exact copy is read
+  again at every sweep (section 1.2).
 - No change to `canary/gate.py`, to the check, or to `frontdoor.SKILL_TEXT`.
 - `add.ask` is unchanged, so Cancel and a mistyped folder name stay
   indistinguishable (section 2.3).
