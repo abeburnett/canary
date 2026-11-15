@@ -14,8 +14,9 @@ Owner decisions (2026-11-15). The owner accepted all three recommendations:
 Status: design, refuted on 2026-11-15 with the verdict PROCEED-WITH-FIXES;
 the nine findings are folded and answered in section 9. No code is written.
 Base: `main` at `94a2f80` (0.1.5 released). Two slices; each builds in a
-short-lived worktree branched from `main` and merges when its "Done when" list is shown. Slice 1 starts from
-the commit on `main` that carries this document, whose code is identical to
+short-lived worktree branched from `main` and merges when its "Done when"
+list is shown. Slice 1 starts from the commit on `main` that carries this
+document, whose code is identical to
 `94a2f80`; slice 2 starts from the merge of slice 1. The coordinator writes
 the start commit into each worker's contract, and the worker checks it with
 `git merge-base --is-ancestor <commit> HEAD` before editing. Gate:
@@ -192,11 +193,21 @@ never run at once in one watcher. It runs in three situations:
 - after `handle` puts a hold back, as a direct call and not a queue item.
 
 At most one `watcher.SWEEP` waits on the queue. `Watcher` gains
-`sweep_waiting`, a `threading.Event`. `step` puts `SWEEP` on the queue only
-when the event is clear, and then sets it. `handle` clears it before it
-runs the sweep, so an approval that settles during a sweep queues one more.
-Only `step` sets the event and only `handle` clears it. A burst of approved
-arrivals therefore costs one running sweep and at most one waiting sweep.
+`sweep_waiting`, a `threading.Event`. When the event is clear, `step` sets
+it and then puts `SWEEP` on the queue; when it is set, `step` does neither.
+`handle` clears it when it takes `SWEEP`, before it runs the sweep, so an
+approval that settles during a sweep queues one more. Only `step` sets the
+event and only `handle` clears it. A burst of approved arrivals therefore
+costs one running sweep and at most one waiting sweep.
+
+The order in `step` matters, because `step` runs on the watcher's main
+thread and `handle` on the review thread. With the put first, `handle`
+could take `SWEEP` and clear the event before `step` set it. The event
+would then stay set with nothing on the queue, and no later approval would
+queue a sweep in that run. With the set first, `handle` clears only after a
+put, so a set event always has a `SWEEP` on the queue or one being taken.
+An approval that `step` skips because the event is set is already in place
+when the waiting sweep starts, so that sweep sees it.
 
 The sweep makes one pass over `held(self.support, self.roots)`, oldest
 first, and skips a hold whose held copy is a link. For a hold whose place is
@@ -703,8 +714,10 @@ each pin names its counterfactual in section 8:
 Every other case is red at the start commit.
 
 Not tested, on purpose: the limit of one waiting `watcher.SWEEP` (section
-1.2). It bounds cost and changes no outcome; the pre-merge review reads it
-in the diff.
+1.2). With the order that section gives (`step` sets the event, then puts)
+it bounds cost and changes no outcome. A test of the wrong order would need
+a timed race between two threads, so the pre-merge review reads the order
+in the diff instead.
 
 ### Slice 1
 
@@ -854,7 +867,9 @@ findings are folded into sections 0 to 8 and answered in section 9.
 
 The refutation ran on 2026-11-15 against this document at `676def3`, which
 differs from the version the owner's decisions were recorded in (`9c50ecc`)
-only by that decisions block. Verdict: PROCEED-WITH-FIXES, nine findings.
+only by that decisions block and by three references to it in the body,
+where "open question" became "owner decision". Verdict: PROCEED-WITH-FIXES,
+nine findings.
 Each was checked against the tree at `94a2f80` before it was folded. The
 refuter's full text is in the owner's review cache, outside this
 repository, under `20261115-142525-refute-program-2026-11-15-quiet-holds`.
@@ -877,6 +892,21 @@ The refuter also confirmed, against the code, the survey in section 0, the
 ask-once design, the early `STILL_TAKEN`, the three-copy flow in section
 2.4, the migration by sweep in section 4, the additive JSON fields and the
 scope cuts.
+
+Two changes in the fold answer no finding. The owner did not ask for
+either, so each is named here:
+
+- Slice 2, test 3 lost its "one changed byte" case. Listing the pins for
+  finding 2 showed that no single small change turns that case red: the
+  fingerprint filter and `same_tree` each stop a changed byte on their own.
+  A pin that no counterfactual can fail shows nothing, so the test keeps
+  the `.git`-only case, which only `same_tree` stops. To restore the case,
+  add it to test 3 as a pin without a counterfactual and say so in
+  section 7.
+- A review of the fold corrected the order in section 1.2: `step` sets
+  `sweep_waiting` before it puts `SWEEP`. The fold first wrote the put
+  before the set, which could stop queued sweeps for the rest of a run.
+  The failure would have left holds held and installed nothing.
 
 ## 10. Scope cuts, in one place
 
