@@ -2,11 +2,8 @@
 
 Open questions for the owner, before refutation:
 
-1. **Who refutes this document?** The owner picks one refuter per program.
-   I recommend Spark 1.3 Contributor at `max` through `refute-plan`, the
-   owner's choice for the 2026-10-06 and 2026-10-17 programs. The design
-   deletes held copies and installs without a question, so it needs a
-   refuter that attacks the error paths.
+1. **Who refutes this document?** Answered by the owner on 2026-11-15:
+   Spark 1.3 Contributor at `max`, through `refute-plan`.
 2. **Do approvals given before this version, or through `canary add` and
    `canary install`, count as remembered answers?** I recommend no (section
    2.2). Those dialogs never said that an answer covers other copies. With
@@ -746,8 +743,8 @@ before and after the new watcher's first start on this Mac in
 `slice-1/this-mac.log`. That start may delete held copies, so an agent does
 not run it without the owner's go-ahead.
 
-Process: this document is refuted through `refute-plan` by the refuter the
-owner picks (open question 1) before any code; findings are folded into
+Process: this document is refuted through `refute-plan` by Spark 1.3
+Contributor at `max` (the owner's choice, 2026-11-15) before any code; findings are folded into
 sections 1 to 7 and answered in section 9.
 
 ## 9. Where each refutation finding is answered
