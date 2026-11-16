@@ -14,6 +14,7 @@ import itertools
 import json
 import os
 import queue
+import re
 import shutil
 import contextlib
 import io
@@ -197,7 +198,12 @@ class ThePersonDecides(unittest.TestCase):
         self.assertEqual(mac.w.review(held_id), (False, STILL_CANCELLED))
         report = guestlist.scan(mac.home, support=mac.support)
         self.assertEqual([h["restore"] for h in report["held"]], [f"canary restore {held_id}"])
-        self.assertIn("held for your decision", guestlist.session_line(report))
+        # Program 2026-11-15, 2.6: the person answered, so the notice no longer counts it.
+        self.assertIn(f"  dropped-in  from {folder}  held since {mac.held()[0]['at'][:10]}  "
+                      "(you chose not to install it)\n"
+                      f"    to check it again and install it: canary restore {held_id}",
+                      guestlist.render_text(report))
+        self.assertIsNone(guestlist.session_line(report))
         self.assertEqual(watcher.restore(held_id, mac.home, mac.support,
                                          ask=lambda text, verdict, confirm=None: True,
                                          backend=model(), model="fake"), (True, None))
@@ -571,6 +577,167 @@ class CanaryDropDeletesOnlyOnAYes(unittest.TestCase):
                         contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
                     self.assertEqual(cli.main(["drop", self.held_id]), code)
                 self.assertEqual((out.getvalue(), err.getvalue()), (printed, warned))
+
+
+COVERING = ("Your answer covers every copy with exactly the same content that arrives in your "
+            "skills folders, now or later: SkillCanary will not ask about it again.")
+PUT_BACK_NOTE = ("SkillCanary put dropped-in back in {folder}: it has the same content as a skill "
+                 "you chose to install.")
+REFUSED_NOTE = ("SkillCanary is holding dropped-in, which arrived in {folder}: it has the same "
+                "content as a skill you chose not to install. canary list shows where it is.")
+ASKED_NOTE = ("SkillCanary is holding dropped-in, which arrived in {folder}: it has the same "
+              "content as a skill it already asked you about. canary list shows where it is.")
+
+
+def three_roots(mac):
+    """The three user skills folders, the Codex home's own last. It must be
+    inside the test's home: CODEX_HOME could point anywhere."""
+    [third] = [r for r in mac.w.roots if r not in (mac.claude, mac.codex)]
+    assert third.startswith(mac.home + os.sep), third
+    return [mac.claude, mac.codex, third]
+
+
+class OneAnswerCoversEveryCopy(unittest.TestCase):
+    """Program 2026-11-15 (quiet holds), slice 2, test 1. No seam."""
+
+    def test_one_question_puts_every_copy_back(self):
+        mac = Mac(verdict="UNSAFE", answer=True)
+        roots = three_roots(mac)
+        folders = [skill(root, "dropped-in") for root in roots]
+        with ordered_ids():
+            self.assertEqual(len(mac.settle()), 3)
+        drain(mac.w)
+        self.assertEqual(mac.confirms, ["dropped-in"])
+        self.assertIn("Install puts it back where it was. Cancel keeps it held and deletes "
+                      "nothing.\n" + COVERING + "\n", mac.asked[0])
+        self.assertEqual(mac.held(), [])
+        self.assertEqual(mac.notes, [PUT_BACK_NOTE.format(folder=watcher._short(r, mac.home))
+                                     for r in roots[1:]])
+        text = guestlist.render_text(guestlist.scan(mac.home, support=mac.support))
+        for folder in folders:
+            self.assertTrue(os.path.isfile(os.path.join(folder, "SKILL.md")))
+            self.assertRegex(text, rf"dropped-in +installed anyway +{re.escape(folder)}  "
+                                   "from restored")
+
+    def test_nobody_answering_is_asked_once(self):
+        # Counterfactual p: without Watcher.asked, each copy is asked about.
+        mac = Mac(verdict="UNSAFE", answer=None)
+        roots = three_roots(mac)
+        for root in roots:
+            skill(root, "dropped-in")
+        with ordered_ids():
+            self.assertEqual(len(mac.settle()), 3)
+        drain(mac.w)
+        self.assertEqual(len(mac.asked), 1)
+        self.assertEqual(len(mac.held()), 3)
+        self.assertEqual(mac.notes, [ASKED_NOTE.format(folder="~/.agents/skills")])
+
+
+class ANoIsRemembered(unittest.TestCase):
+    """Program 2026-11-15 (quiet holds), slice 2, test 2. No seam. The same
+    content arrives again after a restart, so `Watcher.asked` cannot be what
+    withholds the question."""
+
+    def setUp(self):
+        self.mac = Mac(answer=False)
+        with ordered_ids():
+            self.first_folder = skill(self.mac.codex, "dropped-in")
+            [self.first] = self.mac.settle()
+            drain(self.mac.w)
+            self.later = Mac(answer=False, home=self.mac.home)
+            self.second_folder = skill(self.mac.claude, "dropped-in")
+            [self.second] = self.later.settle(start=20)
+        drain(self.later.w)
+
+    def test_no_second_question_and_it_stays_held(self):
+        # Counterfactual m.
+        self.assertEqual((len(self.mac.asked), self.later.asked), (1, []))
+        self.assertEqual([h["id"] for h in self.later.held()], [self.first, self.second])
+        self.assertEqual(self.later.notes, [REFUSED_NOTE.format(folder="~/.claude/skills")])
+        self.assertEqual([(e.get("id"), e.get("replay")) for e in ledger(self.mac, "declined")],
+                         [(self.first, None), (self.second, True)])
+
+    def test_canary_list_says_the_person_chose_not_to_install_it(self):
+        report = guestlist.scan(self.mac.home, support=self.mac.support)
+        self.assertEqual([h["refused"] for h in report["held"]], [True, True])
+        text = guestlist.render_text(report)
+        days = {h["id"]: h["at"][:10] for h in self.later.held()}
+        for held_id, folder in ((self.first, self.first_folder),
+                                (self.second, self.second_folder)):
+            self.assertIn(f"  dropped-in  from {folder}  held since {days[held_id]}  "
+                          "(you chose not to install it)\n"
+                          f"    to check it again and install it: canary restore {held_id}", text)
+
+    def test_the_session_notice_counts_neither_hold(self):
+        # Counterfactual o.
+        report = guestlist.scan(self.mac.home, support=self.mac.support)
+        self.assertIsNone(guestlist.session_line(report))
+
+    def test_canary_restore_asks_again(self):
+        # Pin (counterfactual n): the remembered no is not in Watcher.review.
+        asked = []
+        result = watcher.restore(self.second, self.mac.home, self.mac.support,
+                                 ask=lambda text, verdict, confirm=None: asked.append(text),
+                                 backend=model(), model="fake")
+        self.assertEqual((result, len(asked)), ((False, STILL_SILENT), 1))
+
+
+class ChangedContentAndOlderApprovalsAreAskedAbout(unittest.TestCase):
+    """Program 2026-11-15 (quiet holds), slice 2, test 3. Every case is a pin
+    (counterfactuals i, j, k, l). The later copy arrives after a restart, so
+    `Watcher.asked` cannot be what asks or withholds."""
+
+    def covering_yes(self):
+        mac = Mac(answer=True)
+        folder = skill(mac.codex, "dropped-in")
+        mac.settle()
+        drain(mac.w)
+        self.assertEqual(len(mac.asked), 1)
+        self.assertTrue(os.path.isfile(os.path.join(folder, "SKILL.md")))
+        return mac, folder
+
+    def arrives_again(self, mac, git=False):
+        """The same SKILL.md arrives in ~/.claude/skills; the watcher that
+        sees it asks, with no answer. Returns that watcher's Mac."""
+        later = Mac(answer=None, home=mac.home)
+        copy = skill(mac.claude, "dropped-in")
+        if git:
+            os.makedirs(os.path.join(copy, ".git"))
+            with open(os.path.join(copy, ".git", "HEAD"), "w") as fh:
+                fh.write("ref: refs/heads/main\n")
+        self.assertEqual(len(later.settle(start=20)), 1)
+        drain(later.w)
+        return later
+
+    def test_j_a_copy_that_differs_only_under_git_is_asked_about(self):
+        mac, folder = self.covering_yes()
+        later = self.arrives_again(mac, git=True)
+        copy = os.path.join(watcher.held_dir(mac.support), later.held()[0]["id"], "entry")
+        self.assertEqual(guestlist.digest(copy), guestlist.digest(folder))
+        self.assertEqual((len(later.asked), len(later.held())), (1, 1))
+
+    def test_i_content_approved_without_covers_is_asked_about(self):
+        mac = Mac(answer=None)
+        folder = skill(mac.codex, "dropped-in")
+        # As canary add records it: the approval comes before the files are seen.
+        guestlist.record_install(mac.home, [folder], "dropped-in", "LIKELY_SAFE",
+                                 support=mac.support)
+        self.assertEqual(mac.settle(), [])
+        later = self.arrives_again(mac)
+        self.assertEqual((len(later.asked), len(later.held())), (1, 1))
+
+    def test_k_after_the_approved_copy_is_removed_the_same_content_is_asked_about(self):
+        mac, folder = self.covering_yes()
+        shutil.rmtree(folder)
+        later = self.arrives_again(mac)
+        self.assertEqual((len(later.asked), len(later.held())), (1, 1))
+
+    def test_l_after_an_approval_without_covers_replaces_it_the_same_content_is_asked_about(self):
+        mac, folder = self.covering_yes()
+        guestlist.record_install(mac.home, [folder], "dropped-in", "LIKELY_SAFE",
+                                 support=mac.support)
+        later = self.arrives_again(mac)
+        self.assertEqual((len(later.asked), len(later.held())), (1, 1))
 
 
 class TheLaunchAgent(unittest.TestCase):
