@@ -242,7 +242,9 @@ only after its ledger record, so this removal deletes nothing unrecorded.
 
 A sweep that dropped something sends one notification: `SkillCanary deleted
 {n} held copy that matches a skill you already installed: {names}. canary
-list shows what is still held.` (`copies` and `skills` when n is not one).
+list shows what is still held.` When n is two or more: `SkillCanary deleted
+{n} held copies that match skills you already installed: {names}. canary
+list shows what is still held.`
 A sweep that changes nothing does nothing else. An error on one hold is
 caught and the pass goes on with the next hold.
 
@@ -503,7 +505,8 @@ New constants in `canary/watcher.py`, beside the `STILL_*` lines:
 - `DROPPED = "Deleted the held copy of {name}."`
 - `NOT_A_HOLD = "canary drop deletes a held skill only; canary restore {id} puts a replaced copy back."`
 
-The `canary drop` dialog (`watcher.drop_text(h, home)`):
+The `canary drop` dialog (`watcher.drop_text(h, home)`). Each line of the
+block is one line of the dialog; the dialog wraps a long line.
 
 ```
 Delete the held copy of this skill?
@@ -512,9 +515,7 @@ Folder name: <name>
 Arrived in <folder> on <YYYY-MM-DD>.
 <Another copy is in its place now. | Its place is free.>
 
-Delete removes the copy SkillCanary is holding. This cannot be undone: to
-get it back, install the skill again from where it came. Nothing in your
-skills folders changes.
+Delete removes the copy SkillCanary is holding. This cannot be undone: to get it back, install the skill again from where it came. Nothing in your skills folders changes.
 Cancel keeps it held.
 The folder name comes from whoever put it there, not from SkillCanary.
 ```
@@ -907,6 +908,15 @@ either, so each is named here:
   `sweep_waiting` before it puts `SWEEP`. The fold first wrote the put
   before the set, which could stop queued sweeps for the rest of a run.
   The failure would have left holds held and installed nothing.
+
+The slice 1 build found two wording defects in this document and shipped
+them to the letter (`1b6594a`, `db0d117`). The plural deletion note in
+section 1.2 read "copies that matches a skills", and the `canary drop`
+dialog in section 3 broke its explanation in the middle of a sentence. The
+owner chose to fix both (2026-11-15). This commit corrects sections 1.2 and
+3; the source commit after it changes `watcher._installed_note` and
+`watcher.drop_text` to match, and the manifest commit after that is the
+slice's final code commit.
 
 ## 10. Scope cuts, in one place
 
