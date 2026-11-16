@@ -316,7 +316,8 @@ def scan(home=None, support=None, cwd=None, first_look=False):
                               if s.get("status") == CHECKED and s.get("origin") else {})})
     from canary import replace, watcher
     held = [{"id": h["id"], "name": h["name"], "origin": h["origin"], "since": h["at"],
-             "restore": f"canary restore {h['id']}"}
+             "restore": f"canary restore {h['id']}", "drop": f"canary drop {h['id']}",
+             "taken": os.path.lexists(h["origin"])}
             for h in watcher.held(support, user_roots(home))]
     return {"schema": "canary.list/1", "skills": skills,
             "unchecked": [s for s in skills if s["status"] == UNCHECKED],
@@ -445,9 +446,15 @@ def render_text(report):
     else:
         lines.append("No skills found.")
     if report.get("held"):
-        lines += ["", "Held by SkillCanary (arrived without its check; nothing is deleted):"]
-        lines += [f"  {h['name']}  from {h['origin']}  to restore: {h['restore']}"
-                  for h in report["held"]]
+        lines += ["", "Held by SkillCanary (arrived without its check):"]
+        for h in report["held"]:
+            since = h.get("since")
+            lines.append(f"  {h['name']}  from {h['origin']}"
+                         + (f"  held since {since[:10]}" if isinstance(since, str) else "")
+                         + ("  (its place is taken)" if h.get("taken") else ""))
+            if not h.get("taken"):
+                lines.append(f"    to check it again and install it: {h['restore']}")
+            lines.append(f"    to delete the held copy: {h['drop']}")
     if report.get("replaced"):
         lines += ["", "Set aside by a replace (nothing is deleted):"]
         lines += [f"  {g['name']}  replaced {g['at'][:10]}  {', '.join(g['paths'])}  "

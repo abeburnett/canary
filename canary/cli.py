@@ -26,6 +26,7 @@ USAGE = ("usage: canary scan <skill-file-or-directory> [--json | --text] [--exce
          " [--corpus <folder>]\n"
          "       canary list [--json]\n"
          "       canary restore <held-id-or-replaced-id>\n"
+         "       canary drop <held-id>\n"
          "       canary trust <skill-folder-or-skills-folder>\n"
          "       canary setup [--level scan|guard]\n"
          "       canary doctor [--json | --prune]\n"
@@ -419,6 +420,24 @@ def _restore(args):
     return 0 if back else 10
 
 
+def _drop(args):
+    """Delete a held copy; only the person's yes in the dialog deletes it."""
+    if len(args) != 1 or args[0].startswith("-"):
+        print(USAGE, file=sys.stderr)
+        return EXIT_USAGE
+    from canary import watcher
+    try:
+        dropped, line = watcher.drop(args[0])
+    except ValueError as exc:
+        print(f"canary: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    except OSError as exc:
+        print(f"canary: {exc.strerror or exc}; it stays held.", file=sys.stderr)
+        return 1
+    print(line)
+    return 0 if dropped else 10
+
+
 def _watch(args):
     """The launch agent's entry point (canary setup installs it at Guard)."""
     if args:
@@ -499,6 +518,8 @@ def main(argv):
             return _trust(rest)
         if command == "restore":
             return _restore(rest)
+        if command == "drop":
+            return _drop(rest)
         if command == "bench":
             return _bench(rest)
         if command == "watch":

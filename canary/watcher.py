@@ -7,7 +7,9 @@ entry appears there and stops changing, and it is a skill SkillCanary has no
 approval for, the watcher moves it into the quarantine ("holds" it), checks
 it, and asks the person once. Approval puts it back where it was, if it
 still matches what was checked; anything else leaves it held, and `canary
-list` shows how to restore it. Nothing is deleted.
+list` shows how to restore it. The watcher deletes a held copy only when the
+same content is installed and approved at its place, or when the person says
+so with `canary drop`; each deletion is recorded first.
 
 What it leaves alone: what was there when it was set up, changes to skills
 already there, SkillCanary's own installs (they record their approval before
@@ -46,7 +48,14 @@ STILL_CHANGED = "Still held: it changed after its check." + SUFFIX
 STILL_TAKEN = "Still held: something else is in its place now." + SUFFIX
 STILL_NOT_MOVED = "Still held: SkillCanary could not move it back." + SUFFIX
 STILL_GONE = "Still held: SkillCanary is no longer holding it."
+STILL_KEPT = "Still held: you chose not to delete it." + SUFFIX
+STILL_NOT_DROPPED = "Still held: SkillCanary could not delete it." + SUFFIX
+DROPPED = "Deleted the held copy of {name}."
+NOT_A_HOLD = ("canary drop deletes a held skill only; canary restore {id} puts a replaced "
+              "copy back.")
 HOLD_ID = re.compile(r"\d{8}T\d{6}Z-[0-9a-f]{8}")
+# On the review queue: run the sweep (program 2026-11-15, section 1.2).
+SWEEP = object()
 
 
 def held_dir(support):
@@ -145,6 +154,60 @@ def _record(support, events):
         pass
 
 
+def _fail(err):
+    raise err
+
+
+def same_tree(a, b):
+    """True only when two real folders hold exactly the same bytes, paths and
+    program bits, `.git` included. A link, a special file or anything that
+    cannot be read makes them not the same."""
+    for root in (a, b):
+        if os.path.islink(root) or not os.path.isdir(root):
+            return False
+    try:
+        # tree_digest's walk skips a folder it cannot list; this one does not.
+        for root in (a, b):
+            for _ in os.walk(root, onerror=_fail):
+                pass
+        return add.tree_digest(a) == add.tree_digest(b)
+    except (add.SourceError, OSError):
+        return False
+
+
+def _drop_hold(support, h, how, same_as=None):
+    """Delete one held copy, recording it first. True once the held copy is
+    committed to deletion; False when it could not be, and nothing was
+    deleted. A failed ledger write raises OSError and removes nothing."""
+    slot = os.path.join(held_dir(support), h["id"])
+    entry = os.path.join(slot, "entry")
+    try:
+        fingerprint = None if os.path.islink(entry) else guestlist.digest(entry)
+    except (OSError, ValueError):
+        fingerprint = None
+    record = {"at": _now(), "event": "dropped", "id": h["id"], "name": h["name"],
+              "origin": h["origin"], "digest": fingerprint, "how": how}
+    if same_as is not None:
+        record["same_as"] = same_as
+    guestlist.record_events(support, [record])
+    try:
+        # The commit point: `held` stops listing it, and a put-back's rename fails.
+        os.rename(entry, os.path.join(slot, "dropped"))
+    except OSError:
+        _record(support, [{"at": _now(), "event": "drop_failed", "id": h["id"]}])
+        return False
+    shutil.rmtree(slot, ignore_errors=True)
+    return True
+
+
+def _installed_note(names):
+    n = len(names)
+    what = ("held copy that matches a skill" if n == 1
+            else "held copies that match skills")
+    return (f"SkillCanary deleted {n} {what} you already installed: {', '.join(names)}. "
+            "canary list shows what is still held.")
+
+
 class Watcher:
     """`step(now)` notices, settles and holds; `review(id)` checks and asks.
     The loop runs reviews on their own thread, so holding never waits for a
@@ -160,6 +223,8 @@ class Watcher:
         self.settle, self.max_wait = settle, max_wait
         self.roots = guestlist.user_roots(home)
         self.reviews = queue.Queue()
+        # Set while a SWEEP waits on the queue: only `step` sets it, only `handle` clears it.
+        self.sweep_waiting = threading.Event()
         self.pending = {}  # path -> {"first", "key", "changed"}
         # What the last run saw, so a restart does not take arrivals as given.
         saved = self._load_seen()
@@ -242,7 +307,16 @@ class Watcher:
                 self.skill_less.add(path)
                 continue
             # Read after the wait: SkillCanary's installs record approval first.
-            if _approved(path, self.support) or _is_frontdoor(path):
+            if _approved(path, self.support):
+                del self.pending[path]
+                # An approved arrival may match a held copy. Set first, then
+                # put, so a set event always has a SWEEP on the queue or one
+                # being taken.
+                if not self.sweep_waiting.is_set():
+                    self.sweep_waiting.set()
+                    self.reviews.put(SWEEP)
+                continue
+            if _is_frontdoor(path):
                 del self.pending[path]
                 continue
             # A link into another watched folder (an installer's
@@ -286,6 +360,9 @@ class Watcher:
         if h is None:
             return False, STILL_GONE
         entry = _held_path(self.support, h)
+        if os.path.lexists(h["origin"]):
+            # Nothing could go back, so there is nothing to check or ask about.
+            return False, STILL_TAKEN
         work = tempfile.mkdtemp(prefix="canary-held-")
         try:
             snap = os.path.join(work, "skill")
@@ -355,14 +432,107 @@ class Watcher:
             self.tick(time.monotonic())
 
     def _review_loop(self):
-        for h in held(self.support, self.roots):
-            self.reviews.put(h["id"])  # ones left from before a restart
+        self.begin()
         while True:
-            held_id = self.reviews.get()
+            # A held skill stays held; `canary list` shows it.
+            self.handle(self.reviews.get())
+
+    def begin(self):
+        """At start: one sweep. No hold goes on the review queue: the watcher
+        asked about each one when it made it."""
+        try:
+            self.sweep()
+        except Exception:
+            pass
+
+    def handle(self, item):
+        """One item from the review queue: SWEEP, or a hold's id. Any error
+        leaves the hold held."""
+        try:
+            if item is SWEEP:
+                self.sweep_waiting.clear()
+                self.sweep()
+            else:
+                self._handle_hold(item)
+        except Exception:
+            pass
+
+    def _handle_hold(self, held_id):
+        holds = held(self.support, self.roots)
+        h = next((h for h in holds if h["id"] == held_id), None)
+        if h is None:
+            return
+        entry = _held_path(self.support, h)
+        if os.path.islink(entry):
+            self.review(held_id)
+            return
+        for older in holds:
+            if older["id"] == held_id:
+                break
+            if older["origin"] == h["origin"] and same_tree(_held_path(self.support, older),
+                                                            entry):
+                try:
+                    if _drop_hold(self.support, h, "same as waiting hold"):
+                        self.notify(f"SkillCanary deleted a second held copy of {h['name']}: "
+                                    "it is the same as the copy it is already holding. "
+                                    "canary list shows what is still held.")
+                except OSError:
+                    pass  # the record failed: both stay, and nothing is asked
+                return
+        if os.path.lexists(h["origin"]):
             try:
-                self.review(held_id)
+                gone = self._drop_if_installed(h)
+            except OSError:
+                gone = False
+            if gone:
+                self.notify(_installed_note([h["name"]]))
+            elif os.path.lexists(entry):
+                self.notify(f"SkillCanary is holding {h['name']}, which arrived in "
+                            f"{_short(os.path.dirname(h['origin']), self.home)} without its "
+                            "check. Its place is taken now, so SkillCanary did not ask about "
+                            "it. canary list shows where it is.")
+            return
+        back, _ = self.review(held_id)
+        if back:
+            self.sweep()
+
+    def _drop_if_installed(self, h):
+        """The taken-place rule: drop a hold whose place is a real folder,
+        approved, with exactly the same bytes. The tests run in this order
+        and stop at the first that fails."""
+        place = h["origin"]
+        if os.path.islink(place) or not os.path.isdir(place):
+            return False
+        if not _approved(place, self.support):
+            return False
+        if not same_tree(_held_path(self.support, h), place):
+            return False
+        return _drop_hold(self.support, h, "same as installed", same_as=place)
+
+    def sweep(self):
+        """One pass over the holds, oldest first: drop each one whose place
+        holds an approved exact copy. Then remove what a stopped drop left."""
+        dropped = []
+        for h in held(self.support, self.roots):
+            try:
+                if os.path.islink(_held_path(self.support, h)):
+                    continue
+                if os.path.lexists(h["origin"]) and self._drop_if_installed(h):
+                    dropped.append(h["name"])
             except Exception:
-                pass  # a held skill stays held; the next restart asks again
+                continue
+        try:
+            slots = os.listdir(held_dir(self.support))
+        except OSError:
+            slots = []
+        for name in slots:
+            slot = os.path.join(held_dir(self.support), name)
+            # Only _drop_hold makes `dropped`, after its record.
+            if (HOLD_ID.fullmatch(name) and os.path.lexists(os.path.join(slot, "dropped"))
+                    and not os.path.lexists(os.path.join(slot, "entry"))):
+                shutil.rmtree(slot, ignore_errors=True)
+        if dropped:
+            self.notify(_installed_note(dropped))
 
     def _wait(self):
         timeout = 0.5 if self.pending else POLL_SECONDS
@@ -420,7 +590,7 @@ def dialog_text(h, verdict, reasons, caps, home, result=None, snapshot=None):
     if other:
         lines += ([""] if result is not None else []) + [f"- {r}" for r in other]
     lines += ["", f"Folder name: {h['name']}", "",
-              "Install puts it back where it was. Cancel keeps it held; nothing is deleted.",
+              "Install puts it back where it was. Cancel keeps it held and deletes nothing.",
               "The folder name comes from whoever put it there, not from SkillCanary."
               + (" So do the file names and quoted lines." if found and snapshot else "")]
     if verdict == "UNSAFE":
@@ -467,6 +637,46 @@ def restore(held_id, home=None, support=None, ask=None, backend="auto", model=No
     if any(g["id"] == held_id for g in replace.groups(w.support, w.roots)):
         return replace.restore(held_id, home, w.support, w.ask, backend, model)
     raise ValueError(replace.NOT_KEEPING)
+
+
+def drop_text(h, home):
+    """The `canary drop` dialog."""
+    day = (h.get("at") or "")[:10]
+    folder = _short(os.path.dirname(h["origin"]), home)
+    return "\n".join([
+        "Delete the held copy of this skill?", "",
+        f"Folder name: {h['name']}",
+        f"Arrived in {folder} on {day}." if day else f"Arrived in {folder}.",
+        "Another copy is in its place now." if os.path.lexists(h["origin"])
+        else "Its place is free.", "",
+        "Delete removes the copy SkillCanary is holding. This cannot be undone: to get it "
+        "back, install the skill again from where it came. Nothing in your skills folders "
+        "changes.",
+        "Cancel keeps it held.",
+        "The folder name comes from whoever put it there, not from SkillCanary."])
+
+
+def drop(held_id, home=None, support=None, ask=None):
+    """`canary drop <id>`: delete a held copy after the person says so in
+    SkillCanary's dialog. (True, the line), or (False, the line saying why
+    it stays held). A failed ledger write raises OSError and deletes nothing."""
+    home = home or os.path.expanduser("~")
+    support = support or os.path.join(home, guestlist.SUPPORT[2:])
+    ask = ask or (lambda text, verdict: add.ask(text, verdict, yes="Delete"))
+    roots = guestlist.user_roots(home)
+    h = next((h for h in held(support, roots) if h["id"] == held_id), None)
+    if h is None:
+        from canary import replace
+        if any(g["id"] == held_id for g in replace.groups(support, roots)):
+            raise ValueError(NOT_A_HOLD.format(id=held_id))
+        raise ValueError(replace.NOT_KEEPING)
+    answer = ask(drop_text(h, home), "NEEDS_REVIEW")
+    if answer is True:
+        if _drop_hold(support, h, "person"):
+            return True, DROPPED.format(name=h["name"])
+        still = os.path.lexists(_held_path(support, h))
+        return False, STILL_NOT_DROPPED if still else STILL_GONE
+    return False, STILL_KEPT if answer is False else STILL_SILENT
 
 
 def agent_path(which=shutil.which):
