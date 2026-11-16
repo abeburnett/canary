@@ -958,7 +958,7 @@ defect: only the 11 manifest cases went red.
   bullet 3, k now removes both the approval check and `same_tree`. Its
   evidence is `slice-2/counterfactual-k-combined.log` and
   `slice-2/counterfactual-k-combined-usr-bin-python3.log`, both run at
-  `26dacea`. On both interpreters, k-combined turns 13 tests red:
+  `9331ba8`. On both interpreters, k-combined turns 13 tests red:
   - `test_k_after_the_approved_copy_is_removed_the_same_content_is_asked_about`
     fails on its assertion. This failure alone shows k.
   - `test_j_a_copy_that_differs_only_under_git_is_asked_about` errors with
@@ -967,8 +967,8 @@ defect: only the 11 manifest cases went red.
     failure, and it is not counted as k's evidence.
   - The other 11 are the manifest cases named in bullet 3.
   `counterfactual-k.log` stays as the record of the defect. No source,
-  test or log changed with this decision, so the gate logs at `26dacea`
-  stay valid.
+  test or log changed with this decision. The gate logs stand at
+  `9331ba8`, the final code commit after the fold below.
 - 2026-11-16, owner: fold the pre-merge review's should-fix. Asked "Fold
   the review's should-fix into slice 2?", the owner answered "Fold it".
   The review is
