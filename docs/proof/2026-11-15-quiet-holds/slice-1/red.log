@@ -1,0 +1,269 @@
+commit ccc13022e911f6b4aba6a13e73643202fe1a3db2
+Python 3.10.3
+
+red.log: slice 1 tests at the start commit with the tests applied.
+The commit above adds only tests/test_watcher.py; canary/, bin/ and scanner/
+are byte-identical to the start commit 3ee3058c6edbb6a00e10ef944efa959f46438b53
+(git diff --quiet 3ee3058 HEAD -- canary/ bin/ scanner/ exits 0).
+Command: python3.10 -m unittest tests.test_watcher -v
+
+== Result per slice 1 case (section 7), with why it is red ==
+test 1                       red                      ERROR  AHoldIsAskedAboutOnce.test_a_restart_asks_nothing_and_the_hold_still_shows
+    AttributeError: 'Watcher' object has no attribute 'handle'
+test 2 (a)                   red                      ERROR  AutomaticDropsDeleteExactCopiesOnly.test_a_an_approved_exact_copy_at_its_place_drops_the_hold_at_start
+    AttributeError: 'Watcher' object has no attribute 'begin'
+test 2 (b)                   PIN (counterfactual b)   ERROR  AutomaticDropsDeleteExactCopiesOnly.test_b_a_copy_that_differs_only_under_git_is_kept
+    AttributeError: 'Watcher' object has no attribute 'begin'
+test 2 (c) exact copy        red                      ERROR  AutomaticDropsDeleteExactCopiesOnly.test_c_a_second_exact_copy_from_one_place_is_dropped_without_a_question
+    AttributeError: 'Watcher' object has no attribute 'handle'
+test 2 (c) different content PIN (counterfactual d)   ERROR  AutomaticDropsDeleteExactCopiesOnly.test_c_a_second_hold_with_different_content_is_kept
+    AttributeError: 'Watcher' object has no attribute 'handle'
+test 2 (d)                   PIN (counterfactual e)   ERROR  AutomaticDropsDeleteExactCopiesOnly.test_d_a_failed_record_drops_nothing
+    AttributeError: 'Watcher' object has no attribute 'begin'
+test 2 (e)                   red                      ERROR  AutomaticDropsDeleteExactCopiesOnly.test_e_a_drop_that_stops_after_its_rename_is_finished_by_the_next_start
+    AttributeError: 'Watcher' object has no attribute 'begin'
+test 3 no                    PIN (counterfactual g)   ERROR  CanaryDropDeletesOnlyOnAYes.test_no_keeps_the_hold
+    AttributeError: module 'canary.watcher' has no attribute 'drop'
+test 3 ledger fault          PIN (counterfactual e)   ERROR  CanaryDropDeletesOnlyOnAYes.test_a_ledger_fault_removes_nothing
+    AttributeError: module 'canary.watcher' has no attribute 'drop'
+test 3 yes                   red                      ERROR  CanaryDropDeletesOnlyOnAYes.test_yes_deletes_the_held_copy_and_records_it
+    AttributeError: module 'canary.watcher' has no attribute 'drop'
+test 3 cli._drop             red                      ERROR (all 4 subtests: codes 0, 10, 2, 1)  CanaryDropDeletesOnlyOnAYes.test_canary_drop_prints_the_line_and_exits_with_its_code
+    AttributeError: <module 'canary.watcher' from '/Users/abrahamburnett/workspace/canary/.claude/worktrees/gallant-mcnulty-afd3b7/canary/watcher.py'> does not have
+changed existing test (1.3)  red                      FAIL   ThePersonDecides.test_every_restore_failure_says_why
+    AssertionError: Lists differ: ["A skill appeared in ~/.agents/skills wit[422 chars]ry."] != []
+
+Pins (section 7 table), by name, with their result at the start commit:
+  test 2 (b)  test_b_a_copy_that_differs_only_under_git_is_kept          ERROR (missing Watcher.begin)
+  test 2 (c)  test_c_a_second_hold_with_different_content_is_kept        ERROR (missing Watcher.handle)
+  test 2 (d)  test_d_a_failed_record_drops_nothing                       ERROR (missing Watcher.begin)
+  test 3 no   test_no_keeps_the_hold                                     ERROR (missing watcher.drop)
+  test 3 ledger fault  test_a_ledger_fault_removes_nothing               ERROR (missing watcher.drop)
+  Their red here shows only the missing interface; counterfactuals b, d, e, g show they can fail.
+
+== Full output ==
+test_a_restart_asks_nothing_and_the_hold_still_shows (tests.test_watcher.AHoldIsAskedAboutOnce) ... ERROR
+test_a_folder_gets_held_when_its_skill_md_arrives (tests.test_watcher.ANewSkillIsHeld) ... ok
+test_a_link_into_another_skills_folder_follows_its_target (tests.test_watcher.ANewSkillIsHeld) ... ok
+test_a_link_to_a_folder_outside_is_held (tests.test_watcher.ANewSkillIsHeld) ... ok
+test_a_new_skill_is_held_only_once_it_settles (tests.test_watcher.ANewSkillIsHeld) ... ok
+test_a_an_approved_exact_copy_at_its_place_drops_the_hold_at_start (tests.test_watcher.AutomaticDropsDeleteExactCopiesOnly) ... ERROR
+test_b_a_copy_that_differs_only_under_git_is_kept (tests.test_watcher.AutomaticDropsDeleteExactCopiesOnly) ... ERROR
+test_c_a_second_exact_copy_from_one_place_is_dropped_without_a_question (tests.test_watcher.AutomaticDropsDeleteExactCopiesOnly) ... ERROR
+test_c_a_second_hold_with_different_content_is_kept (tests.test_watcher.AutomaticDropsDeleteExactCopiesOnly) ... ERROR
+test_d_a_failed_record_drops_nothing (tests.test_watcher.AutomaticDropsDeleteExactCopiesOnly) ... ERROR
+test_e_a_drop_that_stops_after_its_rename_is_finished_by_the_next_start (tests.test_watcher.AutomaticDropsDeleteExactCopiesOnly) ... ERROR
+test_a_ledger_fault_removes_nothing (tests.test_watcher.CanaryDropDeletesOnlyOnAYes) ... ERROR
+test_canary_drop_prints_the_line_and_exits_with_its_code (tests.test_watcher.CanaryDropDeletesOnlyOnAYes) ... test_no_keeps_the_hold (tests.test_watcher.CanaryDropDeletesOnlyOnAYes) ... ERROR
+test_yes_deletes_the_held_copy_and_records_it (tests.test_watcher.CanaryDropDeletesOnlyOnAYes) ... ERROR
+test_it_finds_the_classifier_your_terminal_finds (tests.test_watcher.TheLaunchAgent) ... ok
+test_a_folder_named_with_only_spaces_needs_the_fixed_phrase (tests.test_watcher.ThePersonDecides) ... ok
+test_a_held_skill_with_links_is_refused_without_a_question (tests.test_watcher.ThePersonDecides) ... ok
+test_a_link_put_back_still_leads_to_its_folder (tests.test_watcher.ThePersonDecides) ... ok
+test_a_restored_skill_lists_as_restored (tests.test_watcher.ThePersonDecides) ... ok
+test_an_unsafe_skill_goes_back_when_the_person_types_its_name_and_says_so (tests.test_watcher.ThePersonDecides) ... ok
+test_an_unsafe_skill_stays_held_unless_the_person_types_its_name (tests.test_watcher.ThePersonDecides) ... ok
+test_canary_restore_does_not_also_send_a_notification (tests.test_watcher.ThePersonDecides) ... ok
+test_canary_restore_prints_the_reason_or_the_success_line (tests.test_watcher.ThePersonDecides) ... ok
+test_cancel_keeps_it_held_and_canary_list_says_how_to_restore (tests.test_watcher.ThePersonDecides) ... ok
+test_every_restore_failure_says_why (tests.test_watcher.ThePersonDecides) ... FAIL
+test_install_puts_it_back_and_it_counts_as_checked (tests.test_watcher.ThePersonDecides) ... ok
+test_restore_still_needs_the_person (tests.test_watcher.ThePersonDecides) ... ok
+test_the_dialog_recommends_an_action_and_quotes_the_line (tests.test_watcher.ThePersonDecides)
+Program 2026-10-12: the held-skill dialog says what to do, the ... ok
+test_the_real_dialog_is_always_asked_with_the_name_to_type (tests.test_watcher.ThePersonDecides) ... ok
+test_a_failed_put_back_is_reported_not_raised (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_a_folder_let_go_without_a_skill_md_is_held_when_it_gets_one (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_a_folder_there_at_start_that_gains_a_skill_md_is_held (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_a_forged_hold_cannot_name_a_place_outside_the_skills_folders (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_a_hold_that_fails_is_tried_again (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_a_restart_does_not_forget_what_arrived (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_a_skill_changed_after_its_check_is_not_put_back (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_an_entry_that_never_stops_changing_is_held_anyway (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_holds_survive_a_broken_ledger (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_one_bad_look_does_not_stop_the_watcher (tests.test_watcher.WhatCannotSlipPast) ... canary watch: OSError: disk trouble
+ok
+test_staging_names_are_no_way_around (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_trusting_a_skill_needs_the_person (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_canary_add_is_not_held (tests.test_watcher.WhatTheWatcherLeavesAlone) ... ok
+test_canary_install_and_its_links_are_not_held (tests.test_watcher.WhatTheWatcherLeavesAlone) ... ok
+test_skillcanarys_own_skill_is_not_held (tests.test_watcher.WhatTheWatcherLeavesAlone) ... ok
+test_skills_already_there_and_changes_to_them_are_never_held (tests.test_watcher.WhatTheWatcherLeavesAlone) ... ok
+
+======================================================================
+ERROR: test_a_restart_asks_nothing_and_the_hold_still_shows (tests.test_watcher.AHoldIsAskedAboutOnce)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/gallant-mcnulty-afd3b7/tests/test_watcher.py", line 401, in test_a_restart_asks_nothing_and_the_hold_still_shows
+    drain(mac.w)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/gallant-mcnulty-afd3b7/tests/test_watcher.py", line 364, in drain
+    w.handle(item)
+AttributeError: 'Watcher' object has no attribute 'handle'
+
+======================================================================
+ERROR: test_a_an_approved_exact_copy_at_its_place_drops_the_hold_at_start (tests.test_watcher.AutomaticDropsDeleteExactCopiesOnly)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/gallant-mcnulty-afd3b7/tests/test_watcher.py", line 425, in test_a_an_approved_exact_copy_at_its_place_drops_the_hold_at_start
+    restarted.w.begin()
+AttributeError: 'Watcher' object has no attribute 'begin'
+
+======================================================================
+ERROR: test_b_a_copy_that_differs_only_under_git_is_kept (tests.test_watcher.AutomaticDropsDeleteExactCopiesOnly)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/gallant-mcnulty-afd3b7/tests/test_watcher.py", line 443, in test_b_a_copy_that_differs_only_under_git_is_kept
+    restarted.w.begin()
+AttributeError: 'Watcher' object has no attribute 'begin'
+
+======================================================================
+ERROR: test_c_a_second_exact_copy_from_one_place_is_dropped_without_a_question (tests.test_watcher.AutomaticDropsDeleteExactCopiesOnly)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/gallant-mcnulty-afd3b7/tests/test_watcher.py", line 466, in test_c_a_second_exact_copy_from_one_place_is_dropped_without_a_question
+    mac, first, second = self.two_holds_from_one_place("Help.\n")
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/gallant-mcnulty-afd3b7/tests/test_watcher.py", line 462, in two_holds_from_one_place
+    drain(mac.w)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/gallant-mcnulty-afd3b7/tests/test_watcher.py", line 364, in drain
+    w.handle(item)
+AttributeError: 'Watcher' object has no attribute 'handle'
+
+======================================================================
+ERROR: test_c_a_second_hold_with_different_content_is_kept (tests.test_watcher.AutomaticDropsDeleteExactCopiesOnly)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/gallant-mcnulty-afd3b7/tests/test_watcher.py", line 475, in test_c_a_second_hold_with_different_content_is_kept
+    mac, first, second = self.two_holds_from_one_place("Other help.\n")
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/gallant-mcnulty-afd3b7/tests/test_watcher.py", line 462, in two_holds_from_one_place
+    drain(mac.w)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/gallant-mcnulty-afd3b7/tests/test_watcher.py", line 364, in drain
+    w.handle(item)
+AttributeError: 'Watcher' object has no attribute 'handle'
+
+======================================================================
+ERROR: test_d_a_failed_record_drops_nothing (tests.test_watcher.AutomaticDropsDeleteExactCopiesOnly)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/gallant-mcnulty-afd3b7/tests/test_watcher.py", line 486, in test_d_a_failed_record_drops_nothing
+    restarted.w.begin()
+AttributeError: 'Watcher' object has no attribute 'begin'
+
+======================================================================
+ERROR: test_e_a_drop_that_stops_after_its_rename_is_finished_by_the_next_start (tests.test_watcher.AutomaticDropsDeleteExactCopiesOnly)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/gallant-mcnulty-afd3b7/tests/test_watcher.py", line 498, in test_e_a_drop_that_stops_after_its_rename_is_finished_by_the_next_start
+    restarted.w.begin()
+AttributeError: 'Watcher' object has no attribute 'begin'
+
+======================================================================
+ERROR: test_a_ledger_fault_removes_nothing (tests.test_watcher.CanaryDropDeletesOnlyOnAYes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/gallant-mcnulty-afd3b7/tests/test_watcher.py", line 542, in test_a_ledger_fault_removes_nothing
+    self.drop(True)
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/gallant-mcnulty-afd3b7/tests/test_watcher.py", line 521, in drop
+    return watcher.drop(self.held_id, self.mac.home, self.mac.support, ask=ask)
+AttributeError: module 'canary.watcher' has no attribute 'drop'
+
+======================================================================
+ERROR: test_canary_drop_prints_the_line_and_exits_with_its_code (tests.test_watcher.CanaryDropDeletesOnlyOnAYes) (code=0)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/gallant-mcnulty-afd3b7/tests/test_watcher.py", line 570, in test_canary_drop_prints_the_line_and_exits_with_its_code
+    with unittest.mock.patch.object(watcher, "drop", fake), \
+  File "/Users/abrahamburnett/.pyenv/versions/3.10.3/lib/python3.10/unittest/mock.py", line 1437, in __enter__
+    original, local = self.get_original()
+  File "/Users/abrahamburnett/.pyenv/versions/3.10.3/lib/python3.10/unittest/mock.py", line 1410, in get_original
+    raise AttributeError(
+AttributeError: <module 'canary.watcher' from '/Users/abrahamburnett/workspace/canary/.claude/worktrees/gallant-mcnulty-afd3b7/canary/watcher.py'> does not have the attribute 'drop'
+
+======================================================================
+ERROR: test_canary_drop_prints_the_line_and_exits_with_its_code (tests.test_watcher.CanaryDropDeletesOnlyOnAYes) (code=10)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/gallant-mcnulty-afd3b7/tests/test_watcher.py", line 570, in test_canary_drop_prints_the_line_and_exits_with_its_code
+    with unittest.mock.patch.object(watcher, "drop", fake), \
+  File "/Users/abrahamburnett/.pyenv/versions/3.10.3/lib/python3.10/unittest/mock.py", line 1437, in __enter__
+    original, local = self.get_original()
+  File "/Users/abrahamburnett/.pyenv/versions/3.10.3/lib/python3.10/unittest/mock.py", line 1410, in get_original
+    raise AttributeError(
+AttributeError: <module 'canary.watcher' from '/Users/abrahamburnett/workspace/canary/.claude/worktrees/gallant-mcnulty-afd3b7/canary/watcher.py'> does not have the attribute 'drop'
+
+======================================================================
+ERROR: test_canary_drop_prints_the_line_and_exits_with_its_code (tests.test_watcher.CanaryDropDeletesOnlyOnAYes) (code=2)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/gallant-mcnulty-afd3b7/tests/test_watcher.py", line 570, in test_canary_drop_prints_the_line_and_exits_with_its_code
+    with unittest.mock.patch.object(watcher, "drop", fake), \
+  File "/Users/abrahamburnett/.pyenv/versions/3.10.3/lib/python3.10/unittest/mock.py", line 1437, in __enter__
+    original, local = self.get_original()
+  File "/Users/abrahamburnett/.pyenv/versions/3.10.3/lib/python3.10/unittest/mock.py", line 1410, in get_original
+    raise AttributeError(
+AttributeError: <module 'canary.watcher' from '/Users/abrahamburnett/workspace/canary/.claude/worktrees/gallant-mcnulty-afd3b7/canary/watcher.py'> does not have the attribute 'drop'
+
+======================================================================
+ERROR: test_canary_drop_prints_the_line_and_exits_with_its_code (tests.test_watcher.CanaryDropDeletesOnlyOnAYes) (code=1)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/gallant-mcnulty-afd3b7/tests/test_watcher.py", line 570, in test_canary_drop_prints_the_line_and_exits_with_its_code
+    with unittest.mock.patch.object(watcher, "drop", fake), \
+  File "/Users/abrahamburnett/.pyenv/versions/3.10.3/lib/python3.10/unittest/mock.py", line 1437, in __enter__
+    original, local = self.get_original()
+  File "/Users/abrahamburnett/.pyenv/versions/3.10.3/lib/python3.10/unittest/mock.py", line 1410, in get_original
+    raise AttributeError(
+AttributeError: <module 'canary.watcher' from '/Users/abrahamburnett/workspace/canary/.claude/worktrees/gallant-mcnulty-afd3b7/canary/watcher.py'> does not have the attribute 'drop'
+
+======================================================================
+ERROR: test_no_keeps_the_hold (tests.test_watcher.CanaryDropDeletesOnlyOnAYes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/gallant-mcnulty-afd3b7/tests/test_watcher.py", line 525, in test_no_keeps_the_hold
+    self.assertEqual(self.drop(False), (False, STILL_KEPT))
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/gallant-mcnulty-afd3b7/tests/test_watcher.py", line 521, in drop
+    return watcher.drop(self.held_id, self.mac.home, self.mac.support, ask=ask)
+AttributeError: module 'canary.watcher' has no attribute 'drop'
+
+======================================================================
+ERROR: test_yes_deletes_the_held_copy_and_records_it (tests.test_watcher.CanaryDropDeletesOnlyOnAYes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/gallant-mcnulty-afd3b7/tests/test_watcher.py", line 547, in test_yes_deletes_the_held_copy_and_records_it
+    self.assertEqual(self.drop(True), (True, "Deleted the held copy of dropped-in."))
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/gallant-mcnulty-afd3b7/tests/test_watcher.py", line 521, in drop
+    return watcher.drop(self.held_id, self.mac.home, self.mac.support, ask=ask)
+AttributeError: module 'canary.watcher' has no attribute 'drop'
+
+======================================================================
+FAIL: test_every_restore_failure_says_why (tests.test_watcher.ThePersonDecides)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/gallant-mcnulty-afd3b7/tests/test_watcher.py", line 323, in test_every_restore_failure_says_why
+    self.assertEqual(mac.asked, [])
+AssertionError: Lists differ: ["A skill appeared in ~/.agents/skills wit[422 chars]ry."] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+"A skill appeared in ~/.agents/skills without SkillCanary's check, so SkillCanary is holding it.\n\nSkillCanary checked it: no problems found.\n\nRecommended: install. SkillCanary found nothing that needs your judgment.\n\nNo problems found: the pattern scan and the AI review both passed it.\n\nFolder name: taken\n\nInstall puts it back where it was. Cancel keeps it held; nothing is deleted.\nThe folder name comes from whoever put it there, not from SkillCanary."
+
++ []
+- ["A skill appeared in ~/.agents/skills without SkillCanary's check, so "
+-  'SkillCanary is holding it.\n'
+-  '\n'
+-  'SkillCanary checked it: no problems found.\n'
+-  '\n'
+-  'Recommended: install. SkillCanary found nothing that needs your judgment.\n'
+-  '\n'
+-  'No problems found: the pattern scan and the AI review both passed it.\n'
+-  '\n'
+-  'Folder name: taken\n'
+-  '\n'
+-  'Install puts it back where it was. Cancel keeps it held; nothing is '
+-  'deleted.\n'
+-  'The folder name comes from whoever put it there, not from SkillCanary.']
+
+----------------------------------------------------------------------
+Ran 46 tests in 0.375s
+
+FAILED (failures=1, errors=14)
+exit code: 1
