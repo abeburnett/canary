@@ -856,7 +856,7 @@ since 0.1.5 also `origin`, where the skill came from: `{"kind": "github",
 "owner", "repo", "commit"}` from `canary add` (the commit is the SHA GitHub
 resolved, not the link text), `{"kind": "installer", "command": [...]}` from
 `canary install`, `{"kind": "local"}` for a folder, `{"kind": "watcher"}` for
-a restore; plugin installs record none), `declined`, `refused` or `not_installed`, `changed`, `removed` and `trusted`. A damaged line is skipped. Each skill is keyed by its resolved
+a restore; plugin installs record none), `declined`, `refused` or `not_installed`, `changed`, `removed`, `trusted`, `dropped` and `drop_failed`. A damaged line is skipped. Each skill is keyed by its resolved
 path; a skill reached under several names is listed under each. Its
 fingerprint covers every file's bytes, path and program bit, without `.git`.
 Links inside a skill are recorded and followed (each folder once), so a
@@ -897,7 +897,8 @@ repository's skills are what this report is for.
   `{"schema": "canary.list/1", "skills": [{"name", "path", "status",
   "changed_since_approval", "since", "override", "installed_from"}], "unchecked": [...], "changed": [...]}`.
   `installed_from` is the approved event's `origin` and is present only for
-  checked skills whose ledger has one.
+  checked skills whose ledger has one. What the watcher holds is listed as
+  `held: [{"id", "name", "origin", "since", "restore", "drop", "taken"}]`.
   Listing scans first, so it also records what changed.
 - `canary list` also lists what a replace set aside, read from the store
   (`quarantine/replaced/`), as `replaced: [{"id", "name", "paths", "kept",
@@ -921,7 +922,7 @@ account; the hook keeps agents' file tools from rewriting it, but a shell
 command, a tool the hook does not read (such as an MCP server's file tool),
 or other software running as the person can change it.
 
-## The watcher: `canary watch` and `canary restore <id>`
+## The watcher: `canary watch`, `canary restore <id>` and `canary drop <id>`
 
 A launch agent (`com.skillcanary.watcher`, `canary/watcher.py`; program
 2026-09-30, slice B2) that holds a new skill that arrived without
@@ -952,7 +953,7 @@ two seconds for folders that appear later. When a new entry appears:
    came from), and records a `held` event in the ledger when it can; a hold
    that fails is tried again at the next look. Then, on its own thread so
    holding never waits, it checks the skill (both layers) and asks the
-   person in SkillCanary's dialog, which leads with the recommendation, the
+   person in SkillCanary's dialog once, when it makes the hold. The dialog leads with the recommendation, the
    headline and `What SkillCanary found:` with quoted lines from the checked
    copy, as `canary add` does. Install puts it back only if it still
    matches the checked copy, recording the approval first. Cancel, no
@@ -964,12 +965,20 @@ two seconds for folders that appear later. When a new entry appears:
    stays held with a notification and no question. `canary restore` prints
    why a skill stays held, as one `Still held: …` line.
 
-Nothing is deleted. What is held comes from the quarantine folder itself,
-not the ledger, and a hold whose origin is not directly in a watched folder
-is ignored. `canary list` shows what is held, where it came from, and
-`canary restore <id>`, which checks it again and asks the person again: an
-agent can run the command, but only the person's answer puts it back. The
-session-start notice counts held skills. What it never holds: what is there
+A hold ends in one of three ways. The person's yes puts it back. The
+watcher deletes it without asking when its place holds an approved folder
+with exactly the same bytes, or when an older hold from the same place has
+exactly the same bytes. `canary drop <id>` deletes it after the person
+says so in SkillCanary's dialog. Every deletion writes a `dropped` event
+first, and a failed write deletes nothing. The watcher asks about a hold
+once, when it makes it, and never at a restart. What is held comes from
+the quarantine folder itself, not the ledger, and a hold whose origin is
+not directly in a watched folder is ignored. `canary list` shows what is
+held, where it came from, since when, whether its place is taken, and the
+`canary restore <id>` and `canary drop <id>` commands: an agent can run
+either, but only the person's answer acts. `canary restore` refuses a hold
+whose place is taken before it checks or asks. The session-start notice
+counts held skills. What it never holds: what is there
 at setup, changes to skills already there, skills the person marks as theirs
 (`canary trust` asks the person too), and skills in repositories (the guest
 list reports those). The watcher saves what it has seen

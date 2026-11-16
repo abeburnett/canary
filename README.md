@@ -42,7 +42,8 @@ skill anyway, type its name into the field and choose **Install anyway**; one
 click can't do it. `canary list` marks such a skill `installed anyway`. Anyone
 at your Mac's keyboard can type the name, so SkillCanary records the override
 but can't judge it. Cancel deletes nothing: a held skill stays held, and
-`canary list` shows how to restore it.
+`canary list` shows how to restore it. `canary drop <id>` deletes a held copy
+you do not want.
 
 ## What it protects against
 
