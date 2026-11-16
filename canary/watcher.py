@@ -56,6 +56,9 @@ NOT_A_HOLD = ("canary drop deletes a held skill only; canary restore {id} puts a
 HOLD_ID = re.compile(r"\d{8}T\d{6}Z-[0-9a-f]{8}")
 # On the review queue: run the sweep (program 2026-11-15, section 1.2).
 SWEEP = object()
+# The held-skill dialog's promise (program 2026-11-15, section 3).
+COVERS = ("Your answer covers every copy with exactly the same content that arrives in your "
+          "skills folders, now or later: SkillCanary will not ask about it again.")
 
 
 def held_dir(support):
@@ -226,6 +229,9 @@ class Watcher:
         # Set while a SWEEP waits on the queue: only `step` sets it, only `handle` clears it.
         self.sweep_waiting = threading.Event()
         self.pending = {}  # path -> {"first", "key", "changed"}
+        # For this run only (program 2026-11-15, 2.4): the fingerprints asked
+        # about, and the (key, fingerprint) pairs already notified.
+        self.asked, self.notified = set(), set()
         # What the last run saw, so a restart does not take arrivals as given.
         saved = self._load_seen()
         self.seen = {r: set(saved[r]) if r in saved else self._list(r) for r in self.roots}
@@ -387,9 +393,21 @@ class Watcher:
                 answer = self.ask(text, verdict)
             if answer is True:
                 return self.put_back(h, snap, verdict)
+            # Only a no is remembered, and only for a real folder (2.3).
+            fingerprint = None
+            if answer is False and not os.path.islink(entry):
+                try:
+                    fingerprint = guestlist.digest(snap)
+                except (OSError, ValueError):
+                    fingerprint = None
             _decision(self, h["name"], verdict,
                       "refused" if verdict == "UNSAFE" else
-                      "declined" if answer is False else "not_installed")
+                      "declined" if answer is False else "not_installed",
+                      digest=fingerprint, id=h["id"] if fingerprint else None)
+            if answer is False and verdict == "UNSAFE":
+                self.notify(f"SkillCanary did not install {h['name']}: the dialog was cancelled, "
+                            "or the folder name was not typed exactly. It stays held. "
+                            f"canary restore {h['id']} asks again.")
             return False, STILL_CANCELLED if answer is False else STILL_SILENT
         finally:
             shutil.rmtree(work, ignore_errors=True)
@@ -413,7 +431,7 @@ class Watcher:
             guestlist.record_install(self.home, [resolved], h["name"], verdict,
                                      support=self.support, source=snap, how="watcher",
                                      override=(verdict == "UNSAFE"),
-                                     origin={"kind": "watcher"})
+                                     origin={"kind": "watcher"}, covers="content")
             os.rename(entry, origin)
         except OSError:
             self.notify(f"SkillCanary could not put {h['name']} back. It stays held; "
@@ -422,6 +440,65 @@ class Watcher:
         shutil.rmtree(os.path.dirname(entry), ignore_errors=True)
         _record(self.support, [{"at": _now(), "event": "restored", "id": h["id"]}])
         return True, None
+
+    def _notify_once(self, key, fingerprint, text):
+        """A notification limited to once per content per run (2.4)."""
+        if (key, fingerprint) not in self.notified:
+            self.notified.add((key, fingerprint))
+            self.notify(text)
+
+    def _keep_refused(self, h, fingerprint, events, notify=True):
+        """Step 5 of program 2026-11-15, section 2.4: True when the person's
+        remembered no covers this content, so the hold stays with no check
+        and no question. The hold is marked once, for `canary list`."""
+        kind = guestlist.refusal(events, fingerprint)
+        if not kind:
+            return False
+        if not any(e.get("event") in ("declined", "refused") and e.get("id") == h["id"]
+                   and e.get("digest") == fingerprint for e in events):
+            _record(self.support, [{"at": _now(), "event": kind, "name": h["name"],
+                                    "id": h["id"], "digest": fingerprint, "replay": True}])
+        if notify:
+            self._notify_once("refused", fingerprint,
+                              f"SkillCanary is holding {h['name']}, which arrived in "
+                              f"{_short(os.path.dirname(h['origin']), self.home)}: it has the "
+                              "same content as a skill you chose not to install. canary list "
+                              "shows where it is.")
+        return True
+
+    def _put_back_same(self, h, fingerprint, events):
+        """Step 6 of program 2026-11-15, section 2.4 (a remembered yes, 2.2),
+        for a real folder whose place is free: "back" when it went back
+        without a question, "stays" when that put-back failed, else None."""
+        paths = guestlist.covering(events, fingerprint)
+        if not paths:
+            return None
+        folder = _short(os.path.dirname(h["origin"]), self.home)
+        entry, origin = _held_path(self.support, h), h["origin"]
+        state, _ = guestlist._state(events)
+        for place in paths:
+            if os.path.dirname(place) not in self.roots or not _approved(place, self.support):
+                continue
+            if not same_tree(entry, place):
+                continue
+            approval = {"at": _now(), "event": "approved", "how": "watcher", "name": h["name"],
+                        "skill": os.path.realpath(origin), "digest": state[place]["approved"],
+                        "covers": "content", "origin": {"kind": "watcher", "same_as": place}}
+            if state[place].get("override"):
+                approval["override"] = True
+            try:
+                # Approval first (2.2): no checked event, because no check ran.
+                guestlist.record_events(self.support, [approval])
+                os.rename(entry, origin)
+            except OSError:
+                return "stays"
+            shutil.rmtree(os.path.dirname(entry), ignore_errors=True)
+            _record(self.support, [{"at": _now(), "event": "restored", "id": h["id"],
+                                    "replay": True}])
+            self.notify(f"SkillCanary put {h['name']} back in {folder}: it has the same content "
+                        "as a skill you chose to install.")
+            return "back"
+        return None
 
     def run(self, stop=None):
         """The launch agent's loop: kqueue on the skills folders, with a look
@@ -492,6 +569,29 @@ class Watcher:
                             "check. Its place is taken now, so SkillCanary did not ask about "
                             "it. canary list shows where it is.")
             return
+        # Program 2026-11-15, 2.4, steps 5 to 8. A fingerprint that cannot be
+        # read skips steps 5 to 7.
+        try:
+            fingerprint = guestlist.digest(entry)
+        except (OSError, ValueError):
+            fingerprint = None
+        if fingerprint is not None:
+            events = guestlist._events(self.support)
+            if self._keep_refused(h, fingerprint, events):
+                return
+            outcome = self._put_back_same(h, fingerprint, events)
+            if outcome == "back":
+                self.sweep()
+            if outcome:
+                return
+            if fingerprint in self.asked:
+                self._notify_once("asked", fingerprint,
+                                  f"SkillCanary is holding {h['name']}, which arrived in "
+                                  f"{_short(os.path.dirname(h['origin']), self.home)}: it has "
+                                  "the same content as a skill it already asked you about. "
+                                  "canary list shows where it is.")
+                return
+            self.asked.add(fingerprint)
         back, _ = self.review(held_id)
         if back:
             self.sweep()
@@ -511,14 +611,26 @@ class Watcher:
 
     def sweep(self):
         """One pass over the holds, oldest first: drop each one whose place
-        holds an approved exact copy. Then remove what a stopped drop left."""
+        holds an approved exact copy, and put back each one whose place is
+        free and that a remembered yes covers (program 2026-11-15, 2.4: steps
+        5 and 6 only; it never asks). Then remove what a stopped drop left."""
         dropped = []
         for h in held(self.support, self.roots):
             try:
-                if os.path.islink(_held_path(self.support, h)):
+                entry = _held_path(self.support, h)
+                if os.path.islink(entry):
                     continue
-                if os.path.lexists(h["origin"]) and self._drop_if_installed(h):
-                    dropped.append(h["name"])
+                if os.path.lexists(h["origin"]):
+                    if self._drop_if_installed(h):
+                        dropped.append(h["name"])
+                    continue
+                if not os.path.isdir(entry):
+                    continue
+                fingerprint, events = guestlist.digest(entry), guestlist._events(self.support)
+                # The sweep runs at every start; a no it remembers is not
+                # announced again there.
+                if not self._keep_refused(h, fingerprint, events, notify=False):
+                    self._put_back_same(h, fingerprint, events)
             except Exception:
                 continue
         try:
@@ -558,9 +670,10 @@ class Watcher:
             kq.close()
 
 
-def _decision(w, name, verdict, outcome):
+def _decision(w, name, verdict, outcome, digest=None, id=None):
     try:
-        guestlist.record_decision(w.home, name, verdict, outcome, support=w.support)
+        guestlist.record_decision(w.home, name, verdict, outcome, support=w.support,
+                                  digest=digest, id=id)
     except OSError:
         pass
 
@@ -591,6 +704,7 @@ def dialog_text(h, verdict, reasons, caps, home, result=None, snapshot=None):
         lines += ([""] if result is not None else []) + [f"- {r}" for r in other]
     lines += ["", f"Folder name: {h['name']}", "",
               "Install puts it back where it was. Cancel keeps it held and deletes nothing.",
+              COVERS,
               "The folder name comes from whoever put it there, not from SkillCanary."
               + (" So do the file names and quoted lines." if found and snapshot else "")]
     if verdict == "UNSAFE":

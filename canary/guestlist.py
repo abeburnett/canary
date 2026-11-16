@@ -230,6 +230,7 @@ def _state(events):
             skills[path] = {"status": CHECKED, "digest": e.get("digest"),
                             "approved": e.get("digest"), "name": e.get("name"), "since": e.get("at"),
                             "override": e.get("override") is True,
+                            **({"covers": "content"} if e.get("covers") == "content" else {}),
                             **({"origin": e["origin"]} if isinstance(e.get("origin"), dict) else {})}
         elif kind == "arrived":
             skills[path] = {"status": UNCHECKED, "digest": e.get("digest"), "approved": None,
@@ -239,6 +240,43 @@ def _state(events):
         elif kind == "removed":
             skills.pop(path, None)
     return skills, looked
+
+
+def covering(events, fingerprint):
+    """The paths whose approval now covers every copy of this content
+    (program 2026-11-15, 2.2): checked, approved in the held-skill dialog
+    with `covers`, and approved with this fingerprint. Sorted. It reads the
+    current state, so a removed path or a covering approval that a later
+    approval replaced is not returned."""
+    state, _ = _state(events)
+    return sorted(p for p, s in state.items()
+                  if s.get("status") == CHECKED and s.get("covers") == "content"
+                  and fingerprint is not None and s.get("approved") == fingerprint)
+
+
+def refusal(events, fingerprint):
+    """The kind of the person's remembered no for this content, `declined`
+    or `refused`, or None (program 2026-11-15, 2.3): the latest event with
+    this digest among approvals and refusals decides."""
+    if fingerprint is None:
+        return None
+    last = None
+    for e in events:
+        if e.get("event") in ("approved", "declined", "refused") and e.get("digest") == fingerprint:
+            last = e["event"]
+    return last if last in ("declined", "refused") else None
+
+
+def refused(events, fingerprint):
+    return refusal(events, fingerprint) is not None
+
+
+def _held_refused(events, held_id):
+    """A hold is refused when the ledger has a no with its id and a digest,
+    and that content is still refused (program 2026-11-15, 2.6)."""
+    return any(e.get("event") in ("declined", "refused") and e.get("id") == held_id
+               and isinstance(e.get("digest"), str) and refused(events, e["digest"])
+               for e in events)
 
 
 def _cached_digest(folder, cache):
@@ -303,6 +341,7 @@ def scan(home=None, support=None, cwd=None, first_look=False):
             _append(support, new)
         _write_cache(support, cache)
         state, _ = _state(events + new)
+    events = events + new
     skills = []
     for path, names in sorted(present.items(), key=lambda kv: (kv[1], kv[0])):
         s = state.get(path, {})
@@ -317,7 +356,7 @@ def scan(home=None, support=None, cwd=None, first_look=False):
     from canary import replace, watcher
     held = [{"id": h["id"], "name": h["name"], "origin": h["origin"], "since": h["at"],
              "restore": f"canary restore {h['id']}", "drop": f"canary drop {h['id']}",
-             "taken": os.path.lexists(h["origin"])}
+             "taken": os.path.lexists(h["origin"]), "refused": _held_refused(events, h["id"])}
             for h in watcher.held(support, user_roots(home))]
     return {"schema": "canary.list/1", "skills": skills,
             "unchecked": [s for s in skills if s["status"] == UNCHECKED],
@@ -329,7 +368,7 @@ def scan(home=None, support=None, cwd=None, first_look=False):
 
 
 def record_install(home, folders, name, verdict, support=None, source=None, how="canary add",
-                   override=False, origin=None):
+                   override=False, origin=None, covers=None):
     """Record the check and the approval of `folders`; `override` marks an
     approval the person gave despite an unsafe verdict. With `source`, the
     checked copy they are about to be made from: SkillCanary records the
@@ -337,7 +376,8 @@ def record_install(home, folders, name, verdict, support=None, source=None, how=
     installs. A failed install leaves an approval for a path that is not
     there, which the next scan records as removed. `origin` says where the
     skill came from (kind github, installer, local or watcher) and is stored
-    on each approval."""
+    on each approval. `covers="content"` marks an approval from the
+    held-skill dialog, which covers every copy with the same content."""
     support = _support(support) if support else os.path.join(home, SUPPORT[2:])
     at = _now()
     fixed = digest(source) if source else None
@@ -346,6 +386,7 @@ def record_install(home, folders, name, verdict, support=None, source=None, how=
         events += [{"at": at, "event": "approved", "how": how, "name": name,
                     "skill": os.path.realpath(f), "digest": fixed or digest(os.path.realpath(f)),
                     **({"override": True} if override else {}),
+                    **({"covers": covers} if covers else {}),
                     **({"origin": origin} if origin else {})}
                    for f in folders]
         _append(support, events)
@@ -358,12 +399,16 @@ def record_events(support, events):
         _append(support, events)
 
 
-def record_decision(home, name, verdict, outcome, support=None):
-    """`canary add` checked a skill that was not installed."""
+def record_decision(home, name, verdict, outcome, support=None, digest=None, id=None):
+    """`canary add` checked a skill that was not installed. The watcher
+    passes the content's `digest` and the hold's `id` when the person said
+    no, so the no is remembered (program 2026-11-15, 2.3)."""
     support = _support(support) if support else os.path.join(home, SUPPORT[2:])
     with _Lock(support):
         _append(support, [{"at": _now(), "event": "checked", "name": name, "verdict": verdict},
-                          {"at": _now(), "event": outcome, "name": name}])
+                          {"at": _now(), "event": outcome, "name": name,
+                           **({"digest": digest} if digest else {}),
+                           **({"id": id} if id else {})}])
 
 
 def trust(folder, home=None, support=None, ask=None):
@@ -405,9 +450,11 @@ def session_line(report):
     if report["changed"]:
         names = ", ".join(s["name"] for s in report["changed"][:5])
         parts.append(f"{len(report['changed'])} changed since you approved them ({names})")
-    if report.get("held"):
-        names = ", ".join(h["name"] for h in report["held"][:5])
-        parts.append(f"{len(report['held'])} held for your decision ({names})")
+    # A hold the person answered no to is not counted (program 2026-11-15, 2.6).
+    waiting = [h for h in report.get("held") or [] if not h.get("refused")]
+    if waiting:
+        names = ", ".join(h["name"] for h in waiting[:5])
+        parts.append(f"{len(waiting)} held for your decision ({names})")
     if not parts:
         return None
     return ("SkillCanary: " + "; ".join(parts) + ". Run canary list to see them; canary trust "
@@ -451,7 +498,8 @@ def render_text(report):
             since = h.get("since")
             lines.append(f"  {h['name']}  from {h['origin']}"
                          + (f"  held since {since[:10]}" if isinstance(since, str) else "")
-                         + ("  (its place is taken)" if h.get("taken") else ""))
+                         + ("  (its place is taken)" if h.get("taken") else "")
+                         + ("  (you chose not to install it)" if h.get("refused") else ""))
             if not h.get("taken"):
                 lines.append(f"    to check it again and install it: {h['restore']}")
             lines.append(f"    to delete the held copy: {h['drop']}")
