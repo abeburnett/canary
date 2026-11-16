@@ -1,13 +1,19 @@
 """Behavioural tests for the watcher (docs/program-2026-09-30-front-door.md,
 slice B2): a new, unchecked skill in a skills folder is held once it settles,
-checked, and put back only when the person says so. Nothing is deleted.
+checked, and put back only when the person says so. The watcher deletes a
+held copy only when the same content is installed and approved at its place,
+or when the person says so with `canary drop`; each deletion is recorded
+first (program 2026-11-15, quiet holds).
 
 The tests drive `Watcher.step` with a made-up clock; they never start launchd
 or kqueue.
 """
 
+import errno
+import itertools
 import json
 import os
+import queue
 import shutil
 import contextlib
 import io
@@ -17,7 +23,7 @@ import tempfile
 import unittest
 import unittest.mock
 
-from canary import add, cli, frontdoor, guestlist, watcher
+from canary import add, cli, frontdoor, guestlist, replace, watcher
 try:
     from test_add import FakeGitHub, URL, SKILL, Approver, model, tarball
     import test_install
@@ -34,6 +40,8 @@ STILL_CHANGED = "Still held: it changed after its check." + SUFFIX
 STILL_TAKEN = "Still held: something else is in its place now." + SUFFIX
 STILL_NOT_MOVED = "Still held: SkillCanary could not move it back." + SUFFIX
 STILL_GONE = "Still held: SkillCanary is no longer holding it."
+STILL_KEPT = "Still held: you chose not to delete it." + SUFFIX
+STILL_NOT_DROPPED = "Still held: SkillCanary could not delete it." + SUFFIX
 
 
 def skill(root, name, body="Help.\n"):
@@ -305,6 +313,14 @@ class ThePersonDecides(unittest.TestCase):
 
         mac.w.ask = take_the_place
         self.assertEqual(mac.w.review(held_id), (False, STILL_TAKEN))
+        # Program 2026-11-15, 1.3: something took its place before the review,
+        # so there is nothing to ask about.
+        skill(mac.codex, "taken")
+        [taken_id] = mac.settle(start=20)
+        skill(mac.codex, "taken")
+        mac.w.ask = mac.ask
+        self.assertEqual(mac.w.review(taken_id), (False, STILL_TAKEN))
+        self.assertEqual(mac.asked, [])
 
     def test_canary_restore_prints_the_reason_or_the_success_line(self):
         # Program 2026-10-17, test 23: the line restore returns is printed.
@@ -330,6 +346,231 @@ class ThePersonDecides(unittest.TestCase):
                                      ask=lambda text, verdict, confirm=None: None,
                                      backend=model(), model="fake")
         self.assertEqual((result, sent), ((False, STILL_LINKS), []))
+
+
+DROP_NOTE = ("SkillCanary deleted 1 held copy that matches a skill you already installed: "
+             "dropped-in. canary list shows what is still held.")
+TWIN_NOTE = ("SkillCanary deleted a second held copy of dropped-in: it is the same as the copy "
+             "it is already holding. canary list shows what is still held.")
+
+
+def drain(w):
+    """Handle whatever is on a watcher's review queue, as its loop would."""
+    while True:
+        try:
+            item = w.reviews.get_nowait()
+        except queue.Empty:
+            return
+        w.handle(item)
+
+
+def ledger(mac, event):
+    with open(os.path.join(mac.support, "ledger.jsonl")) as fh:
+        return [e for e in map(json.loads, fh) if e.get("event") == event]
+
+
+def ordered_ids():
+    """Holds made within one second sort in the order they were made."""
+    counter = itertools.count()
+    return unittest.mock.patch.object(watcher.secrets, "token_hex",
+                                      lambda n: f"{next(counter):08x}")
+
+
+def held_with_its_place_taken(git=False):
+    """A held skill whose place now holds an approved copy with the same
+    SKILL.md, as `canary add` leaves one; `git` adds a file under .git."""
+    mac = Mac(answer=None)
+    skill(mac.codex, "dropped-in")
+    [held_id] = mac.settle()
+    folder = skill(mac.codex, "dropped-in")
+    if git:
+        os.makedirs(os.path.join(folder, ".git"))
+        with open(os.path.join(folder, ".git", "HEAD"), "w") as fh:
+            fh.write("ref: refs/heads/main\n")
+    guestlist.record_install(mac.home, [folder], "dropped-in", "LIKELY_SAFE", support=mac.support)
+    return mac, held_id, folder
+
+
+class AHoldIsAskedAboutOnce(unittest.TestCase):
+    """Program 2026-11-15 (quiet holds), slice 1, test 1."""
+
+    def test_a_restart_asks_nothing_and_the_hold_still_shows(self):
+        mac = Mac(answer=None)
+        folder = skill(mac.codex, "dropped-in")
+        [held_id] = mac.settle()
+        drain(mac.w)
+        self.assertEqual(len(mac.asked), 1)
+        restarted = Mac(answer=None, home=mac.home)
+        restarted.w.begin()
+        drain(restarted.w)
+        self.assertEqual(restarted.asked, [])
+        report = guestlist.scan(mac.home, support=mac.support)
+        day = mac.held()[0]["at"][:10]
+        self.assertIn("Held by SkillCanary (arrived without its check):\n"
+                      f"  dropped-in  from {folder}  held since {day}\n"
+                      f"    to check it again and install it: canary restore {held_id}\n"
+                      f"    to delete the held copy: canary drop {held_id}",
+                      guestlist.render_text(report))
+        self.assertIn("1 held for your decision (dropped-in)", guestlist.session_line(report))
+
+
+class AutomaticDropsDeleteExactCopiesOnly(unittest.TestCase):
+    """Program 2026-11-15 (quiet holds), slice 1, test 2."""
+
+    def test_a_an_approved_exact_copy_at_its_place_drops_the_hold_at_start(self):
+        mac, held_id, folder = held_with_its_place_taken()
+        fingerprint = guestlist.digest(os.path.join(watcher.held_dir(mac.support), held_id,
+                                                    "entry"))
+        restarted = Mac(answer=None, home=mac.home)
+        restarted.w.begin()
+        self.assertEqual(restarted.held(), [])
+        self.assertFalse(os.path.lexists(os.path.join(watcher.held_dir(mac.support), held_id)))
+        [dropped] = ledger(mac, "dropped")
+        self.assertEqual({k: dropped.get(k) for k in ("id", "name", "origin", "digest", "how",
+                                                      "same_as")},
+                         {"id": held_id, "name": "dropped-in", "origin": folder,
+                          "digest": fingerprint, "how": "same as installed",
+                          "same_as": folder})
+        self.assertTrue(os.path.isfile(os.path.join(folder, "SKILL.md")))
+        self.assertEqual((restarted.asked, restarted.notes), ([], [DROP_NOTE]))
+
+    def test_b_a_copy_that_differs_only_under_git_is_kept(self):
+        # Pin (counterfactual b): the fingerprint leaves .git out, the exact copy does not.
+        mac, held_id, folder = held_with_its_place_taken(git=True)
+        entry = os.path.join(watcher.held_dir(mac.support), held_id, "entry")
+        self.assertEqual(guestlist.digest(entry), guestlist.digest(folder))
+        restarted = Mac(answer=None, home=mac.home)
+        restarted.w.begin()
+        self.assertEqual([h["id"] for h in restarted.held()], [held_id])
+        self.assertEqual((ledger(mac, "dropped"), restarted.asked, restarted.notes), ([], [], []))
+        report = guestlist.scan(mac.home, support=mac.support)
+        [listed] = report["held"]
+        self.assertEqual((listed["taken"], listed["drop"]), (True, f"canary drop {held_id}"))
+        day = restarted.held()[0]["at"][:10]
+        text = guestlist.render_text(report)
+        self.assertIn(f"  dropped-in  from {folder}  held since {day}  (its place is taken)\n"
+                      f"    to delete the held copy: canary drop {held_id}", text)
+        self.assertNotIn(f"canary restore {held_id}", text)
+
+    def two_holds_from_one_place(self, second_body):
+        mac = Mac(answer=False)
+        with ordered_ids():
+            skill(mac.codex, "dropped-in")
+            [first] = mac.settle()
+            skill(mac.codex, "dropped-in", second_body)
+            [second] = mac.settle(start=20)
+        drain(mac.w)
+        return mac, first, second
+
+    def test_c_a_second_exact_copy_from_one_place_is_dropped_without_a_question(self):
+        mac, first, second = self.two_holds_from_one_place("Help.\n")
+        self.assertEqual([h["id"] for h in mac.held()], [first])
+        self.assertEqual(len(mac.asked), 1)
+        [dropped] = ledger(mac, "dropped")
+        self.assertEqual((dropped["id"], dropped["how"]), (second, "same as waiting hold"))
+        self.assertEqual(mac.notes, [TWIN_NOTE])
+
+    def test_c_a_second_hold_with_different_content_is_kept(self):
+        # Pin (counterfactual d): dropping either would delete the only copy of its content.
+        mac, first, second = self.two_holds_from_one_place("Other help.\n")
+        self.assertEqual([h["id"] for h in mac.held()], [first, second])
+        self.assertEqual(len(mac.asked), 2)
+        self.assertEqual(ledger(mac, "dropped"), [])
+
+    def test_d_a_failed_record_drops_nothing(self):
+        # Pin (counterfactual e). Seam: guestlist.record_events.
+        mac, held_id, folder = held_with_its_place_taken()
+        restarted = Mac(answer=None, home=mac.home)
+        with unittest.mock.patch.object(guestlist, "record_events",
+                                        side_effect=OSError(errno.EIO, "ledger")):
+            restarted.w.begin()
+        self.assertEqual([h["id"] for h in restarted.held()], [held_id])
+        self.assertTrue(os.path.isdir(os.path.join(watcher.held_dir(mac.support), held_id,
+                                                   "entry")))
+        self.assertEqual(restarted.notes, [])
+
+    def test_e_a_drop_that_stops_after_its_rename_is_finished_by_the_next_start(self):
+        # Seam: watcher.shutil.rmtree, during the drop.
+        mac, held_id, folder = held_with_its_place_taken()
+        slot = os.path.join(watcher.held_dir(mac.support), held_id)
+        restarted = Mac(answer=None, home=mac.home)
+        with unittest.mock.patch.object(watcher.shutil, "rmtree"):
+            restarted.w.begin()
+        self.assertEqual(sorted(os.listdir(slot)), ["dropped", "hold.json"])
+        self.assertEqual(restarted.held(), [])
+        Mac(answer=None, home=mac.home).w.begin()
+        self.assertFalse(os.path.lexists(slot))
+        self.assertTrue(os.path.isfile(os.path.join(folder, "SKILL.md")))
+
+
+class CanaryDropDeletesOnlyOnAYes(unittest.TestCase):
+    """Program 2026-11-15 (quiet holds), slice 1, test 3. Seam: the injected
+    `ask`, as `watcher.restore` has."""
+
+    def setUp(self):
+        self.mac = Mac(answer=False)
+        skill(self.mac.codex, "dropped-in")
+        [self.held_id] = self.mac.settle()
+        self.slot = os.path.join(watcher.held_dir(self.mac.support), self.held_id)
+        self.asked = []
+
+    def drop(self, answer):
+        def ask(text, verdict):
+            self.asked.append((text, verdict))
+            return answer
+        return watcher.drop(self.held_id, self.mac.home, self.mac.support, ask=ask)
+
+    def test_no_keeps_the_hold(self):
+        # Pin (counterfactual g).
+        self.assertEqual(self.drop(False), (False, STILL_KEPT))
+        self.assertEqual([h["id"] for h in self.mac.held()], [self.held_id])
+        [(text, verdict)] = self.asked
+        self.assertEqual(verdict, "NEEDS_REVIEW")
+        day = self.mac.held()[0]["at"][:10]
+        for line in ("Delete the held copy of this skill?", "Folder name: dropped-in",
+                     f"Arrived in ~/.agents/skills on {day}.", "Its place is free.",
+                     "Cancel keeps it held."):
+            self.assertIn(line + "\n", text)
+        self.assertIn("This cannot be undone", text)
+
+    def test_a_ledger_fault_removes_nothing(self):
+        # Pin (counterfactual e). Seam: the ledger path made a directory.
+        path = os.path.join(self.mac.support, "ledger.jsonl")
+        os.unlink(path)
+        os.makedirs(path)
+        with self.assertRaises(OSError):
+            self.drop(True)
+        self.assertEqual([h["id"] for h in self.mac.held()], [self.held_id])
+        self.assertTrue(os.path.isdir(os.path.join(self.slot, "entry")))
+
+    def test_yes_deletes_the_held_copy_and_records_it(self):
+        self.assertEqual(self.drop(True), (True, "Deleted the held copy of dropped-in."))
+        self.assertFalse(os.path.lexists(self.slot))
+        [dropped] = ledger(self.mac, "dropped")
+        self.assertEqual((dropped["id"], dropped["how"]), (self.held_id, "person"))
+        self.assertEqual(guestlist.scan(self.mac.home, support=self.mac.support)["held"], [])
+        with self.assertRaises(ValueError) as caught:
+            self.drop(True)
+        self.assertEqual(str(caught.exception), replace.NOT_KEEPING)
+        self.assertEqual(len(self.asked), 1)
+
+    def test_canary_drop_prints_the_line_and_exits_with_its_code(self):
+        for result, printed, warned, code in (
+                ((True, "Deleted the held copy of x."), "Deleted the held copy of x.\n", "", 0),
+                ((False, STILL_KEPT), STILL_KEPT + "\n", "", 10),
+                (ValueError("no such hold"), "", "canary: no such hold\n", 2),
+                (OSError(errno.EISDIR, "Is a directory"), "",
+                 "canary: Is a directory; it stays held.\n", 1)):
+            with self.subTest(code=code):
+                def fake(*args, **kwargs):
+                    if isinstance(result, Exception):
+                        raise result
+                    return result
+                out, err = io.StringIO(), io.StringIO()
+                with unittest.mock.patch.object(watcher, "drop", fake), \
+                        contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    self.assertEqual(cli.main(["drop", self.held_id]), code)
+                self.assertEqual((out.getvalue(), err.getvalue()), (printed, warned))
 
 
 class TheLaunchAgent(unittest.TestCase):
