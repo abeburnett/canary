@@ -1,0 +1,185 @@
+commit 5246de3eadd435465ac08a60fc401eedb8663034
+Python 3.10.3
+
+Counterfactual h (program 2026-11-15 quiet holds, slice 1, section 8 bullet 3)
+
+`review`'s test for a taken place is removed.
+
+Run in a `git archive` export of the commit above (no .git), so the worktree was never modified. The change was an exact string swap in canary/watcher.py that matched once; the original bytes were written back after the run.
+
+## The change
+
+Applied diff:
+
+--- a/canary/watcher.py
++++ b/canary/watcher.py
+@@ -361,9 +361,6 @@
+         if h is None:
+             return False, STILL_GONE
+         entry = _held_path(self.support, h)
+-        if os.path.lexists(h["origin"]):
+-            # Nothing could go back, so there is nothing to check or ask about.
+-            return False, STILL_TAKEN
+         work = tempfile.mkdtemp(prefix="canary-held-")
+         try:
+             snap = os.path.join(work, "skill")
+
+command (cwd = the export): python3.10 -m unittest discover -s tests
+exit code: 1
+reds: 12 in all
+  named by this counterfactual (1):
+    FAIL: test_every_restore_failure_says_why (test_watcher.ThePersonDecides)
+  other reds (11), all tests/test_action.py CanaryActionTests: the manifest check (spec section 8 bullet 2) sees canary/watcher.py change and scanner/manifest.json not rewritten:
+    FAIL: test_each_skill_folder_is_one_package_and_the_strictest_wins (test_action.CanaryActionTests)
+    FAIL: test_files_outside_skill_folders_are_still_scanned (test_action.CanaryActionTests)
+    FAIL: test_invalid_escaping_and_incomplete_inputs_are_rejected (test_action.CanaryActionTests)
+    FAIL: test_invalid_escaping_and_incomplete_inputs_are_rejected (test_action.CanaryActionTests)
+    FAIL: test_private_repository_requires_token_presence_without_disclosure (test_action.CanaryActionTests)
+    FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests)
+    FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests)
+    FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests)
+    FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests)
+    FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests)
+    FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests)
+
+Reverted: canary/watcher.py sha256 after the run matches the pristine 1d1b2d4c541fa3a4dedba173dd9eab56a69dcc7ad9a35bc84f22ed1185e82da7
+
+Full output:
+
+.FFFF................................................................................................................................./Users/abrahamburnett/.pyenv/versions/3.10.3/lib/python3.10/unittest/case.py:549: ResourceWarning: unclosed file <_io.TextIOWrapper name=5 encoding='UTF-8'>
+  method()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+.................................................................................................................................................................................................................................canary: skipped /private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-unlock-abud4i40/home/.claude/skills: it is reached through a link
+....................................................F.............canary watch: OSError: disk trouble
+.......
+======================================================================
+FAIL: test_each_skill_folder_is_one_package_and_the_strictest_wins (test_action.CanaryActionTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-gallant-mcnulty-afd3b7/9cef6b4c-2d92-488f-8506-65ecea31879d/scratchpad/export-5246de3/tests/test_action.py", line 108, in test_each_skill_folder_is_one_package_and_the_strictest_wins
+    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_files_outside_skill_folders_are_still_scanned (test_action.CanaryActionTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-gallant-mcnulty-afd3b7/9cef6b4c-2d92-488f-8506-65ecea31879d/scratchpad/export-5246de3/tests/test_action.py", line 129, in test_files_outside_skill_folders_are_still_scanned
+    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_invalid_escaping_and_incomplete_inputs_are_rejected (test_action.CanaryActionTests) (name='incomplete-coverage-fails')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-gallant-mcnulty-afd3b7/9cef6b4c-2d92-488f-8506-65ecea31879d/scratchpad/export-5246de3/tests/test_action.py", line 184, in test_invalid_escaping_and_incomplete_inputs_are_rejected
+    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_invalid_escaping_and_incomplete_inputs_are_rejected (test_action.CanaryActionTests) (name='workflow-command-path')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-gallant-mcnulty-afd3b7/9cef6b4c-2d92-488f-8506-65ecea31879d/scratchpad/export-5246de3/tests/test_action.py", line 197, in test_invalid_escaping_and_incomplete_inputs_are_rejected
+    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+AssertionError: 2 != 0 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_private_repository_requires_token_presence_without_disclosure (test_action.CanaryActionTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-gallant-mcnulty-afd3b7/9cef6b4c-2d92-488f-8506-65ecea31879d/scratchpad/export-5246de3/tests/test_action.py", line 224, in test_private_repository_requires_token_presence_without_disclosure
+    self.assertEqual(present.returncode, 0, present.stdout + present.stderr)
+AssertionError: 2 != 0 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='safe')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-gallant-mcnulty-afd3b7/9cef6b4c-2d92-488f-8506-65ecea31879d/scratchpad/export-5246de3/tests/test_action.py", line 79, in test_verdicts_and_fail_thresholds_follow_the_public_contract
+    self.assertEqual(result.returncode, expected_code, result.stderr)
+AssertionError: 2 != 0 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='review')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-gallant-mcnulty-afd3b7/9cef6b4c-2d92-488f-8506-65ecea31879d/scratchpad/export-5246de3/tests/test_action.py", line 79, in test_verdicts_and_fail_thresholds_follow_the_public_contract
+    self.assertEqual(result.returncode, expected_code, result.stderr)
+AssertionError: 2 != 0 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='unsafe')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-gallant-mcnulty-afd3b7/9cef6b4c-2d92-488f-8506-65ecea31879d/scratchpad/export-5246de3/tests/test_action.py", line 79, in test_verdicts_and_fail_thresholds_follow_the_public_contract
+    self.assertEqual(result.returncode, expected_code, result.stderr)
+AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='review-fails')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-gallant-mcnulty-afd3b7/9cef6b4c-2d92-488f-8506-65ecea31879d/scratchpad/export-5246de3/tests/test_action.py", line 79, in test_verdicts_and_fail_thresholds_follow_the_public_contract
+    self.assertEqual(result.returncode, expected_code, result.stderr)
+AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='never')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-gallant-mcnulty-afd3b7/9cef6b4c-2d92-488f-8506-65ecea31879d/scratchpad/export-5246de3/tests/test_action.py", line 79, in test_verdicts_and_fail_thresholds_follow_the_public_contract
+    self.assertEqual(result.returncode, expected_code, result.stderr)
+AssertionError: 2 != 0 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-gallant-mcnulty-afd3b7/9cef6b4c-2d92-488f-8506-65ecea31879d/scratchpad/export-5246de3/tests/test_action.py", line 96, in test_verdicts_and_fail_thresholds_follow_the_public_contract
+    self.assertEqual(result.returncode, 1, result.stderr)
+AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed its integrity check
+
+
+======================================================================
+FAIL: test_every_restore_failure_says_why (test_watcher.ThePersonDecides)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-gallant-mcnulty-afd3b7/9cef6b4c-2d92-488f-8506-65ecea31879d/scratchpad/export-5246de3/tests/test_watcher.py", line 323, in test_every_restore_failure_says_why
+    self.assertEqual(mac.asked, [])
+AssertionError: Lists differ: ["A skill appeared in ~/.agents/skills wit[422 chars]ry."] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+"A skill appeared in ~/.agents/skills without SkillCanary's check, so SkillCanary is holding it.\n\nSkillCanary checked it: no problems found.\n\nRecommended: install. SkillCanary found nothing that needs your judgment.\n\nNo problems found: the pattern scan and the AI review both passed it.\n\nFolder name: taken\n\nInstall puts it back where it was. Cancel keeps it held and deletes nothing.\nThe folder name comes from whoever put it there, not from SkillCanary."
+
++ []
+- ["A skill appeared in ~/.agents/skills without SkillCanary's check, so "
+-  'SkillCanary is holding it.\n'
+-  '\n'
+-  'SkillCanary checked it: no problems found.\n'
+-  '\n'
+-  'Recommended: install. SkillCanary found nothing that needs your judgment.\n'
+-  '\n'
+-  'No problems found: the pattern scan and the AI review both passed it.\n'
+-  '\n'
+-  'Folder name: taken\n'
+-  '\n'
+-  'Install puts it back where it was. Cancel keeps it held and deletes '
+-  'nothing.\n'
+-  'The folder name comes from whoever put it there, not from SkillCanary.']
+
+----------------------------------------------------------------------
+Ran 433 tests in 74.785s
+
+FAILED (failures=12)

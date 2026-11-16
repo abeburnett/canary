@@ -1,0 +1,107 @@
+commit 5246de3eadd435465ac08a60fc401eedb8663034
+Python 3.10.3
+
+Paths no committed test executes, run once on temp homes (not a gate, not a done-when bullet):
+step -> SWEEP when an approved copy arrives after its hold; handle step 4 keeping a hold whose place differs only under .git;
+canary drop on a replaced group's id; drop_text with the place taken; the two-name deletion note.
+Every call passes home=, support= and ask=. Script: untested_paths.py (scratch, not committed), source below the output.
+
+PASS hold id was on the queue first  [20261116T052459Z-c51c98d6]
+PASS step set sweep_waiting
+PASS step queued exactly one SWEEP  [[<object object at 0x105058b40>]]
+PASS sweep_waiting is clear after the sweep
+PASS the hold is dropped  [[]]
+PASS one note, the installed note  [['SkillCanary deleted 1 held copy that matches a skill you already installed: dropped-in. canary list shows what is still held.']]
+   note: ['SkillCanary deleted 1 held copy that matches a skill you already installed: dropped-in. canary list shows what is still held.']
+PASS hold stays
+PASS no question asked  [0 asked]
+   notes: ['SkillCanary is holding dropped-in, which arrived in ~/.agents/skills without its check. Its place is taken now, so SkillCanary did not ask about it. canary list shows where it is.']
+PASS taken note sent  [['SkillCanary is holding dropped-in, which arrived in ~/.agents/skills without its check. Its place is taken now, so SkillCanary did not ask about it. canary list shows where it is.']]
+PASS drop on a replaced id says NOT_A_HOLD  [canary drop deletes a held skill only; canary restore 20261116T052459Z-2fc15b23 puts a replaced copy back.]
+   drop_text:
+     | Delete the held copy of this skill?
+     | 
+     | Folder name: dropped-in
+     | Arrived in ~/.agents/skills on 2026-11-16.
+     | Another copy is in its place now.
+     | 
+     | Delete removes the copy SkillCanary is holding. This cannot be undone: to
+     | get it back, install the skill again from where it came. Nothing in your
+     | skills folders changes.
+     | Cancel keeps it held.
+     | The folder name comes from whoever put it there, not from SkillCanary.
+PASS drop_text says the place is taken
+   two-name note: SkillCanary deleted 2 held copies that matches a skills you already installed: a, b. canary list shows what is still held.
+PASS two-name note uses copies and skills
+ALL PASS
+exit code: 0
+
+--- script ---
+"""Throwaway: run the slice-1 paths no committed test executes, on temp homes.
+Every call passes home=, support= and ask=; nothing touches the real home."""
+import os
+import sys
+
+sys.path[:0] = [os.getcwd(), os.path.join(os.getcwd(), "tests")]
+from canary import watcher  # noqa: E402
+from tests.test_watcher import Mac, drain, held_with_its_place_taken  # noqa: E402
+from tests.test_replace import Home  # noqa: E402
+
+real_home = os.path.realpath(os.path.expanduser("~"))
+
+
+def check(label, ok, detail=""):
+    print(("PASS " if ok else "FAIL ") + label + (f"  [{detail}]" if detail else ""))
+    return ok
+
+
+results = []
+
+# 1. step -> SWEEP: the approved copy arrives after the hold, step queues one sweep.
+mac, held_id, folder = held_with_its_place_taken()
+assert mac.home != real_home and mac.home.startswith("/private/var") or "/T/" in mac.home, mac.home
+first = mac.w.reviews.get_nowait()
+results.append(check("hold id was on the queue first", first == held_id, first))
+mac.w.step(20); mac.w.step(25); mac.w.step(30)
+results.append(check("step set sweep_waiting", mac.w.sweep_waiting.is_set()))
+queued = list(mac.w.reviews.queue)
+results.append(check("step queued exactly one SWEEP", queued == [watcher.SWEEP], repr(queued)))
+drain(mac.w)
+results.append(check("sweep_waiting is clear after the sweep", not mac.w.sweep_waiting.is_set()))
+results.append(check("the hold is dropped", mac.held() == [], repr(mac.held())))
+results.append(check("one note, the installed note", len(mac.notes) == 1, repr(mac.notes)))
+print("   note:", mac.notes)
+
+# 2. handle step 4, hold stays: place taken by a copy that differs (.git), no question.
+mac, held_id, folder = held_with_its_place_taken(git=True)
+drain(mac.w)
+results.append(check("hold stays", [h["id"] for h in mac.held()] == [held_id]))
+results.append(check("no question asked", mac.asked == [mac.asked[0]] if mac.asked else True,
+                     f"{len(mac.asked)} asked"))
+print("   notes:", mac.notes)
+results.append(check("taken note sent", any("place is taken" in n.lower() or "in its place" in n
+                                             for n in mac.notes), repr(mac.notes)))
+
+# 3. drop on a replaced group's id -> NOT_A_HOLD.
+home = Home()
+gid = home.replaced_group()
+try:
+    watcher.drop(gid, home.home, home.support, ask=lambda text, verdict: True)
+    results.append(check("drop on a replaced id raises", False))
+except ValueError as e:
+    results.append(check("drop on a replaced id says NOT_A_HOLD",
+                         str(e) == watcher.NOT_A_HOLD.format(id=gid), str(e)))
+
+# 4. drop_text with the place taken, and the two-name note.
+mac, held_id, folder = held_with_its_place_taken(git=True)
+h = mac.held()[0]
+text = watcher.drop_text(h, mac.home)
+print("   drop_text:\n" + "\n".join("     | " + line for line in text.split("\n")))
+results.append(check("drop_text says the place is taken", "Another copy is in its place now." in text))
+note = watcher._installed_note(["a", "b"])
+print("   two-name note:", note)
+results.append(check("two-name note uses copies and skills",
+                     "2 held copies" in note and "a skills" in note))
+
+print("ALL PASS" if all(results) else "SOME FAILED")
+sys.exit(0 if all(results) else 1)
