@@ -856,7 +856,13 @@ since 0.1.5 also `origin`, where the skill came from: `{"kind": "github",
 "owner", "repo", "commit"}` from `canary add` (the commit is the SHA GitHub
 resolved, not the link text), `{"kind": "installer", "command": [...]}` from
 `canary install`, `{"kind": "local"}` for a folder, `{"kind": "watcher"}` for
-a restore; plugin installs record none), `declined`, `refused` or `not_installed`, `changed`, `removed`, `trusted`, `dropped` and `drop_failed`. A damaged line is skipped. Each skill is keyed by its resolved
+a restore; plugin installs record none), `declined`, `refused` or `not_installed`, `changed`, `removed`, `trusted`, `dropped` and `drop_failed`. An
+`approved` event from the held-skill dialog also carries `"covers":
+"content"`, and one the watcher wrote for an exact copy carries
+`origin.same_as`, the approved path it copies. A `declined` or `refused`
+event for a held skill the person answered no to carries its `digest` and
+hold `id`; the watcher's own copy of that event for a later hold, and its
+`restored` event for an exact-copy put-back, carry `"replay": true`. A damaged line is skipped. Each skill is keyed by its resolved
 path; a skill reached under several names is listed under each. Its
 fingerprint covers every file's bytes, path and program bit, without `.git`.
 Links inside a skill are recorded and followed (each folder once), so a
@@ -898,7 +904,9 @@ repository's skills are what this report is for.
   "changed_since_approval", "since", "override", "installed_from"}], "unchecked": [...], "changed": [...]}`.
   `installed_from` is the approved event's `origin` and is present only for
   checked skills whose ledger has one. What the watcher holds is listed as
-  `held: [{"id", "name", "origin", "since", "restore", "drop", "taken"}]`.
+  `held: [{"id", "name", "origin", "since", "restore", "drop", "taken",
+  "refused"}]`; `refused` is true when the person answered no to this
+  content and has not approved it since.
   Listing scans first, so it also records what changed.
 - `canary list` also lists what a replace set aside, read from the store
   (`quarantine/replaced/`), as `replaced: [{"id", "name", "paths", "kept",
@@ -986,6 +994,15 @@ list reports those). The watcher saves what it has seen
 saved), so a skill that arrives while it is stopped is held when it starts
 again; setup starts that memory afresh. One look that fails is logged and
 the next look tries again.
+
+The person's answer in the held-skill dialog covers every copy with
+exactly the same content. After a yes, a later copy is put back without a
+question when it is byte for byte the same as a folder that this dialog
+approved and that is still installed and unchanged. After a no, a later
+copy with the same fingerprint stays held without a question, `canary
+list` says the person chose not to install it, and the session-start
+notice no longer counts it. Approvals from `canary add` and `canary
+install` are not remembered this way.
 
 At Guard the hook keeps agents from stopping it (owner decision 10): a shell
 command naming its label or launch-agent file is denied, and so is a file
