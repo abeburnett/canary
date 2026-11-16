@@ -332,6 +332,17 @@ Held by SkillCanary (arrived without its check):
 apply: a taken place has the note and no restore line. `session_line` is
 unchanged in slice 1 and counts every hold.
 
+### 1.7 Slice 1 review and audit (2026-11-16)
+
+- **Pre-merge review:** GPT-6.1 Sol at `high` on `3ee3058...c38b001`,
+  excluding `docs/proof/`, returned MERGE with no findings.
+- **Done-when audit:** the Fable `milestone-auditor`, read-only, audited
+  section 8 bullets 1 to 3 (counterfactuals a to h) at `c38b001`.
+  - It returned `AUDIT: PASS`: every row SHOWN, none refused, so nothing
+    needed doing.
+  - It read the logs and did not rerun the tests.
+  - The code's author is Opus 5.5.
+
 ## 2. Slice 2: one answer covers every exact copy
 
 ### 2.1 What the dialog says
