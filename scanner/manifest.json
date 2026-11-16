@@ -1,5 +1,5 @@
 {
-  "version": "1b6594acb12781705b1bbc68fce02b87bf85200f",
+  "version": "db0d11724b2bc8fa6079476e77f6ed372fec889d",
   "files": {
     "bin/canary": "6be3492d4a1c5373bf1040f4a612737548593853448d95f436d5828e9545ffa9",
     "canary/__init__.py": "acf49f5a021eab661654fc8448e030081b7cbdfb6c4e9224b8b0060c4cf24507",
@@ -24,6 +24,6 @@
     "canary/scan.py": "10835ce85cbbe7806a3e3fb909337b09e9f9f5f7610c208c57ab3601bef842f1",
     "canary/setup.py": "eca8c24b921de8d34658333be6bd2b5650deb0b407f0730e148e88f4a9db52bd",
     "canary/shellparse.py": "ed1a73a3121d4e35cf6491ed83951bbdf45de3516ebbca438b47898369c7436e",
-    "canary/watcher.py": "a2ee7e94c11a3586b9c5d9f87850d4f675630cd67e24c0e13b84deb50e937793"
+    "canary/watcher.py": "1d1b2d4c541fa3a4dedba173dd9eab56a69dcc7ad9a35bc84f22ed1185e82da7"
   }
 }
