@@ -1,14 +1,14 @@
-commit 5246de3eadd435465ac08a60fc401eedb8663034
+commit f31b0ff634de07e742500cbaf509735ee914125a
 Python 3.10.3
 
 Paths no committed test executes, run once on temp homes (not a gate, not a done-when bullet):
 step -> SWEEP when an approved copy arrives after its hold; handle step 4 keeping a hold whose place differs only under .git;
-canary drop on a replaced group's id; drop_text with the place taken; the two-name deletion note.
+canary drop on a replaced group's id; drop_text with the place taken, printed in full; the two-name deletion note, printed.
 Every call passes home=, support= and ask=. Script: untested_paths.py (scratch, not committed), source below the output.
 
-PASS hold id was on the queue first  [20261116T052459Z-c51c98d6]
+PASS hold id was on the queue first  [20261116T065435Z-376c6397]
 PASS step set sweep_waiting
-PASS step queued exactly one SWEEP  [[<object object at 0x105058b40>]]
+PASS step queued exactly one SWEEP  [[<object object at 0x100e00b40>]]
 PASS sweep_waiting is clear after the sweep
 PASS the hold is dropped  [[]]
 PASS one note, the installed note  [['SkillCanary deleted 1 held copy that matches a skill you already installed: dropped-in. canary list shows what is still held.']]
@@ -17,7 +17,7 @@ PASS hold stays
 PASS no question asked  [0 asked]
    notes: ['SkillCanary is holding dropped-in, which arrived in ~/.agents/skills without its check. Its place is taken now, so SkillCanary did not ask about it. canary list shows where it is.']
 PASS taken note sent  [['SkillCanary is holding dropped-in, which arrived in ~/.agents/skills without its check. Its place is taken now, so SkillCanary did not ask about it. canary list shows where it is.']]
-PASS drop on a replaced id says NOT_A_HOLD  [canary drop deletes a held skill only; canary restore 20261116T052459Z-2fc15b23 puts a replaced copy back.]
+PASS drop on a replaced id says NOT_A_HOLD  [canary drop deletes a held skill only; canary restore 20261116T065435Z-53b02440 puts a replaced copy back.]
    drop_text:
      | Delete the held copy of this skill?
      | 
@@ -25,14 +25,13 @@ PASS drop on a replaced id says NOT_A_HOLD  [canary drop deletes a held skill on
      | Arrived in ~/.agents/skills on 2026-11-16.
      | Another copy is in its place now.
      | 
-     | Delete removes the copy SkillCanary is holding. This cannot be undone: to
-     | get it back, install the skill again from where it came. Nothing in your
-     | skills folders changes.
+     | Delete removes the copy SkillCanary is holding. This cannot be undone: to get it back, install the skill again from where it came. Nothing in your skills folders changes.
      | Cancel keeps it held.
      | The folder name comes from whoever put it there, not from SkillCanary.
 PASS drop_text says the place is taken
-   two-name note: SkillCanary deleted 2 held copies that matches a skills you already installed: a, b. canary list shows what is still held.
-PASS two-name note uses copies and skills
+   two-name note: SkillCanary deleted 2 held copies that match skills you already installed: a, b. canary list shows what is still held.
+PASS two-name note is section 1.2's plural
+PASS drop_text's explanation is one line
 ALL PASS
 exit code: 0
 
@@ -100,8 +99,13 @@ print("   drop_text:\n" + "\n".join("     | " + line for line in text.split("\n"
 results.append(check("drop_text says the place is taken", "Another copy is in its place now." in text))
 note = watcher._installed_note(["a", "b"])
 print("   two-name note:", note)
-results.append(check("two-name note uses copies and skills",
-                     "2 held copies" in note and "a skills" in note))
+results.append(check("two-name note is section 1.2's plural",
+                     note == "SkillCanary deleted 2 held copies that match skills you already "
+                             "installed: a, b. canary list shows what is still held."))
+results.append(check("drop_text's explanation is one line",
+                     "Delete removes the copy SkillCanary is holding. This cannot be undone: to "
+                     "get it back, install the skill again from where it came. Nothing in your "
+                     "skills folders changes." in text.split("\n")))
 
 print("ALL PASS" if all(results) else "SOME FAILED")
 sys.exit(0 if all(results) else 1)
