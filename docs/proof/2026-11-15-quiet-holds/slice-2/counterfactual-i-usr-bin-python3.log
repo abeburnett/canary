@@ -1,4 +1,4 @@
-commit 26dacea0ae56eeebef4ac70d60f306abcd4ab5ac
+commit 9331ba85e54ed928716115a80f9472059410fa1c
 Python 3.9.6
 
 Counterfactual i (program 2026-11-15 quiet holds, slice 2, section 8 bullet 3)
@@ -11,7 +11,7 @@ Control: the pristine export, before any counterfactual in this run
 command (cwd = the export): /usr/bin/python3 -m unittest discover -s tests
 exit code: 0; reds: 0
 last lines:
-Ran 443 tests in 90.071s
+Ran 444 tests in 95.018s
 
 OK
 
@@ -34,7 +34,7 @@ Applied diff:
 
 command (cwd = the export): /usr/bin/python3 -m unittest discover -s tests
 exit code: 1
-reds: 13 in all
+reds: 14 in all
   named by this counterfactual (1; expected: test_i_content_approved_without_covers_is_asked_about):
     FAIL: test_i_content_approved_without_covers_is_asked_about (test_watcher.ChangedContentAndOlderApprovalsAreAskedAbout)
   other reds (11), all tests/test_action.py CanaryActionTests: the manifest check (spec section 8 bullet 2) sees canary/guestlist.py change and scanner/manifest.json not rewritten:
@@ -49,7 +49,9 @@ reds: 13 in all
     FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests)
     FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests)
     FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests)
-  further reds (1), not named and not manifest collateral:
+  further reds (2), not named and not manifest collateral:
+    FAIL: test_a_replayed_no_after_a_yes_does_not_bring_the_no_back (test_watcher.AYesAfterANoEndsIt)
+      why: the fold's test 4 writes an approval without `covers` for the installed copy; with the test removed that approval covers the later copy, which goes back without a question, so the test's one question is never asked.
     FAIL: test_l_after_an_approval_without_covers_replaces_it_the_same_content_is_asked_about (test_watcher.ChangedContentAndOlderApprovalsAreAskedAbout)
       why: test 3 (l) also needs `covers`: its newer approval of the same path has no `covers`, and with the test removed that approval covers the copy, which goes back without a question.
 
@@ -58,25 +60,25 @@ Re-verifying the collateral: the first CanaryActionTests failure in full:
 FAIL: test_each_skill_folder_is_one_package_and_the_strictest_wins (test_action.CanaryActionTests)
 ----------------------------------------------------------------------
 Traceback (most recent call last):
-  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-unruffled-khorana-72e121/8c22c631-03fc-4af0-bf65-21b93d4203dd/scratchpad/cf39/tests/test_action.py", line 108, in test_each_skill_folder_is_one_package_and_the_strictest_wins
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-unruffled-khorana-72e121/8c22c631-03fc-4af0-bf65-21b93d4203dd/scratchpad/fold39/tests/test_action.py", line 108, in test_each_skill_folder_is_one_package_and_the_strictest_wins
     self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
 AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed its integrity check
 
-Reverted: canary/guestlist.py and canary/watcher.py sha256 after the run match the pristine d656017d4ecc37ea05908da9cb887c4279ac8a1655bc82daae2499cf804eb606 and eb52e9bb5a7041c26a16d6434636c7d9da0d8157ff90e5eb56242532c05e8bc4
+Reverted: canary/guestlist.py and canary/watcher.py sha256 after the run match the pristine 39ea7b12dc1e438d7385e2177c424ad25464aef5e9064c03e58c05f4c6fdfa8a and eb52e9bb5a7041c26a16d6434636c7d9da0d8157ff90e5eb56242532c05e8bc4
 
 Full output:
 
 .FFFF................................................................................................................................./Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/unittest/case.py:550: ResourceWarning: unclosed file <_io.TextIOWrapper name=6 encoding='UTF-8'>
   method()
 ResourceWarning: Enable tracemalloc to get the object allocation traceback
-.................................................................................................................................................................................................................................canary: skipped /private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-unlock-0vs1ka0r/home/.claude/skills: it is reached through a link
-..............................................F..F..........................canary watch: OSError: disk trouble
+.................................................................................................................................................................................................................................canary: skipped /private/var/folders/c1/fh8lgj4n2q939sj08xbl6v5h0000gn/T/canary-unlock-_7cmce1q/home/.claude/skills: it is reached through a link
+....................................F..........F..F..........................canary watch: OSError: disk trouble
 .......
 ======================================================================
 FAIL: test_each_skill_folder_is_one_package_and_the_strictest_wins (test_action.CanaryActionTests)
 ----------------------------------------------------------------------
 Traceback (most recent call last):
-  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-unruffled-khorana-72e121/8c22c631-03fc-4af0-bf65-21b93d4203dd/scratchpad/cf39/tests/test_action.py", line 108, in test_each_skill_folder_is_one_package_and_the_strictest_wins
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-unruffled-khorana-72e121/8c22c631-03fc-4af0-bf65-21b93d4203dd/scratchpad/fold39/tests/test_action.py", line 108, in test_each_skill_folder_is_one_package_and_the_strictest_wins
     self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
 AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed its integrity check
 
@@ -85,7 +87,7 @@ AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed it
 FAIL: test_files_outside_skill_folders_are_still_scanned (test_action.CanaryActionTests)
 ----------------------------------------------------------------------
 Traceback (most recent call last):
-  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-unruffled-khorana-72e121/8c22c631-03fc-4af0-bf65-21b93d4203dd/scratchpad/cf39/tests/test_action.py", line 129, in test_files_outside_skill_folders_are_still_scanned
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-unruffled-khorana-72e121/8c22c631-03fc-4af0-bf65-21b93d4203dd/scratchpad/fold39/tests/test_action.py", line 129, in test_files_outside_skill_folders_are_still_scanned
     self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
 AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed its integrity check
 
@@ -94,7 +96,7 @@ AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed it
 FAIL: test_invalid_escaping_and_incomplete_inputs_are_rejected (test_action.CanaryActionTests) (name='incomplete-coverage-fails')
 ----------------------------------------------------------------------
 Traceback (most recent call last):
-  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-unruffled-khorana-72e121/8c22c631-03fc-4af0-bf65-21b93d4203dd/scratchpad/cf39/tests/test_action.py", line 184, in test_invalid_escaping_and_incomplete_inputs_are_rejected
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-unruffled-khorana-72e121/8c22c631-03fc-4af0-bf65-21b93d4203dd/scratchpad/fold39/tests/test_action.py", line 184, in test_invalid_escaping_and_incomplete_inputs_are_rejected
     self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
 AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed its integrity check
 
@@ -103,7 +105,7 @@ AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed it
 FAIL: test_invalid_escaping_and_incomplete_inputs_are_rejected (test_action.CanaryActionTests) (name='workflow-command-path')
 ----------------------------------------------------------------------
 Traceback (most recent call last):
-  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-unruffled-khorana-72e121/8c22c631-03fc-4af0-bf65-21b93d4203dd/scratchpad/cf39/tests/test_action.py", line 197, in test_invalid_escaping_and_incomplete_inputs_are_rejected
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-unruffled-khorana-72e121/8c22c631-03fc-4af0-bf65-21b93d4203dd/scratchpad/fold39/tests/test_action.py", line 197, in test_invalid_escaping_and_incomplete_inputs_are_rejected
     self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 AssertionError: 2 != 0 : SkillCanary action error: the bundled scanner failed its integrity check
 
@@ -112,7 +114,7 @@ AssertionError: 2 != 0 : SkillCanary action error: the bundled scanner failed it
 FAIL: test_private_repository_requires_token_presence_without_disclosure (test_action.CanaryActionTests)
 ----------------------------------------------------------------------
 Traceback (most recent call last):
-  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-unruffled-khorana-72e121/8c22c631-03fc-4af0-bf65-21b93d4203dd/scratchpad/cf39/tests/test_action.py", line 224, in test_private_repository_requires_token_presence_without_disclosure
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-unruffled-khorana-72e121/8c22c631-03fc-4af0-bf65-21b93d4203dd/scratchpad/fold39/tests/test_action.py", line 224, in test_private_repository_requires_token_presence_without_disclosure
     self.assertEqual(present.returncode, 0, present.stdout + present.stderr)
 AssertionError: 2 != 0 : SkillCanary action error: the bundled scanner failed its integrity check
 
@@ -121,7 +123,7 @@ AssertionError: 2 != 0 : SkillCanary action error: the bundled scanner failed it
 FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='safe')
 ----------------------------------------------------------------------
 Traceback (most recent call last):
-  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-unruffled-khorana-72e121/8c22c631-03fc-4af0-bf65-21b93d4203dd/scratchpad/cf39/tests/test_action.py", line 79, in test_verdicts_and_fail_thresholds_follow_the_public_contract
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-unruffled-khorana-72e121/8c22c631-03fc-4af0-bf65-21b93d4203dd/scratchpad/fold39/tests/test_action.py", line 79, in test_verdicts_and_fail_thresholds_follow_the_public_contract
     self.assertEqual(result.returncode, expected_code, result.stderr)
 AssertionError: 2 != 0 : SkillCanary action error: the bundled scanner failed its integrity check
 
@@ -130,7 +132,7 @@ AssertionError: 2 != 0 : SkillCanary action error: the bundled scanner failed it
 FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='review')
 ----------------------------------------------------------------------
 Traceback (most recent call last):
-  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-unruffled-khorana-72e121/8c22c631-03fc-4af0-bf65-21b93d4203dd/scratchpad/cf39/tests/test_action.py", line 79, in test_verdicts_and_fail_thresholds_follow_the_public_contract
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-unruffled-khorana-72e121/8c22c631-03fc-4af0-bf65-21b93d4203dd/scratchpad/fold39/tests/test_action.py", line 79, in test_verdicts_and_fail_thresholds_follow_the_public_contract
     self.assertEqual(result.returncode, expected_code, result.stderr)
 AssertionError: 2 != 0 : SkillCanary action error: the bundled scanner failed its integrity check
 
@@ -139,7 +141,7 @@ AssertionError: 2 != 0 : SkillCanary action error: the bundled scanner failed it
 FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='unsafe')
 ----------------------------------------------------------------------
 Traceback (most recent call last):
-  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-unruffled-khorana-72e121/8c22c631-03fc-4af0-bf65-21b93d4203dd/scratchpad/cf39/tests/test_action.py", line 79, in test_verdicts_and_fail_thresholds_follow_the_public_contract
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-unruffled-khorana-72e121/8c22c631-03fc-4af0-bf65-21b93d4203dd/scratchpad/fold39/tests/test_action.py", line 79, in test_verdicts_and_fail_thresholds_follow_the_public_contract
     self.assertEqual(result.returncode, expected_code, result.stderr)
 AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed its integrity check
 
@@ -148,7 +150,7 @@ AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed it
 FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='review-fails')
 ----------------------------------------------------------------------
 Traceback (most recent call last):
-  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-unruffled-khorana-72e121/8c22c631-03fc-4af0-bf65-21b93d4203dd/scratchpad/cf39/tests/test_action.py", line 79, in test_verdicts_and_fail_thresholds_follow_the_public_contract
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-unruffled-khorana-72e121/8c22c631-03fc-4af0-bf65-21b93d4203dd/scratchpad/fold39/tests/test_action.py", line 79, in test_verdicts_and_fail_thresholds_follow_the_public_contract
     self.assertEqual(result.returncode, expected_code, result.stderr)
 AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed its integrity check
 
@@ -157,7 +159,7 @@ AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed it
 FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests) (name='never')
 ----------------------------------------------------------------------
 Traceback (most recent call last):
-  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-unruffled-khorana-72e121/8c22c631-03fc-4af0-bf65-21b93d4203dd/scratchpad/cf39/tests/test_action.py", line 79, in test_verdicts_and_fail_thresholds_follow_the_public_contract
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-unruffled-khorana-72e121/8c22c631-03fc-4af0-bf65-21b93d4203dd/scratchpad/fold39/tests/test_action.py", line 79, in test_verdicts_and_fail_thresholds_follow_the_public_contract
     self.assertEqual(result.returncode, expected_code, result.stderr)
 AssertionError: 2 != 0 : SkillCanary action error: the bundled scanner failed its integrity check
 
@@ -166,16 +168,24 @@ AssertionError: 2 != 0 : SkillCanary action error: the bundled scanner failed it
 FAIL: test_verdicts_and_fail_thresholds_follow_the_public_contract (test_action.CanaryActionTests)
 ----------------------------------------------------------------------
 Traceback (most recent call last):
-  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-unruffled-khorana-72e121/8c22c631-03fc-4af0-bf65-21b93d4203dd/scratchpad/cf39/tests/test_action.py", line 96, in test_verdicts_and_fail_thresholds_follow_the_public_contract
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-unruffled-khorana-72e121/8c22c631-03fc-4af0-bf65-21b93d4203dd/scratchpad/fold39/tests/test_action.py", line 96, in test_verdicts_and_fail_thresholds_follow_the_public_contract
     self.assertEqual(result.returncode, 1, result.stderr)
 AssertionError: 2 != 1 : SkillCanary action error: the bundled scanner failed its integrity check
 
 
 ======================================================================
+FAIL: test_a_replayed_no_after_a_yes_does_not_bring_the_no_back (test_watcher.AYesAfterANoEndsIt)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-unruffled-khorana-72e121/8c22c631-03fc-4af0-bf65-21b93d4203dd/scratchpad/fold39/tests/test_watcher.py", line 709, in test_a_replayed_no_after_a_yes_does_not_bring_the_no_back
+    self.assertEqual(len(later.asked), 1)
+AssertionError: 0 != 1
+
+======================================================================
 FAIL: test_i_content_approved_without_covers_is_asked_about (test_watcher.ChangedContentAndOlderApprovalsAreAskedAbout)
 ----------------------------------------------------------------------
 Traceback (most recent call last):
-  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-unruffled-khorana-72e121/8c22c631-03fc-4af0-bf65-21b93d4203dd/scratchpad/cf39/tests/test_watcher.py", line 727, in test_i_content_approved_without_covers_is_asked_about
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-unruffled-khorana-72e121/8c22c631-03fc-4af0-bf65-21b93d4203dd/scratchpad/fold39/tests/test_watcher.py", line 754, in test_i_content_approved_without_covers_is_asked_about
     self.assertEqual((len(later.asked), len(later.held())), (1, 1))
 AssertionError: Tuples differ: (0, 0) != (1, 1)
 
@@ -190,7 +200,7 @@ First differing element 0:
 FAIL: test_l_after_an_approval_without_covers_replaces_it_the_same_content_is_asked_about (test_watcher.ChangedContentAndOlderApprovalsAreAskedAbout)
 ----------------------------------------------------------------------
 Traceback (most recent call last):
-  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-unruffled-khorana-72e121/8c22c631-03fc-4af0-bf65-21b93d4203dd/scratchpad/cf39/tests/test_watcher.py", line 740, in test_l_after_an_approval_without_covers_replaces_it_the_same_content_is_asked_about
+  File "/private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-unruffled-khorana-72e121/8c22c631-03fc-4af0-bf65-21b93d4203dd/scratchpad/fold39/tests/test_watcher.py", line 767, in test_l_after_an_approval_without_covers_replaces_it_the_same_content_is_asked_about
     self.assertEqual((len(later.asked), len(later.held())), (1, 1))
 AssertionError: Tuples differ: (0, 0) != (1, 1)
 
@@ -202,6 +212,6 @@ First differing element 0:
 + (1, 1)
 
 ----------------------------------------------------------------------
-Ran 443 tests in 89.943s
+Ran 444 tests in 93.429s
 
-FAILED (failures=13)
+FAILED (failures=14)
