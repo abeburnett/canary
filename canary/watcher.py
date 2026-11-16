@@ -201,11 +201,10 @@ def _drop_hold(support, h, how, same_as=None):
 
 
 def _installed_note(names):
-    # Section 1.2 words it so: `copies` and `skills` when n is not one.
     n = len(names)
-    copy, skill = ("copy", "skill") if n == 1 else ("copies", "skills")
-    return (f"SkillCanary deleted {n} held {copy} that matches a {skill} you already "
-            f"installed: {', '.join(names)}. "
+    what = ("held copy that matches a skill" if n == 1
+            else "held copies that match skills")
+    return (f"SkillCanary deleted {n} {what} you already installed: {', '.join(names)}. "
             "canary list shows what is still held.")
 
 
@@ -650,10 +649,9 @@ def drop_text(h, home):
         f"Arrived in {folder} on {day}." if day else f"Arrived in {folder}.",
         "Another copy is in its place now." if os.path.lexists(h["origin"])
         else "Its place is free.", "",
-        # Section 3's lines, as that section breaks them.
-        "Delete removes the copy SkillCanary is holding. This cannot be undone: to",
-        "get it back, install the skill again from where it came. Nothing in your",
-        "skills folders changes.",
+        "Delete removes the copy SkillCanary is holding. This cannot be undone: to get it "
+        "back, install the skill again from where it came. Nothing in your skills folders "
+        "changes.",
         "Cancel keeps it held.",
         "The folder name comes from whoever put it there, not from SkillCanary."])
 
