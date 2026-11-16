@@ -1,0 +1,83 @@
+commit b43438e38f04f8808f157cfd286d9b7605a6c7ea
+Python 3.10.3
+
+red-fold.log: the fold's new test, before any source change.
+The commit above changes only tests/test_watcher.py since 165bb41; canary/, bin/ and scanner/
+are byte-identical to 26dacea, the slice's code before the fold
+(git diff --quiet 165bb41 HEAD -- canary bin scanner exits 0; 165bb41 changed only docs).
+Tree clean: 1 changed paths.
+Command: python3.10 -m unittest tests.test_watcher -v
+
+test_a_restart_asks_nothing_and_the_hold_still_shows (tests.test_watcher.AHoldIsAskedAboutOnce) ... ok
+test_a_folder_gets_held_when_its_skill_md_arrives (tests.test_watcher.ANewSkillIsHeld) ... ok
+test_a_link_into_another_skills_folder_follows_its_target (tests.test_watcher.ANewSkillIsHeld) ... ok
+test_a_link_to_a_folder_outside_is_held (tests.test_watcher.ANewSkillIsHeld) ... ok
+test_a_new_skill_is_held_only_once_it_settles (tests.test_watcher.ANewSkillIsHeld) ... ok
+test_canary_list_says_the_person_chose_not_to_install_it (tests.test_watcher.ANoIsRemembered) ... ok
+test_canary_restore_asks_again (tests.test_watcher.ANoIsRemembered) ... ok
+test_no_second_question_and_it_stays_held (tests.test_watcher.ANoIsRemembered) ... ok
+test_the_session_notice_counts_neither_hold (tests.test_watcher.ANoIsRemembered) ... ok
+test_a_replayed_no_after_a_yes_does_not_bring_the_no_back (tests.test_watcher.AYesAfterANoEndsIt) ... FAIL
+test_a_an_approved_exact_copy_at_its_place_drops_the_hold_at_start (tests.test_watcher.AutomaticDropsDeleteExactCopiesOnly) ... ok
+test_b_a_copy_that_differs_only_under_git_is_kept (tests.test_watcher.AutomaticDropsDeleteExactCopiesOnly) ... ok
+test_c_a_second_exact_copy_from_one_place_is_dropped_without_a_question (tests.test_watcher.AutomaticDropsDeleteExactCopiesOnly) ... ok
+test_c_a_second_hold_with_different_content_is_kept (tests.test_watcher.AutomaticDropsDeleteExactCopiesOnly) ... ok
+test_d_a_failed_record_drops_nothing (tests.test_watcher.AutomaticDropsDeleteExactCopiesOnly) ... ok
+test_e_a_drop_that_stops_after_its_rename_is_finished_by_the_next_start (tests.test_watcher.AutomaticDropsDeleteExactCopiesOnly) ... ok
+test_a_ledger_fault_removes_nothing (tests.test_watcher.CanaryDropDeletesOnlyOnAYes) ... ok
+test_canary_drop_prints_the_line_and_exits_with_its_code (tests.test_watcher.CanaryDropDeletesOnlyOnAYes) ... ok
+test_no_keeps_the_hold (tests.test_watcher.CanaryDropDeletesOnlyOnAYes) ... ok
+test_yes_deletes_the_held_copy_and_records_it (tests.test_watcher.CanaryDropDeletesOnlyOnAYes) ... ok
+test_i_content_approved_without_covers_is_asked_about (tests.test_watcher.ChangedContentAndOlderApprovalsAreAskedAbout) ... ok
+test_j_a_copy_that_differs_only_under_git_is_asked_about (tests.test_watcher.ChangedContentAndOlderApprovalsAreAskedAbout) ... ok
+test_k_after_the_approved_copy_is_removed_the_same_content_is_asked_about (tests.test_watcher.ChangedContentAndOlderApprovalsAreAskedAbout) ... ok
+test_l_after_an_approval_without_covers_replaces_it_the_same_content_is_asked_about (tests.test_watcher.ChangedContentAndOlderApprovalsAreAskedAbout) ... ok
+test_nobody_answering_is_asked_once (tests.test_watcher.OneAnswerCoversEveryCopy) ... ok
+test_one_question_puts_every_copy_back (tests.test_watcher.OneAnswerCoversEveryCopy) ... ok
+test_it_finds_the_classifier_your_terminal_finds (tests.test_watcher.TheLaunchAgent) ... ok
+test_a_folder_named_with_only_spaces_needs_the_fixed_phrase (tests.test_watcher.ThePersonDecides) ... ok
+test_a_held_skill_with_links_is_refused_without_a_question (tests.test_watcher.ThePersonDecides) ... ok
+test_a_link_put_back_still_leads_to_its_folder (tests.test_watcher.ThePersonDecides) ... ok
+test_a_restored_skill_lists_as_restored (tests.test_watcher.ThePersonDecides) ... ok
+test_an_unsafe_skill_goes_back_when_the_person_types_its_name_and_says_so (tests.test_watcher.ThePersonDecides) ... ok
+test_an_unsafe_skill_stays_held_unless_the_person_types_its_name (tests.test_watcher.ThePersonDecides) ... ok
+test_canary_restore_does_not_also_send_a_notification (tests.test_watcher.ThePersonDecides) ... ok
+test_canary_restore_prints_the_reason_or_the_success_line (tests.test_watcher.ThePersonDecides) ... ok
+test_cancel_keeps_it_held_and_canary_list_says_how_to_restore (tests.test_watcher.ThePersonDecides) ... ok
+test_every_restore_failure_says_why (tests.test_watcher.ThePersonDecides) ... ok
+test_install_puts_it_back_and_it_counts_as_checked (tests.test_watcher.ThePersonDecides) ... ok
+test_restore_still_needs_the_person (tests.test_watcher.ThePersonDecides) ... ok
+test_the_dialog_recommends_an_action_and_quotes_the_line (tests.test_watcher.ThePersonDecides)
+Program 2026-10-12: the held-skill dialog says what to do, the ... ok
+test_the_real_dialog_is_always_asked_with_the_name_to_type (tests.test_watcher.ThePersonDecides) ... ok
+test_a_failed_put_back_is_reported_not_raised (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_a_folder_let_go_without_a_skill_md_is_held_when_it_gets_one (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_a_folder_there_at_start_that_gains_a_skill_md_is_held (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_a_forged_hold_cannot_name_a_place_outside_the_skills_folders (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_a_hold_that_fails_is_tried_again (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_a_restart_does_not_forget_what_arrived (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_a_skill_changed_after_its_check_is_not_put_back (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_an_entry_that_never_stops_changing_is_held_anyway (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_holds_survive_a_broken_ledger (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_one_bad_look_does_not_stop_the_watcher (tests.test_watcher.WhatCannotSlipPast) ... canary watch: OSError: disk trouble
+ok
+test_staging_names_are_no_way_around (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_trusting_a_skill_needs_the_person (tests.test_watcher.WhatCannotSlipPast) ... ok
+test_canary_add_is_not_held (tests.test_watcher.WhatTheWatcherLeavesAlone) ... ok
+test_canary_install_and_its_links_are_not_held (tests.test_watcher.WhatTheWatcherLeavesAlone) ... ok
+test_skillcanarys_own_skill_is_not_held (tests.test_watcher.WhatTheWatcherLeavesAlone) ... ok
+test_skills_already_there_and_changes_to_them_are_never_held (tests.test_watcher.WhatTheWatcherLeavesAlone) ... ok
+
+======================================================================
+FAIL: test_a_replayed_no_after_a_yes_does_not_bring_the_no_back (tests.test_watcher.AYesAfterANoEndsIt)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/unruffled-khorana-72e121/tests/test_watcher.py", line 709, in test_a_replayed_no_after_a_yes_does_not_bring_the_no_back
+    self.assertEqual(len(later.asked), 1)
+AssertionError: 0 != 1
+
+----------------------------------------------------------------------
+Ran 57 tests in 0.508s
+
+FAILED (failures=1)
+exit code: 1
