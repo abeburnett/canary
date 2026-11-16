@@ -862,7 +862,9 @@ a restore; plugin installs record none), `declined`, `refused` or `not_installed
 `origin.same_as`, the approved path it copies. A `declined` or `refused`
 event for a held skill the person answered no to carries its `digest` and
 hold `id`; the watcher's own copy of that event for a later hold, and its
-`restored` event for an exact-copy put-back, carry `"replay": true`. A damaged line is skipped. Each skill is keyed by its resolved
+`restored` event for an exact-copy put-back, carry `"replay": true`. A
+replayed `declined` or `refused` labels its hold but never counts as the
+person's latest answer, so it cannot outlast a later approval. A damaged line is skipped. Each skill is keyed by its resolved
 path; a skill reached under several names is listed under each. Its
 fingerprint covers every file's bytes, path and program bit, without `.git`.
 Links inside a skill are recorded and followed (each folder once), so a

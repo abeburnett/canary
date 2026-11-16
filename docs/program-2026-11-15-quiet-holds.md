@@ -426,8 +426,9 @@ check also uses; that change is cut from this program (section 10).
 
 `guestlist.refused(events, fingerprint)` is true when the latest event that
 carries that `digest`, among `approved`, `declined` and `refused`, is a
-`declined` or a `refused`. A later approval of the same content ends the
-refusal, whichever command gave it.
+`declined` or a `refused`. The watcher's replayed marks (`"replay": true`,
+below) do not count when the latest event is picked. A later approval of
+the same content ends the refusal, whichever command gave it.
 
 A hold whose fingerprint is refused stays held with no check and no dialog.
 The watcher writes, through `watcher._record`, `{"at", "event": <the kind
@@ -435,7 +436,10 @@ of the remembered event>, "name", "id", "digest", "replay": true}` once per
 hold, and notifies once per content per run (the `notified` set, section
 2.4, with the key `"refused"`): `SkillCanary is holding
 {name}, which arrived in {folder}: it has the same content as a skill you
-chose not to install. canary list shows where it is.`
+chose not to install. canary list shows where it is.` The mark labels its
+hold for `canary list` and is never the person's answer. The watcher writes
+it from a ledger it read earlier, so it can land after a newer approval;
+because it does not count, it cannot bring the no back.
 
 The fingerprint is enough here because a wrong match only withholds a
 question; it never installs or deletes. The remembered no lives in `handle`
@@ -788,6 +792,14 @@ The `STILL_*` pins stay green because no sentence changes.
    removed, the same content is asked about. After an approval without
    `covers` replaces the covering approval at the same path, the same
    content is asked about.
+4. **A yes after a no ends it** (added 2026-11-16 by the fold in section
+   9). The ledger gets, written directly and in this order, a no with a
+   fingerprint, an approval of that content without `covers`, and a
+   replayed no (`"replay": true`). A later copy of that content is asked
+   about. No seam. Its red evidence is `slice-2/red-fold.log`, stamped at
+   the commit that adds it, before the source change: the case fails on
+   its assertion and the other watcher tests pass. `red.log` predates it
+   and stays as it was.
 
 Existing test changed on purpose:
 `test_cancel_keeps_it_held_and_canary_list_says_how_to_restore` asserts
@@ -957,6 +969,19 @@ defect: only the 11 manifest cases went red.
   `counterfactual-k.log` stays as the record of the defect. No source,
   test or log changed with this decision, so the gate logs at `26dacea`
   stay valid.
+- 2026-11-16, owner: fold the pre-merge review's should-fix. Asked "Fold
+  the review's should-fix into slice 2?", the owner answered "Fold it".
+  The review is
+  `~/.cache/reviews/20261116-154239-premerge-gpt-6.1-sol-claude-unruffled-khorana-72e121-T4R3gN/review.md`
+  (MERGE-AFTER-FIXES, no security findings, one should-fix). The finding:
+  `Watcher._keep_refused` writes its replayed no from a ledger read before
+  the lock, so a `canary restore` yes can land between the read and the
+  mark, and `guestlist.refusal` then counted the mark as the latest
+  answer. The fix: `guestlist.refusal` ignores events with `"replay":
+  true` (section 2.3). Section 7, slice 2, test 4 covers it, with
+  `slice-2/red-fold.log` as its red evidence. The fold adds no
+  counterfactual: `red-fold.log` already runs that test against the
+  source before the fix.
 
 ## 10. Scope cuts, in one place
 
