@@ -682,6 +682,33 @@ class ANoIsRemembered(unittest.TestCase):
         self.assertEqual((result, len(asked)), ((False, STILL_SILENT), 1))
 
 
+class AYesAfterANoEndsIt(unittest.TestCase):
+    """Program 2026-11-15 (quiet holds), slice 2, the pre-merge review's
+    fold (2026-11-16). No seam. The watcher marks a hold with a replayed no
+    from a ledger it read earlier, so the mark can land after a newer yes.
+    The events are written directly, in that order; no threads race."""
+
+    def test_a_replayed_no_after_a_yes_does_not_bring_the_no_back(self):
+        mac = Mac(answer=None)
+        folder = skill(mac.codex, "dropped-in")
+        fingerprint = guestlist.digest(folder)
+        at = guestlist._now()
+        guestlist.record_events(mac.support, [
+            {"at": at, "event": "declined", "name": "dropped-in", "id": "first-hold",
+             "digest": fingerprint},
+            {"at": at, "event": "approved", "how": "canary add", "name": "dropped-in",
+             "skill": folder, "digest": fingerprint},
+            {"at": at, "event": "declined", "name": "dropped-in", "id": "second-hold",
+             "digest": fingerprint, "replay": True}])
+        self.assertEqual(mac.settle(), [])
+        later = Mac(answer=None, home=mac.home)
+        skill(mac.claude, "dropped-in")
+        self.assertEqual(len(later.settle(start=20)), 1)
+        drain(later.w)
+        # The yes ended the no, so the new copy is asked about.
+        self.assertEqual(len(later.asked), 1)
+
+
 class ChangedContentAndOlderApprovalsAreAskedAbout(unittest.TestCase):
     """Program 2026-11-15 (quiet holds), slice 2, test 3. Every case is a pin
     (counterfactuals i, j, k, l). The later copy arrives after a restart, so
