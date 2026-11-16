@@ -739,9 +739,9 @@ class ChangedContentAndOlderApprovalsAreAskedAbout(unittest.TestCase):
     def test_j_a_copy_that_differs_only_under_git_is_asked_about(self):
         mac, folder = self.covering_yes()
         later = self.arrives_again(mac, git=True)
+        self.assertEqual((len(later.asked), len(later.held())), (1, 1))
         copy = os.path.join(watcher.held_dir(mac.support), later.held()[0]["id"], "entry")
         self.assertEqual(guestlist.digest(copy), guestlist.digest(folder))
-        self.assertEqual((len(later.asked), len(later.held())), (1, 1))
 
     def test_i_content_approved_without_covers_is_asked_about(self):
         mac = Mac(answer=None)
