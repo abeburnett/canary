@@ -257,12 +257,15 @@ def covering(events, fingerprint):
 def refusal(events, fingerprint):
     """The kind of the person's remembered no for this content, `declined`
     or `refused`, or None (program 2026-11-15, 2.3): the latest event with
-    this digest among approvals and refusals decides."""
+    this digest among approvals and refusals decides. The watcher's replayed
+    marks only label holds: one written from an older read of the ledger
+    must not outlast a newer approval."""
     if fingerprint is None:
         return None
     last = None
     for e in events:
-        if e.get("event") in ("approved", "declined", "refused") and e.get("digest") == fingerprint:
+        if (e.get("event") in ("approved", "declined", "refused") and e.get("digest") == fingerprint
+                and e.get("replay") is not True):
             last = e["event"]
     return last if last in ("declined", "refused") else None
 
