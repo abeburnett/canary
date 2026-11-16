@@ -843,8 +843,15 @@ the slice's own tests and counterfactuals:
       without `covers`);
    j. a remembered yes compares fingerprints only → test 3 (the `.git`
       copy);
-   k. a remembered yes no longer needs the installed copy to be approved →
-      test 3 (the removed copy);
+   k. a remembered yes no longer needs the installed copy to be approved
+      and no longer runs `same_tree` (both checks are removed) → test 3
+      (the removed copy). Removing the approval check alone cannot turn
+      anything red: once the approved copy is gone, `same_tree` fails too
+      and still stops the put-back. This replaced the original k on
+      2026-11-16 (section 9). Under this change the `.git` case of test 3
+      also goes red, as an ERROR and not an assertion failure, because the
+      copy goes back and the test finds no hold to read. k is shown by the
+      removed-copy case's assertion failure alone;
    l. `guestlist.covering` searches every `approved` event and not the
       current state → test 3 (the replaced approval);
    m. the remembered no is removed from `handle` → test 2;
@@ -928,6 +935,28 @@ owner chose to fix both (2026-11-15). This commit corrects sections 1.2 and
 3; the source commit after it changes `watcher._installed_note` and
 `watcher.drop_text` to match, and the manifest commit after that is the
 slice's final code commit.
+
+The slice 2 build found that counterfactual k, as first written, could
+turn no test red. It removed only the check that the installed copy is
+approved, and `same_tree` fails on its own once that copy is removed.
+`slice-2/counterfactual-k.log` and its `/usr/bin/python3` twin record the
+defect: only the 11 manifest cases went red.
+
+- 2026-11-16, owner: replace counterfactual k with k-combined. Section 8,
+  bullet 3, k now removes both the approval check and `same_tree`. Its
+  evidence is `slice-2/counterfactual-k-combined.log` and
+  `slice-2/counterfactual-k-combined-usr-bin-python3.log`, both run at
+  `26dacea`. On both interpreters, k-combined turns 13 tests red:
+  - `test_k_after_the_approved_copy_is_removed_the_same_content_is_asked_about`
+    fails on its assertion. This failure alone shows k.
+  - `test_j_a_copy_that_differs_only_under_git_is_asked_about` errors with
+    an `IndexError` at `later.held()[0]`. The copy was put back, so no hold
+    was left for the test to read. That is an ERROR, not an assertion
+    failure, and it is not counted as k's evidence.
+  - The other 11 are the manifest cases named in bullet 3.
+  `counterfactual-k.log` stays as the record of the defect. No source,
+  test or log changed with this decision, so the gate logs at `26dacea`
+  stay valid.
 
 ## 10. Scope cuts, in one place
 
