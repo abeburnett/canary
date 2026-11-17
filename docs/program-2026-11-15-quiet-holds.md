@@ -861,9 +861,9 @@ the slice's own tests and counterfactuals:
       anything red: once the approved copy is gone, `same_tree` fails too
       and still stops the put-back. This replaced the original k on
       2026-11-16 (section 9). Under this change the `.git` case of test 3
-      also goes red, as an ERROR and not an assertion failure, because the
-      copy goes back and the test finds no hold to read. k is shown by the
-      removed-copy case's assertion failure alone;
+      also fails on its assertion, because the change removes `same_tree`,
+      which that case guards. k is shown by the removed-copy case's
+      assertion failure alone;
    l. `guestlist.covering` searches every `approved` event and not the
       current state → test 3 (the replaced approval);
    m. the remembered no is removed from `handle` → test 2;
@@ -958,17 +958,19 @@ defect: only the 11 manifest cases went red.
   bullet 3, k now removes both the approval check and `same_tree`. Its
   evidence is `slice-2/counterfactual-k-combined.log` and
   `slice-2/counterfactual-k-combined-usr-bin-python3.log`, both run at
-  `9331ba8`. On both interpreters, k-combined turns 13 tests red:
+  `57b6ccd`, after test j's reorder below. On both interpreters,
+  k-combined turns 13 tests red:
   - `test_k_after_the_approved_copy_is_removed_the_same_content_is_asked_about`
     fails on its assertion. This failure alone shows k.
-  - `test_j_a_copy_that_differs_only_under_git_is_asked_about` errors with
-    an `IndexError` at `later.held()[0]`. The copy was put back, so no hold
-    was left for the test to read. That is an ERROR, not an assertion
-    failure, and it is not counted as k's evidence.
+  - `test_j_a_copy_that_differs_only_under_git_is_asked_about` fails on its
+    assertion, `(0, 0) != (1, 1)`: the change removes `same_tree`, which
+    test j guards, so the copy goes back without a question. Before the
+    reorder it errored with an `IndexError` at `later.held()[0]`. Either
+    way it is not counted as k's evidence.
   - The other 11 are the manifest cases named in bullet 3.
   `counterfactual-k.log` stays as the record of the defect. No source,
   test or log changed with this decision. The gate logs stand at
-  `9331ba8`, the final code commit after the fold below.
+  `57b6ccd`, test j's reorder below.
 - 2026-11-16, owner: fold the pre-merge review's should-fix. Asked "Fold
   the review's should-fix into slice 2?", the owner answered "Fold it".
   The review is
@@ -982,6 +984,23 @@ defect: only the 11 manifest cases went red.
   `slice-2/red-fold.log` as its red evidence. The fold adds no
   counterfactual: `red-fold.log` already runs that test against the
   source before the fix.
+- 2026-11-16, owner: reorder test j so counterfactual j fails on its
+  assertion. The done-when audit found that under j's change test j read
+  `later.held()[0]` before its assertion, so it errored with an
+  `IndexError` and the assertion never ran. The owner answered "Reorder
+  test j". Commit `57b6ccd` moves the `(len(later.asked),
+  len(later.held())) == (1, 1)` assertion ahead of that read and changes
+  nothing else; it touches only `tests/test_watcher.py`, with no source or
+  manifest change. At `57b6ccd`, on both interpreters, both gates pass
+  (444 tests) and test j fails on its assertion, `(0, 0) != (1, 1)`, in
+  `counterfactual-j.log` and in `counterfactual-k-combined.log` and their
+  `/usr/bin/python3` twins. Those six logs are stamped `57b6ccd`, the
+  final commit for the gate logs. The other counterfactual logs (i, k, l,
+  m, n, o, p) stay at `9331ba8`, and that is valid:
+  `git diff 9331ba8 57b6ccd -- bin canary scanner` is empty, and in
+  `tests` the diff is the one moved line in test j. None of those
+  counterfactuals targets test j, and none turned it red. Its assertions
+  all pass under them, so their order cannot change any result.
 
 ## 10. Scope cuts, in one place
 
