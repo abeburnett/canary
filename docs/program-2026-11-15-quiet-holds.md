@@ -511,6 +511,38 @@ that are not refused, so a refused hold is in `canary list` and not in the
 session-start notice. The reminder in every session is given up for holds
 the person has already answered.
 
+### 2.7 Slice 2 review and audit (2026-11-16)
+
+- **Pre-merge review 1:** GPT-6.1 Sol at `high` on `3f866f9...165bb41`
+  (`3f866f9` is `main`). This run's diff included `docs/proof/`. It
+  returned MERGE-AFTER-FIXES: no security findings, one should-fix. A
+  replayed refusal could override a newer approval. The fix was folded
+  in after the owner's "Fold it" (section 9). Review file:
+  `~/.cache/reviews/20261116-154239-premerge-gpt-6.1-sol-claude-unruffled-khorana-72e121-T4R3gN/review.md`.
+- **Pre-merge review 2, of the fold:** GPT-6.1 Sol at `high` on
+  `165bb41...9331ba8`, with `docs/proof/` excluded, returned MERGE with
+  no findings. Review file:
+  `~/.cache/reviews/20261116-160140-premerge-gpt-6.1-sol-claude-unruffled-khorana-72e121-HpRjAJ/review.md`.
+- **Done-when audit 1:** the Fable `milestone-auditor`, read-only, at
+  `f0d442b`, returned BLOCKED on one bullet, counterfactual j. Under j's
+  change, test j read `later.held()[0]` before its assertion, so it
+  errored with an `IndexError` and the assertion never ran. What was done:
+  the owner answered "Reorder test j", and test commit `57b6ccd` made the
+  change (section 9).
+- **Done-when audit 2:** the Fable `milestone-auditor`, read-only, audited
+  section 8 bullets 1 to 3 (counterfactuals i to p) at `ca75a05`.
+  - It returned `AUDIT: PASS`: every in-scope row SHOWN, none refused.
+  - It read the logs and did not rerun the tests.
+  - The code's author is Opus 5.5.
+  - Its rulings, none blocking:
+    - The `KeyError: 'refused'` red in `red.log` counts as a missing
+      interface.
+    - Line 8 of `red-fold.log`, "Tree clean: 1 changed paths", contradicts
+      itself but does not affect the red.
+    - Bullet 2's "the final commit is a manifest commit" is met: the last
+      commit that touches `bin/`, `canary/` or `scanner/` is the manifest
+      commit `9331ba8`.
+
 ## 3. Sentences, exact
 
 New constants in `canary/watcher.py`, beside the `STILL_*` lines:
