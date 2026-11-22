@@ -1,0 +1,123 @@
+== broken ==
+commit 419d29cb9b2a2654f335da431914c0274ebdfa1d
+Python 3.10.3
+tree:  M canary/guestlist.py;
+-            os.write(fd, line.encode("utf-8"))
++            pass  # COUNTERFACTUAL: record write skipped
+command: python3.10 -m unittest discover -v -s tests -p test_g*.py (test_gate.py, test_guestlist.py)
+test_a_new_skill_from_a_file_tool_is_sent_to_canary_add (test_gate.InstallsGoThroughTheDoor) ... ok
+test_an_installer_inside_a_longer_command_is_still_denied (test_gate.InstallsGoThroughTheDoor) ... ok
+test_claude_code_runs_a_plain_installer_through_canary_install (test_gate.InstallsGoThroughTheDoor) ... ok
+test_codex_is_told_the_canary_install_command (test_gate.InstallsGoThroughTheDoor) ... ok
+test_the_block_message_says_how_to_write_a_file_that_only_mentions_an_installer (test_gate.InstallsGoThroughTheDoor) ... ok
+test_the_hint_is_for_the_piped_help_form_only (test_gate.TheHelpHintIsForThePipedHelpForm) ... ok
+test_an_internal_error_still_denies (test_gate.TheHookNeverFailsOpen) ... ok
+test_garbage_and_missing_fields_deny (test_gate.TheHookNeverFailsOpen) ... ok
+test_a_denied_installer_writes_one_record_without_its_text_and_an_allow_writes_none (test_gate.TheHookRecordsWhatItStops) ... FAIL
+test_a_failing_record_keeps_every_answer_as_it_was (test_gate.TheHookRecordsWhatItStops) ... ok
+test_file_tool_reads_of_quarantined_packages_are_denied (test_gate.TheQuarantineIsNotReadable) ... ok
+test_both_hosts_deny_it (test_gate.TheSkillsOwnTextIsForThePerson) ... ok
+test_each_message_names_the_command_to_hand_the_person (test_gate.TheSkillsOwnTextIsForThePerson) ... ok
+test_other_canary_commands_and_other_spellings_pass (test_gate.TheSkillsOwnTextIsForThePerson) ... ok
+test_the_classifier_variable_does_not_switch_the_gate_off (test_gate.TheSkillsOwnTextIsForThePerson) ... ok
+test_canary_list_shows_installed_anyway_until_the_contents_change (test_guestlist.AnInstallAnywayIsRecordedAndShown) ... ok
+test_the_approval_carries_the_override_and_the_check_keeps_its_verdict (test_guestlist.AnInstallAnywayIsRecordedAndShown) ... ok
+test_list_ends_with_a_total_of_what_the_check_and_the_hook_did (test_guestlist.CanaryList)
+Program 2026-11-22, sections 1.5 and 3: one count per check, not per ... ok
+test_list_shows_each_skill_and_its_status (test_guestlist.CanaryList) ... ok
+test_a_change_behind_a_link_in_a_checked_skill_is_reported (test_guestlist.SkillsInstalledThroughTheDoor) ... ok
+test_a_change_that_keeps_the_size_and_time_is_still_reported (test_guestlist.SkillsInstalledThroughTheDoor) ... ok
+test_a_checked_skill_that_changes_is_reported_as_changed_since_approval (test_guestlist.SkillsInstalledThroughTheDoor) ... ok
+test_a_declined_install_is_recorded (test_guestlist.SkillsInstalledThroughTheDoor) ... ok
+test_a_refused_install_is_recorded (test_guestlist.SkillsInstalledThroughTheDoor) ... ok
+test_canary_add_records_the_check_and_the_approval (test_guestlist.SkillsInstalledThroughTheDoor) ... ok
+test_a_removed_skill_is_recorded (test_guestlist.SkillsThatSkippedTheCheckAreReported) ... ok
+test_a_repositorys_skills_are_reported_until_trusted (test_guestlist.SkillsThatSkippedTheCheckAreReported) ... ok
+test_a_second_name_for_a_skill_is_shown (test_guestlist.SkillsThatSkippedTheCheckAreReported) ... ok
+test_a_skill_that_arrives_another_way_is_unchecked_until_trusted (test_guestlist.SkillsThatSkippedTheCheckAreReported) ... ok
+test_an_unchecked_skill_is_reported_once_per_scan_not_recorded_twice (test_guestlist.SkillsThatSkippedTheCheckAreReported) ... ok
+test_without_its_record_every_skill_is_unchecked_again (test_guestlist.SkillsThatSkippedTheCheckAreReported) ... ok
+test_never_fails_the_session (test_guestlist.TheSessionStartLine) ... ok
+test_one_notice_for_the_person_and_the_agent_when_something_does (test_guestlist.TheSessionStartLine) ... ok
+test_silent_inside_the_classifier_session_even_with_a_dropped_in_skill (test_guestlist.TheSessionStartLine) ... ok
+test_silent_when_nothing_needs_a_look (test_guestlist.TheSessionStartLine) ... ok
+test_a_first_scan_counts_present_skills_as_yours_and_reports_nothing (test_guestlist.TheSkillsAlreadyThereAreYours) ... ok
+test_changes_to_your_skills_are_recorded_and_never_reported (test_guestlist.TheSkillsAlreadyThereAreYours) ... ok
+test_a_ledger_from_before_0_1_5_lists_cleanly_with_nothing_shown (test_guestlist.WhereASkillCameFrom) ... ok
+test_a_local_folder_renders_as_local_folder (test_guestlist.WhereASkillCameFrom) ... ok
+test_add_from_github_lists_owner_repo_and_commit (test_guestlist.WhereASkillCameFrom) ... ok
+test_origin_survives_a_changed_event (test_guestlist.WhereASkillCameFrom) ... ok
+
+======================================================================
+FAIL: test_a_denied_installer_writes_one_record_without_its_text_and_an_allow_writes_none (test_gate.TheHookRecordsWhatItStops)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-ac997f659e9023973/tests/test_gate.py", line 232, in test_a_denied_installer_writes_one_record_without_its_text_and_an_allow_writes_none
+    self.assertEqual([(e["host"], e["kind"]) for e in hooks], [("claude", "installer_redirect")])
+AssertionError: Lists differ: [] != [('claude', 'installer_redirect')]
+
+Second list contains 1 additional elements.
+First extra element 0:
+('claude', 'installer_redirect')
+
+- []
++ [('claude', 'installer_redirect')]
+
+----------------------------------------------------------------------
+Ran 41 tests in 4.255s
+
+FAILED (failures=1)
+exit code: 1; wall seconds: 5
+== restored ==
+commit 419d29cb9b2a2654f335da431914c0274ebdfa1d
+Python 3.10.3
+tree: 
+command: python3.10 -m unittest discover -v -s tests -p test_g*.py (test_gate.py, test_guestlist.py)
+test_a_new_skill_from_a_file_tool_is_sent_to_canary_add (test_gate.InstallsGoThroughTheDoor) ... ok
+test_an_installer_inside_a_longer_command_is_still_denied (test_gate.InstallsGoThroughTheDoor) ... ok
+test_claude_code_runs_a_plain_installer_through_canary_install (test_gate.InstallsGoThroughTheDoor) ... ok
+test_codex_is_told_the_canary_install_command (test_gate.InstallsGoThroughTheDoor) ... ok
+test_the_block_message_says_how_to_write_a_file_that_only_mentions_an_installer (test_gate.InstallsGoThroughTheDoor) ... ok
+test_the_hint_is_for_the_piped_help_form_only (test_gate.TheHelpHintIsForThePipedHelpForm) ... ok
+test_an_internal_error_still_denies (test_gate.TheHookNeverFailsOpen) ... ok
+test_garbage_and_missing_fields_deny (test_gate.TheHookNeverFailsOpen) ... ok
+test_a_denied_installer_writes_one_record_without_its_text_and_an_allow_writes_none (test_gate.TheHookRecordsWhatItStops) ... ok
+test_a_failing_record_keeps_every_answer_as_it_was (test_gate.TheHookRecordsWhatItStops) ... ok
+test_file_tool_reads_of_quarantined_packages_are_denied (test_gate.TheQuarantineIsNotReadable) ... ok
+test_both_hosts_deny_it (test_gate.TheSkillsOwnTextIsForThePerson) ... ok
+test_each_message_names_the_command_to_hand_the_person (test_gate.TheSkillsOwnTextIsForThePerson) ... ok
+test_other_canary_commands_and_other_spellings_pass (test_gate.TheSkillsOwnTextIsForThePerson) ... ok
+test_the_classifier_variable_does_not_switch_the_gate_off (test_gate.TheSkillsOwnTextIsForThePerson) ... ok
+test_canary_list_shows_installed_anyway_until_the_contents_change (test_guestlist.AnInstallAnywayIsRecordedAndShown) ... ok
+test_the_approval_carries_the_override_and_the_check_keeps_its_verdict (test_guestlist.AnInstallAnywayIsRecordedAndShown) ... ok
+test_list_ends_with_a_total_of_what_the_check_and_the_hook_did (test_guestlist.CanaryList)
+Program 2026-11-22, sections 1.5 and 3: one count per check, not per ... ok
+test_list_shows_each_skill_and_its_status (test_guestlist.CanaryList) ... ok
+test_a_change_behind_a_link_in_a_checked_skill_is_reported (test_guestlist.SkillsInstalledThroughTheDoor) ... ok
+test_a_change_that_keeps_the_size_and_time_is_still_reported (test_guestlist.SkillsInstalledThroughTheDoor) ... ok
+test_a_checked_skill_that_changes_is_reported_as_changed_since_approval (test_guestlist.SkillsInstalledThroughTheDoor) ... ok
+test_a_declined_install_is_recorded (test_guestlist.SkillsInstalledThroughTheDoor) ... ok
+test_a_refused_install_is_recorded (test_guestlist.SkillsInstalledThroughTheDoor) ... ok
+test_canary_add_records_the_check_and_the_approval (test_guestlist.SkillsInstalledThroughTheDoor) ... ok
+test_a_removed_skill_is_recorded (test_guestlist.SkillsThatSkippedTheCheckAreReported) ... ok
+test_a_repositorys_skills_are_reported_until_trusted (test_guestlist.SkillsThatSkippedTheCheckAreReported) ... ok
+test_a_second_name_for_a_skill_is_shown (test_guestlist.SkillsThatSkippedTheCheckAreReported) ... ok
+test_a_skill_that_arrives_another_way_is_unchecked_until_trusted (test_guestlist.SkillsThatSkippedTheCheckAreReported) ... ok
+test_an_unchecked_skill_is_reported_once_per_scan_not_recorded_twice (test_guestlist.SkillsThatSkippedTheCheckAreReported) ... ok
+test_without_its_record_every_skill_is_unchecked_again (test_guestlist.SkillsThatSkippedTheCheckAreReported) ... ok
+test_never_fails_the_session (test_guestlist.TheSessionStartLine) ... ok
+test_one_notice_for_the_person_and_the_agent_when_something_does (test_guestlist.TheSessionStartLine) ... ok
+test_silent_inside_the_classifier_session_even_with_a_dropped_in_skill (test_guestlist.TheSessionStartLine) ... ok
+test_silent_when_nothing_needs_a_look (test_guestlist.TheSessionStartLine) ... ok
+test_a_first_scan_counts_present_skills_as_yours_and_reports_nothing (test_guestlist.TheSkillsAlreadyThereAreYours) ... ok
+test_changes_to_your_skills_are_recorded_and_never_reported (test_guestlist.TheSkillsAlreadyThereAreYours) ... ok
+test_a_ledger_from_before_0_1_5_lists_cleanly_with_nothing_shown (test_guestlist.WhereASkillCameFrom) ... ok
+test_a_local_folder_renders_as_local_folder (test_guestlist.WhereASkillCameFrom) ... ok
+test_add_from_github_lists_owner_repo_and_commit (test_guestlist.WhereASkillCameFrom) ... ok
+test_origin_survives_a_changed_event (test_guestlist.WhereASkillCameFrom) ... ok
+
+----------------------------------------------------------------------
+Ran 41 tests in 3.667s
+
+OK
+exit code: 0; wall seconds: 3
