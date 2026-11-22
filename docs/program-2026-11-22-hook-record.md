@@ -1,7 +1,6 @@
 # Program: record what the hook stops, and show a total
 
-Owner decisions: two of four made (2026-11-22, items 1 and 4). Section 0.1 lists
-all four, each open one with a recommendation.
+Owner decisions: all four made (2026-11-22). Section 0.1 lists them.
 
 Status: design, refuted twice and folded. The first refutation returned
 REWORK (12 findings), the second PROCEED-WITH-FIXES (14 findings); all
@@ -40,7 +39,8 @@ scan in one folder from erasing the approvals of skills in another.
 
 1. **Refuter.** Decided 2026-11-22: Spark 1.3 Contributor at `max`,
    through `refute-plan`.
-2. **Repository approvals persist.** Today a scan from another folder
+2. **Repository approvals persist.** Decided 2026-11-22: yes, as
+   recommended, with the consequence below. Today a scan from another folder
    erases them (section 0.2). Recommendation: yes, an approval of a
    repository skill lasts until a scan sees the skill changed, or sees its
    folder gone (section 2). One consequence in user roots: known paths
@@ -48,7 +48,8 @@ scan in one folder from erasing the approvals of skills in another.
    lives elsewhere keeps its record after it is unlinked, while the
    target exists. Today it is recorded `removed`. It is not listed
    either way.
-3. **The total's wording** (section 3). Recommendation: the sentences in
+3. **The total's wording** (section 3). Decided 2026-11-22: the section 3
+   sentences as they stand after the second refutation. Recommendation: the sentences in
    section 3, which say "not installed" rather than "you declined",
    because the ledger records `refused` for a no, for no answer and for a
    failed copy alike. The hook's count of installs covers installer
