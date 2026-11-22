@@ -613,6 +613,14 @@ folder. The hook refuses an agent that reads the quarantine, so I did not
 compare them. The two installed copies of hyperframes-cli differ from each
 other, so each held copy can match only the folder at its own place.
 
+Established on 2026-11-22 (0.1.6, tag `v0.1.6` at `9472a1b`): four of the
+eight were exact copies. The 0.1.6 watcher's first start, at
+2026-11-22T22:57:20Z, dropped `20261013T065006Z-684a17d3` (make-ugc) and
+the three treg holds, with one `dropped` record each. The two
+hyperframes-cli and two media-use holds remain, each shown with `(its place
+is taken)` and its `canary drop` command. The held sections before and
+after are in `slice-1/this-mac.log`.
+
 The refusals already in the ledger for these holds carry no `id` and no
 `digest`, so slice 2 does not mark any of the eight as refused. Each one
 that the sweep keeps is counted in the session-start notice until the
