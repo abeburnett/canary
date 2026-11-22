@@ -110,7 +110,9 @@ release; 0.1.1 shows the verdict without them.
 - `canary install -- <installer command>` runs `npx skills add …` or `claude plugin install …` through the check.
 - `canary check <folder> --text` checks a skill without installing it.
 - `canary explain <github-link-or-folder>` shows every flagged line and why. It runs only in your own terminal, not an agent's.
-- `canary list` shows checked, held and unchecked skills.
+- `canary list` shows checked, held and unchecked skills, and ends with a
+  total of the installs SkillCanary checked and what its hook recorded
+  stopping.
 - `canary doctor` shows your protection level and any gaps.
 
 Interfaces and exit codes: [`docs/architecture.md`](docs/architecture.md).

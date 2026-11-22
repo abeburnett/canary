@@ -24,7 +24,8 @@ USAGE = ("usage: canary scan <skill-file-or-directory> [--json | --text] [--exce
          " [--timeout <seconds>] -- <installer command>\n"
          "       canary bench [--json] [--layer 1|2] [--backend <name>] [--model <id>]"
          " [--corpus <folder>]\n"
-         "       canary list [--json]\n"
+         "       canary list [--json]    (ends with a total of the installs checked and"
+         " what the hook recorded stopping)\n"
          "       canary restore <held-id-or-replaced-id>\n"
          "       canary drop <held-id>\n"
          "       canary trust <skill-folder-or-skills-folder>\n"
@@ -245,7 +246,14 @@ CANARY_BIN = "/Library/Application Support/SkillCanary/bin/canary"
 
 def _hook(args):
     """Answer a host's pre-tool-use hook. Never raises and never exits with
-    anything but allow (0, silent) or the host's deny: a crash fails open."""
+    anything but allow (0, silent), a rewrite, or the host's deny. It fails
+    closed: any error while deciding denies the call as unreadable.
+
+    A call it refuses, redirects or rewrites appends one `hook` record to the
+    ledger, with a fixed kind code and no text from the call (program
+    2026-11-22, slice 1). The answer is fixed before the record is written,
+    and a failed record never changes it or adds output. An allowed call
+    records nothing."""
     host = args[1] if len(args) == 2 and args[0] == "--host" else None
     try:
         from canary import gate
@@ -258,6 +266,7 @@ def _hook(args):
                          '"SkillCanary could not start."}}')
         sys.stderr.write("SkillCanary could not start.\n")
         return 2 if host != "codex" else 0
+    answer, kind = None, None    # answer: (out, code) for a rewrite
     try:
         if host is None:
             raise ValueError("unknown host")
@@ -269,15 +278,24 @@ def _hook(args):
             call = gate.unmapped(payload)
         roots = gate.user_skill_roots(home, adapters.values())
         can_rewrite = getattr(adapter, "CAN_REWRITE", False)
-        reason = gate.decide(call, home, roots, CANARY_BIN, can_rewrite=can_rewrite)
+        reason, kind = gate.decide_kind(call, home, roots, CANARY_BIN, can_rewrite=can_rewrite)
         if isinstance(reason, gate.Rewrite):
             out, code = adapter.rewrite(payload["tool_input"], reason.command)
-            sys.stdout.write(out)
-            return code
+            answer = (out, code)
     except BaseException:
-        reason = gate.UNREADABLE
+        reason, kind, answer = gate.UNREADABLE, "unreadable", None
     if reason is None:
-        return 0
+        return 0                 # allow: nothing below runs
+    try:
+        from canary import guestlist
+        guestlist.note_hook(os.path.expanduser("~"),
+                            host if host in ("claude", "codex") else "unknown", kind)
+    except BaseException:
+        pass                     # a record failure never changes the answer
+    if answer is not None:
+        out, code = answer
+        sys.stdout.write(out)
+        return code
     out, code = adapter.deny(reason)
     sys.stdout.write(out)
     sys.stderr.write(reason + "\n")

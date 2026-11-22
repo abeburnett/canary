@@ -213,6 +213,50 @@ def _now():
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
+HOOK_HOSTS = ("claude", "codex", "unknown")
+
+
+def note_hook(home, host, kind):
+    """Append the hook's record of a call it refused, redirected or
+    rewrote: `{"at", "event": "hook", "host", "kind"}`, with no text from
+    the call (program 2026-11-22, 1.2 and 1.4). Returns True when written.
+
+    It never waits and never creates anything: when the Support folder, the
+    lock file or the ledger is missing (setup never ran), or a scan or
+    another record holds the lock, the record is dropped. Holding the lock
+    keeps the line out of the middle of another writer's batch. It reads
+    nothing from the ledger. A dropped record makes the hook's totals a
+    lower bound."""
+    if host not in HOOK_HOSTS or not isinstance(kind, str):
+        return False
+    from canary import gate
+    if kind not in gate.HOOK_KINDS:
+        return False
+    support = os.path.join(home, SUPPORT[2:])
+    line = json.dumps({"at": _now(), "event": "hook", "host": host, "kind": kind},
+                      sort_keys=True) + "\n"
+    try:
+        lock = os.open(os.path.join(support, "ledger.lock"), os.O_RDWR | os.O_NOFOLLOW)
+    except OSError:
+        return False
+    try:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:          # held by a scan or another record: drop it
+            return False
+        try:
+            fd = os.open(os.path.join(support, LEDGER), os.O_WRONLY | os.O_APPEND | os.O_NOFOLLOW)
+        except OSError:
+            return False
+        try:
+            os.write(fd, line.encode("utf-8"))
+        finally:
+            os.close(fd)
+        return True
+    finally:
+        os.close(lock)           # closing the descriptor releases the lock
+
+
 def _state(events):
     """Replay the ledger: {skill path: {status, digest, approved, name, since}}."""
     skills, looked = {}, False
@@ -240,6 +284,57 @@ def _state(events):
         elif kind == "removed":
             skills.pop(path, None)
     return skills, looked
+
+
+OUTCOMES = ("approved", "refused", "declined", "not_installed")
+HOOK_INSTALLS = ("installer_redirect", "installer_instead", "installer_rewrite", "new_skill")
+
+
+def _day(e):
+    at = e.get("at")
+    return at[:10] if isinstance(at, str) else None
+
+
+def totals(events):
+    """What the check and the hook did, from the ledger in file order
+    (program 2026-11-22, 1.5). A check is a `checked` event; its outcome is
+    the events after it, up to the next `checked`, with its name and an
+    outcome kind. Hook records, replayed marks and the watcher's remembered
+    yes (`origin.same_as`, written with no check) are never outcomes."""
+    checks, current, hooks = [], None, []
+    for e in events:
+        kind = e["event"]
+        if kind == "hook":
+            hooks.append(e)
+            continue
+        if e.get("replay") is True:
+            continue
+        if (kind == "approved" and isinstance(e.get("origin"), dict)
+                and "same_as" in e["origin"]):
+            continue
+        if kind == "checked":
+            current = {"event": e, "outcome": []}
+            checks.append(current)
+        elif (kind in OUTCOMES and current is not None
+              and e.get("name") == current["event"].get("name")):
+            current["outcome"].append(e)
+    installed = [c for c in checks if any(o["event"] == "approved" for o in c["outcome"])]
+    hook_installs = [h for h in hooks if h.get("kind") in HOOK_INSTALLS]
+    return {"since": _day(checks[0]["event"]) if checks else None,
+            "checked": len(checks),
+            "installed": len(installed),
+            "installed_after_unsafe": sum(
+                1 for c in installed
+                if any(o["event"] == "approved" and o.get("override") for o in c["outcome"])),
+            "not_installed": sum(
+                1 for c in checks
+                if any(o["event"] in ("refused", "declined", "not_installed")
+                       for o in c["outcome"])),
+            "hook_since": _day(hooks[0]) if hooks else None,
+            "hook_installs": len(hook_installs),
+            "hook_installs_rewritten": sum(1 for h in hook_installs
+                                           if h.get("kind") == "installer_rewrite"),
+            "hook_other": len(hooks) - len(hook_installs)}
 
 
 def covering(events, fingerprint):
@@ -367,7 +462,9 @@ def scan(home=None, support=None, cwd=None, first_look=False):
             "held": held,
             # What a replace set aside: the person's own decision, so the
             # session-start notice does not count it (program 2026-10-17).
-            "replaced": replace.groups(support, user_roots(home))}
+            "replaced": replace.groups(support, user_roots(home)),
+            # From the events read under the lock above; never a second read.
+            "totals": totals(events)}
 
 
 def record_install(home, folders, name, verdict, support=None, source=None, how="canary add",
@@ -510,4 +607,28 @@ def render_text(report):
         lines += ["", "Set aside by a replace (nothing is deleted):"]
         lines += [f"  {g['name']}  replaced {g['at'][:10]}  {', '.join(g['paths'])}  "
                   f"to restore: {g['restore']}" for g in report["replaced"]]
+    if report.get("totals"):
+        lines += ["", *render_totals(report["totals"])]
     return "\n".join(lines)
+
+
+def render_totals(t):
+    """The two paragraphs at the very end of `canary list` (program
+    2026-11-22, section 3), one line each. No catch rate is stated."""
+    if t.get("checked"):
+        first = (f"Since {t['since']}, SkillCanary checked {t['checked']} installs: "
+                 f"{t['installed']} were installed, {t['installed_after_unsafe']} of them after "
+                 f"an unsafe verdict, and {t['not_installed']} were not installed.")
+    else:
+        first = "SkillCanary has not checked an install yet."
+    if t.get("hook_installs") or t.get("hook_other"):
+        second = (f"Since {t['hook_since']}, the hook has recorded stopping at least "
+                  f"{t['hook_installs']} attempts to install or create a skill without the "
+                  f"check, and sending {t['hook_installs_rewritten']} of them through the check "
+                  "instead; any that ran are also counted above. It has also recorded refusing "
+                  f"at least {t['hook_other']} other tool calls: ones that touched SkillCanary's "
+                  "own files or watcher, read a quarantined package or a skill's text meant for "
+                  "you, or could not be checked.")
+    else:
+        second = "The hook has not recorded stopping anything since it started recording."
+    return [first, "", second]

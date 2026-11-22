@@ -1,0 +1,62 @@
+commit 28d396b1b231e48149e826afb7f24ea7b9ba602b
+Python 3.10.3
+tree: tests/test_gate.py and tests/test_guestlist.py modified (the slice-1 scenarios), nothing else
+ M tests/test_gate.py
+ M tests/test_guestlist.py
+command: python3.10 -m unittest discover -s tests -v -k TheHookRecordsWhatItStops -k a_total_of_what_the_check
+test_a_denied_installer_writes_one_record_without_its_text_and_an_allow_writes_none (test_gate.TheHookRecordsWhatItStops) ... FAIL
+test_a_failing_record_keeps_every_answer_as_it_was (test_gate.TheHookRecordsWhatItStops) ... ERROR
+test_list_ends_with_a_total_of_what_the_check_and_the_hook_did (test_guestlist.CanaryList)
+Program 2026-11-22, sections 1.5 and 3: one count per check, not per ... FAIL
+
+======================================================================
+ERROR: test_a_failing_record_keeps_every_answer_as_it_was (test_gate.TheHookRecordsWhatItStops)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-ac997f659e9023973/tests/test_gate.py", line 257, in test_a_failing_record_keeps_every_answer_as_it_was
+    with unittest.mock.patch.object(guestlist, "note_hook", broken):
+  File "/Users/abrahamburnett/.pyenv/versions/3.10.3/lib/python3.10/unittest/mock.py", line 1437, in __enter__
+    original, local = self.get_original()
+  File "/Users/abrahamburnett/.pyenv/versions/3.10.3/lib/python3.10/unittest/mock.py", line 1410, in get_original
+    raise AttributeError(
+AttributeError: <module 'canary.guestlist' from '/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-ac997f659e9023973/canary/guestlist.py'> does not have the attribute 'note_hook'
+
+======================================================================
+FAIL: test_a_denied_installer_writes_one_record_without_its_text_and_an_allow_writes_none (test_gate.TheHookRecordsWhatItStops)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-ac997f659e9023973/tests/test_gate.py", line 232, in test_a_denied_installer_writes_one_record_without_its_text_and_an_allow_writes_none
+    self.assertEqual([(e["host"], e["kind"]) for e in hooks], [("claude", "installer_redirect")])
+AssertionError: Lists differ: [] != [('claude', 'installer_redirect')]
+
+Second list contains 1 additional elements.
+First extra element 0:
+('claude', 'installer_redirect')
+
+- []
++ [('claude', 'installer_redirect')]
+
+======================================================================
+FAIL: test_list_ends_with_a_total_of_what_the_check_and_the_hook_did (test_guestlist.CanaryList)
+Program 2026-11-22, sections 1.5 and 3: one count per check, not per
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/abrahamburnett/workspace/canary/.claude/worktrees/agent-ac997f659e9023973/tests/test_guestlist.py", line 412, in test_list_ends_with_a_total_of_what_the_check_and_the_hook_did
+    self.assertEqual(text.stdout.rstrip("\n").splitlines()[-3:], [
+AssertionError: Lists differ: ['notes        yours                   /pri[240 chars]ate'] != ['Since 2026-10-02, SkillCanary checked 5 i[492 chars]ed."]
+
+First differing element 0:
+'notes        yours                   /pri[92 chars]otes'
+'Since 2026-10-02, SkillCanary checked 5 i[83 chars]led.'
+
+Second list contains 1 additional elements.
+First extra element 2:
+"Since 2026-11-23, the hook has recorded stopping at least 2 attempts to install or create a skill without the check, and sending 1 of them through the check instead; any that ran are also counted above. It has also recorded refusing at least 2 other tool calls: ones that touched SkillCanary's own files or watcher, read a quarantined package or a skill's text meant for you, or could not be checked."
+
+Diff is 891 characters long. Set self.maxDiff to None to see it.
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.144s
+
+FAILED (failures=2, errors=1)
+exit=1

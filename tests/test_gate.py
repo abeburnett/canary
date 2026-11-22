@@ -8,15 +8,18 @@ these tests cover what the corpus cannot: the deny contract itself, the
 messages, and failing closed.
 """
 
+import io
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
 import unittest
 import unittest.mock
 
-from canary import gate
+from canary import cli, gate, guestlist
+from canary.hosts import claude, codex
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CANARY = os.path.join(ROOT, "bin", "canary")
@@ -201,6 +204,70 @@ class TheHookNeverFailsOpen(unittest.TestCase):
         with unittest.mock.patch.object(gate, "_creates_skill", side_effect=RuntimeError):
             reason = gate.decide(call, "/h", [])
         self.assertEqual(reason, gate.UNREADABLE)
+
+
+class TheHookRecordsWhatItStops(unittest.TestCase):
+    """Program 2026-11-22, slice 1: a refused, redirected or rewritten call
+    appends one `hook` record with a fixed kind code and no text from the
+    call; an allowed call writes nothing; a failed record never changes the
+    answer."""
+
+    TOKEN = "ghp_FAKEfake0123456789fake0123456789FAKE"
+    COMPOUND = "cd /tmp && npx skills add someone/repo"   # not a plain installer
+    PLAIN = "npx skills add someone/repo -g"              # a supported installer
+
+    def ledger(self, h):
+        return os.path.join(h.path, "Library", "Application Support", "Canary", "ledger.jsonl")
+
+    def test_a_denied_installer_writes_one_record_without_its_text_and_an_allow_writes_none(self):
+        h = Home()
+        with unittest.mock.patch.dict(os.environ):
+            os.environ.pop("CODEX_HOME", None)
+            guestlist.scan(h.path)  # the Support folder, ledger.lock and the ledger exist
+        command = {"command": f"{self.COMPOUND} --token {self.TOKEN}"}
+        self.assertTrue(h.denied("claude", "Bash", command))
+        with open(self.ledger(h), encoding="utf-8") as fh:
+            text = fh.read()
+        hooks = [e for e in map(json.loads, text.splitlines()) if e.get("event") == "hook"]
+        self.assertEqual([(e["host"], e["kind"]) for e in hooks], [("claude", "installer_redirect")])
+        self.assertEqual(sorted(hooks[0]), ["at", "event", "host", "kind"])
+        self.assertNotIn(self.TOKEN, text)
+        self.assertNotIn("someone/repo", text)
+        with open(self.ledger(h), "rb") as fh:
+            before = fh.read()
+        self.assertFalse(h.denied("claude", "Bash", {"command": "ls"}))
+        with open(self.ledger(h), "rb") as fh:
+            self.assertEqual(fh.read(), before)
+
+    def run_hook(self, h, host, command):
+        payload = json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Bash",
+                              "tool_input": {"command": command}, "cwd": h.project})
+        out, err = io.StringIO(), io.StringIO()
+        with unittest.mock.patch.dict(os.environ, {"HOME": h.path}), \
+                unittest.mock.patch.object(sys, "stdin", io.StringIO(payload)), \
+                unittest.mock.patch.object(sys, "stdout", out), \
+                unittest.mock.patch.object(sys, "stderr", err):
+            os.environ.pop("CODEX_HOME", None)
+            code = cli._hook(["--host", host])
+        return code, out.getvalue(), err.getvalue()
+
+    def test_a_failing_record_keeps_every_answer_as_it_was(self):
+        h = Home()
+        broken = unittest.mock.Mock(side_effect=OSError("disk full"))
+        with unittest.mock.patch.object(guestlist, "note_hook", broken):
+            denied = self.run_hook(h, "claude", self.COMPOUND)
+            denied_codex = self.run_hook(h, "codex", self.COMPOUND)
+            rewritten = self.run_hook(h, "claude", self.PLAIN)
+            self.assertEqual(broken.call_count, 3)
+            allowed = self.run_hook(h, "claude", "ls")
+        self.assertEqual(broken.call_count, 3)  # an allow never records
+        self.assertEqual(denied, (2, claude.deny(gate.REDIRECT)[0], gate.REDIRECT + "\n"))
+        self.assertEqual(denied_codex, (0, codex.deny(gate.REDIRECT)[0], gate.REDIRECT + "\n"))
+        new = (f"/usr/bin/python3 -I -B {shlex.quote(cli.CANARY_BIN)} install -- "
+               + self.PLAIN)
+        out, code = claude.rewrite({"command": self.PLAIN}, new)
+        self.assertEqual(rewritten, (code, out, ""))
+        self.assertEqual(allowed, (0, "", ""))
 
 
 class TheQuarantineIsNotReadable(unittest.TestCase):

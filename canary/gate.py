@@ -206,32 +206,46 @@ def _piped_help(command):
 def decide(call, home, roots, canary_bin=None, can_rewrite=False):
     """A deny reason, None to allow, or a Rewrite (only when the host can
     rewrite a command). Any internal error denies."""
+    return decide_kind(call, home, roots, canary_bin, can_rewrite=can_rewrite)[0]
+
+
+# The hook's record carries one of these codes and nothing from the call
+# (program 2026-11-22, 1.1). Each is chosen where its reason is chosen.
+HOOK_KINDS = ("installer_redirect", "installer_instead", "installer_rewrite", "new_skill",
+              "quarantine", "watcher", "record", "own_text", "unreadable")
+
+
+def decide_kind(call, home, roots, canary_bin, can_rewrite=False):
+    """(reason, kind): `reason` is what `decide` returns, and `kind` the fixed
+    code for it from HOOK_KINDS, or None when the call is allowed. Any
+    internal error denies as `unreadable`."""
     try:
         if call.tool_name in SHELL_TOOLS and isinstance(call.command, str):
             own_text = _own_text(call.command)
             if own_text:
-                return own_text
+                return own_text, "own_text"
             if _is_canary(call.command, canary_bin):
-                return None
+                return None, None
             in_skills = lambda p: any(_skill_folder(c, roots) for c in
                                       {os.path.abspath(p), os.path.realpath(p)})
             if installers.installs(call.command, call.cwd, in_skills):
                 parsed = installers.supported(call.command)
                 if parsed is None:
-                    return REDIRECT + (" " + HELP_HINT if _piped_help(call.command) else "")
+                    return (REDIRECT + (" " + HELP_HINT if _piped_help(call.command) else ""),
+                            "installer_redirect")
                 words = shlex.join(parsed[1])
                 if can_rewrite and canary_bin:
-                    return Rewrite(f"/usr/bin/python3 -I -B {shlex.quote(canary_bin)} "
-                                   f"install -- {words}")
-                return INSTALL_INSTEAD.format(command=words)
+                    return (Rewrite(f"/usr/bin/python3 -I -B {shlex.quote(canary_bin)} "
+                                    f"install -- {words}"), "installer_rewrite")
+                return INSTALL_INSTEAD.format(command=words), "installer_instead"
             if QUARANTINE_TEXT.search(call.command):
-                return QUARANTINED
+                return QUARANTINED, "quarantine"
             if WATCHER_TEXT.search(installers.tidy(call.command)):
-                return WATCHER
+                return WATCHER, "watcher"
         if call.tool_name == "apply_patch" and not call.paths_written:
-            return UNREADABLE  # a patch the adapter could not read
+            return UNREADABLE, "unreadable"  # a patch the adapter could not read
         if any(_creates_skill(p, roots) for p in call.paths_written):
-            return NEW_SKILL
+            return NEW_SKILL, "new_skill"
         support = _fold(os.path.realpath(os.path.join(home, SUPPORT)))
         lockfile = _fold(os.path.realpath(os.path.join(home, ".agents", ".canary-lock.json")))
         quarantine_root = _fold(os.path.realpath(quarantine_dir(home)))
@@ -240,16 +254,16 @@ def decide(call, home, roots, canary_bin=None, can_rewrite=False):
         for p in call.paths_written:
             f = _fold(os.path.realpath(p))
             if f == agent_file:
-                return WATCHER
+                return WATCHER, "watcher"
             if (_inside(f, support) and not _inside(f, quarantine_root)) or f == lockfile:
-                return RECORD
+                return RECORD, "record"
         quarantine = _fold(os.path.realpath(quarantine_dir(home)))
         if any(_inside(_fold(os.path.realpath(p)), quarantine)
                for p in call.paths_read + call.paths_written):
-            return QUARANTINED
-        return None
+            return QUARANTINED, "quarantine"
+        return None, None
     except Exception:
-        return UNREADABLE
+        return UNREADABLE, "unreadable"
 
 
 def envelope(raw):

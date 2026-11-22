@@ -159,6 +159,18 @@ call installs a skill without SkillCanary's check, or reads the quarantine.
   agent cannot remove it. Setup also checks that the Python the hook runs on
   works, because macOS's `/usr/bin/python3` stub fails when the command-line
   tools are missing, and a failing hook fails open.
+- The record (program 2026-11-22, slice 1): a call the hook refuses,
+  redirects or rewrites appends one line to the guest-list ledger,
+  `{"at", "event": "hook", "host": "claude"|"codex"|"unknown", "kind"}`, where
+  `kind` is a fixed code chosen with the reason (`gate.decide_kind`):
+  `installer_redirect`, `installer_instead`, `installer_rewrite`,
+  `new_skill`, `quarantine`, `watcher`, `record`, `own_text` or
+  `unreadable`. It carries no skill, name, command, folder or reason text.
+  The answer is fixed first; the record is written next, and a failed one
+  never changes the answer or adds output. An allowed call writes nothing.
+  The record never waits and never creates anything: when the Support
+  folder, `ledger.lock` or the ledger is missing, or a scan holds the lock,
+  it is dropped, so the hook's totals in `canary list` are a lower bound.
 
 What the hook is for (program 2026-09-30, back to the front door):
 SkillCanary checks a skill before any agent can use it, and the hook's only
@@ -856,7 +868,9 @@ since 0.1.5 also `origin`, where the skill came from: `{"kind": "github",
 "owner", "repo", "commit"}` from `canary add` (the commit is the SHA GitHub
 resolved, not the link text), `{"kind": "installer", "command": [...]}` from
 `canary install`, `{"kind": "local"}` for a folder, `{"kind": "watcher"}` for
-a restore; plugin installs record none), `declined`, `refused` or `not_installed`, `changed`, `removed`, `trusted`, `dropped` and `drop_failed`. An
+a restore; plugin installs record none), `declined`, `refused` or `not_installed`, `changed`, `removed`, `trusted`, `dropped`, `drop_failed` and `hook` (the
+hook's record of a call it stopped; it has no `skill`, so it never changes a
+skill's status). An
 `approved` event from the held-skill dialog also carries `"covers":
 "content"`, and one the watcher wrote for an exact copy carries
 `origin.same_as`, the approved path it copies. A `declined` or `refused`
@@ -914,6 +928,22 @@ repository's skills are what this report is for.
   (`quarantine/replaced/`), as `replaced: [{"id", "name", "paths", "kept",
   "at", "how", "restore"}]` and a text section `Set aside by a replace`.
   The session-start notice does not count them.
+- `canary list` text ends with a total of what the check and the hook did
+  (program 2026-11-22, sections 1.5 and 3), after the held and replaced
+  sections: "Since <date>, SkillCanary checked N installs: N were
+  installed, N of them after an unsafe verdict, and N were not installed."
+  (or "SkillCanary has not checked an install yet."), then the hook's
+  paragraph, which says what it "has recorded stopping at least" (or "The
+  hook has not recorded stopping anything since it started recording.").
+  `--json` carries the same numbers as `totals: {"since", "checked",
+  "installed", "installed_after_unsafe", "not_installed", "hook_since",
+  "hook_installs", "hook_installs_rewritten", "hook_other"}` under the same
+  schema. A check is a `checked` event, counted once however many folders it
+  approved; its outcome is the events after it, up to the next `checked`,
+  with its name. `hook` records, `"replay": true` marks and the watcher's
+  remembered-yes approvals (`origin.same_as`, which ran no check) are not
+  outcomes. "Not installed" covers a no, no answer and a failed copy alike.
+  The session-start notice does not change.
 - `canary trust <folder>` marks one skill, or every skill in a skills
   folder, as the person's.
 - `canary session-start --host claude|codex` is the SessionStart hook that

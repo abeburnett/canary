@@ -376,6 +376,55 @@ class CanaryList(unittest.TestCase):
         self.assertIn("dropped-in", text.stdout)
         self.assertIn("unchecked", text.stdout)
 
+    def test_list_ends_with_a_total_of_what_the_check_and_the_hook_did(self):
+        """Program 2026-11-22, sections 1.5 and 3: one count per check, not per
+        folder; hook records and replayed marks are not outcomes, nor is the
+        watcher's remembered yes, which ran no check."""
+        mac = Mac()
+        mac.scan(first_look=True)
+        day, hook_day = "2026-10-02T09:00:00Z", "2026-11-23T10:00:00Z"
+        fixture = [
+            {"at": day, "event": "checked", "name": "alpha", "verdict": "LIKELY_SAFE"},
+            {"at": hook_day, "event": "hook", "host": "claude", "kind": "installer_rewrite"},
+            {"at": hook_day, "event": "approved", "name": "alpha", "skill": "/gone/a1",
+             "digest": "sha256:a"},
+            {"at": hook_day, "event": "approved", "name": "alpha", "skill": "/gone/a2",
+             "digest": "sha256:a"},
+            {"at": hook_day, "event": "checked", "name": "beta", "verdict": "UNSAFE"},
+            {"at": hook_day, "event": "approved", "name": "beta", "skill": "/gone/b",
+             "digest": "sha256:b", "override": True},
+            {"at": hook_day, "event": "checked", "name": "gamma", "verdict": "UNSAFE"},
+            {"at": hook_day, "event": "refused", "name": "gamma"},
+            {"at": hook_day, "event": "approved", "name": "gamma", "skill": "/gone/g",
+             "digest": "sha256:g", "origin": {"kind": "watcher", "same_as": "/gone/a1"}},
+            {"at": hook_day, "event": "checked", "name": "delta", "verdict": "NEEDS_REVIEW"},
+            {"at": hook_day, "event": "refused", "name": "delta", "replay": True},
+            {"at": hook_day, "event": "checked", "name": "epsilon", "verdict": "UNSAFE"},
+            {"at": hook_day, "event": "declined", "name": "epsilon"},
+            {"at": hook_day, "event": "hook", "host": "codex", "kind": "installer_redirect"},
+            {"at": hook_day, "event": "hook", "host": "codex", "kind": "record"},
+            {"at": hook_day, "event": "hook", "host": "unknown", "kind": "own_text"},
+        ]
+        with open(os.path.join(mac.support, "ledger.jsonl"), "a", encoding="utf-8") as fh:
+            fh.writelines(json.dumps(e) + "\n" for e in fixture)
+        text = mac.run("list")
+        self.assertEqual(text.returncode, 0)
+        self.assertEqual(text.stdout.rstrip("\n").splitlines()[-3:], [
+            "Since 2026-10-02, SkillCanary checked 5 installs: 2 were installed, 1 of them "
+            "after an unsafe verdict, and 2 were not installed.",
+            "",
+            "Since 2026-11-23, the hook has recorded stopping at least 2 attempts to install or "
+            "create a skill without the check, and sending 1 of them through the check instead; "
+            "any that ran are also counted above. It has also recorded refusing at least 2 other "
+            "tool calls: ones that touched SkillCanary's own files or watcher, read a quarantined "
+            "package or a skill's text meant for you, or could not be checked."])
+        listed = json.loads(mac.run("list", "--json").stdout)
+        self.assertEqual(listed["schema"], "canary.list/1")
+        self.assertEqual(listed.get("totals"), {
+            "since": "2026-10-02", "checked": 5, "installed": 2, "installed_after_unsafe": 1,
+            "not_installed": 2, "hook_since": "2026-11-23", "hook_installs": 2,
+            "hook_installs_rewritten": 1, "hook_other": 2})
+
 
 if __name__ == "__main__":
     unittest.main()
