@@ -3,9 +3,9 @@
 Owner decisions: two of four made (2026-11-22, items 1 and 4). Section 0.1 lists
 all four, each open one with a recommendation.
 
-Status: design, reworked. The first refutation returned REWORK (12
-findings, all folded; section 10); a second refutation of this version
-has not run. No code written. Base: `main` at `e4df96a` (0.1.6 released, tag
+Status: design, refuted twice and folded. The first refutation returned
+REWORK (12 findings), the second PROCEED-WITH-FIXES (14 findings); all
+are folded and answered in section 10. No code written. Base: `main` at `e4df96a` (0.1.6 released, tag
 `v0.1.6` at `9472a1b`). Two slices, built in order: both change
 `canary/guestlist.py` and `tests/test_guestlist.py`, so slice 2 branches
 from `main` after slice 1 merges. Each builds in a short-lived worktree
@@ -223,7 +223,8 @@ an exception there still becomes an `UNREADABLE` deny, and its record says
 The rule: **a record failure never changes the decision, in either
 direction, and never adds output.**
 
-The allow path gains no import, no file access and no system call.
+The allow path gains no import, file access or system call beyond what
+it does today (reading stdin, parsing, resolving the skills folders).
 
 ### 1.4 How `note_hook` writes
 
@@ -237,13 +238,16 @@ The allow path gains no import, no file access and no system call.
   closes both. A missing ledger, lock file or Support folder means setup
   never ran; the record is dropped.
 - It reads nothing from the ledger.
-- A dropped record makes the hook totals a lower bound. Section 3's
-  sentences state counts of records, so they stay true.
+- A dropped record makes the hook totals a lower bound of what the hook
+  did, so section 3 words them as what the hook recorded, "at least".
 
 ### 1.5 The total in `canary list`
 
-`canary list` text ends with the paragraph in section 3, after the held
-section. `canary list --json` gains an additive `totals` object under the
+`guestlist.scan` computes `totals` from the events it already read under
+its lock and puts them in the report; `guestlist.render_text` appends the
+section 3 paragraph as the very last lines of `canary list` text, after
+the held and replaced sections. Nothing reads the ledger a second time.
+`canary list --json` gains an additive `totals` object under the
 same schema, `canary.list/1`:
 
 ```json
@@ -254,7 +258,11 @@ same schema, `canary.list/1`:
 ```
 
 - Pairing. Read the ledger in file order and skip every `hook` event and
-  every event with `"replay": true`. A check is a `checked` event; its
+  every event with `"replay": true`. Also skip every `approved` event
+  whose `origin` has a `same_as` field: the watcher writes those for a
+  remembered yes with no `checked`, because no check ran
+  (`watcher.py`, quiet-holds section 2.2), and they would otherwise land
+  in an earlier check of the same name. A check is a `checked` event; its
   outcome is the run of events after it, up to the next `checked`, that
   have the same `name` and an `event` of `approved`, `refused`, `declined`
   or `not_installed`. Other events in that run (`arrived`, `changed` and
@@ -284,7 +292,9 @@ two sets. `_skills` itself does not change. A real path found in both (a
 repository skill linked into a user root) is a user skill.
 
 - A skill under a user root: unchanged. `arrived`, `changed` and
-  `removed` as today.
+  `removed` as today. The one exception is a known path that is not
+  itself directly in a listed root (a real path reached through a link);
+  it follows the unlisted-path rule below (owner decision 2).
 - A skill under a repository root of the current folder, with no record:
   no event. It is listed as unchecked, as today.
 - A skill under a repository root, with a record (approved or trusted):
@@ -307,10 +317,8 @@ repository skill linked into a user root) is a user skill.
 "Repository skill" means a path the scan found in the repository set and
 not in the user set. The scan does not classify by path prefix.
 
-`first_look` (setup) baselines user-root skills only. Setup passes no
-`cwd`, so today `repo_roots` is empty there; with this slice, a scan with
-`first_look` and a `cwd` still writes no `baseline` for a repository
-skill. Repository skills never baseline.
+Repository skills never baseline: the only `first_look` caller,
+`canary/setup.py`, passes no `cwd`.
 
 Existing ledger lines are not rewritten. The 10,510 old repository events
 stay; the 50 erased approvals stay erased.
@@ -324,8 +332,8 @@ not, this slice stops until the spec says how it does. The refutation
 checked this: the watcher's automatic install and drop act only on places
 directly in watched user roots (`watcher.py`), re-digest the approval's
 folder (`_approved`) and compare trees (`same_tree`), so a persisted
-repository approval cannot trigger either. The builder confirms it still
-holds at slice 2's start commit.
+repository approval cannot trigger either. Slice 2's `premerge-review`
+brief asks the reviewer to confirm it still holds at the final commit.
 
 ## 3. Sentences, exact
 
@@ -337,15 +345,16 @@ The paragraph at the end of `canary list` text, filled from `totals`
 
 When there is at least one `hook` record:
 
-> Since 2026-11-23, the hook stopped 3 attempts to install or create a
-> skill without the check, and sent 2 of them through the check instead
-> (they are also counted above). It also refused 5 other tool calls: ones
-> that touched SkillCanary's own files or watcher, read a skill's text
-> meant for you, or could not be checked.
+> Since 2026-11-23, the hook has recorded stopping at least 3 attempts to
+> install or create a skill without the check, and sending 2 of them
+> through the check instead; any that ran are also counted above. It has
+> also recorded refusing at least 5 other tool calls: ones that touched
+> SkillCanary's own files or watcher, read a quarantined package or a
+> skill's text meant for you, or could not be checked.
 
 When there is none, the second paragraph is:
 
-> The hook has not stopped anything since it started recording (0.1.7).
+> The hook has not recorded stopping anything since it started recording.
 
 No sentence states or implies a catch rate (decision 12 of
 `docs/program-2026-10-17-replace.md`). These lines print every number as
@@ -363,7 +372,7 @@ numerals, because they are filled from counts.
 ## 5. Interfaces, docs first
 
 - `canary/cli.py` `USAGE` and `docs/` text for `canary list` mention the
-  total paragraph. Update them before the code.
+  total paragraph, in the same slice.
 - `docs/` text that says the hook leaves no record, if any, changes in the
   same slice.
 - The `_hook` docstring says the hook fails closed.
@@ -379,8 +388,13 @@ Slice 1:
 
 1. A denied installer call whose command carries a fake token writes
    exactly one `hook` record with kind `installer_redirect`, and the token
-   appears nowhere in the ledger. An allowed call writes nothing.
-2. With `note_hook` made to raise: a deny keeps its exit code, stdout and
+   appears nowhere in the ledger. An allowed call writes nothing. The
+   fixture runs `guestlist.scan` once first, so the Support folder,
+   `ledger.lock` and the ledger exist (`note_hook` creates neither).
+2. Run in process: the test calls `cli._hook` with `sys.stdin`,
+   `sys.stdout` and `sys.stderr` replaced and `guestlist.note_hook`
+   patched to raise (the subprocess harness in `tests/test_gate.py`
+   cannot be patched). A deny keeps its exit code, stdout and
    stderr; a rewrite keeps its exit code and stdout; an allow exits 0
    with empty stdout and stderr, as today.
 3. `canary list` on a fixture ledger prints the section 3 sentences with
@@ -475,3 +489,29 @@ full text is in the owner's review cache, outside this repository, under
 The refuter also confirmed: the fail-closed finding in section 0.2, the
 old-reader claim in section 1.2, and the byte comparison that section 2
 asked it to check.
+
+### Second refutation
+
+It ran on 2026-11-22 against this document at `6c3cfdb`. Verdict:
+PROCEED-WITH-FIXES, fourteen findings. Each was checked against the tree
+at `6c3cfdb` before it was folded; every cited line matched. Full text in
+the owner's review cache under the newest
+`refute-program-2026-11-22-hook-record` folder. The refuter also ran the
+section 1.5 pairing rule on this Mac's ledger and got 184/152/8/32.
+
+| # | Severity | Finding | Answer |
+|---|---|---|---|
+| 1 | blocks | Test 2 cannot patch `note_hook` in the subprocess harness (`tests/test_gate.py:hook`) | Section 6, test 2 runs `cli._hook` in process |
+| 2 | wrong-if-built | A fresh fixture has no `ledger.lock`, so `note_hook` drops the record and test 1 fails on correct code | Section 6, test 1 runs a scan first |
+| 3 | wrong-if-built | Dropped records make "stopped 3" a lower bound, not a count | Section 3 says "has recorded stopping at least"; section 1.4 follows |
+| 4 | wrong-if-built | The other-calls sentence omits the quarantined package | Section 3 adds it |
+| 5 | wrong-if-built | A rewrite leaves the decision to the person's permission rules (`hosts/claude.py:rewrite`), so not every rewrite is "counted above" | Section 3: "any that ran are also counted above" |
+| 6 | wrong-if-built | The watcher's remembered-yes approval has no `checked` and would inflate an earlier check | Section 1.5 skips `approved` with `origin.same_as` |
+| 7 | wrong-if-built | Section 2 says user roots are unchanged, but decision 2's linked-skill consequence changes them | Section 2 names the exception |
+| 8 | cleanup | The paragraph would print before the replaced section | Section 1.5: the very last lines |
+| 9 | cleanup | No function named for the totals | Section 1.5: `scan` computes, `render_text` prints |
+| 10 | cleanup | "The builder confirms" has no artifact | Section 2: the slice 2 `premerge-review` brief asks for it |
+| 11 | cleanup | The `first_look`-with-`cwd` clause has no caller | Cut |
+| 12 | cleanup | The allow path already reads stdin and resolves folders | Section 1.3: "beyond what it does today" |
+| 13 | cleanup | "(0.1.7)" names an unreleased version | Dropped |
+| 14 | cleanup | "Before the code" cannot be checked | Section 5: "in the same slice" |
