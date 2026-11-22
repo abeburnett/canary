@@ -3,8 +3,9 @@
 Owner decisions: two of four made (2026-11-22, items 1 and 4). Section 0.1 lists
 all four, each open one with a recommendation.
 
-Status: design, refuted once (REWORK, 12 findings, all folded; section
-10). No code written. Base: `main` at `e4df96a` (0.1.6 released, tag
+Status: design, reworked. The first refutation returned REWORK (12
+findings, all folded; section 10); a second refutation of this version
+has not run. No code written. Base: `main` at `e4df96a` (0.1.6 released, tag
 `v0.1.6` at `9472a1b`). Two slices, built in order: both change
 `canary/guestlist.py` and `tests/test_guestlist.py`, so slice 2 branches
 from `main` after slice 1 merges. Each builds in a short-lived worktree
@@ -42,7 +43,11 @@ scan in one folder from erasing the approvals of skills in another.
 2. **Repository approvals persist.** Today a scan from another folder
    erases them (section 0.2). Recommendation: yes, an approval of a
    repository skill lasts until a scan sees the skill changed, or sees its
-   folder gone (section 2).
+   folder gone (section 2). One consequence in user roots: known paths
+   are real paths, so a user skill reached through a link whose target
+   lives elsewhere keeps its record after it is unlinked, while the
+   target exists. Today it is recorded `removed`. It is not listed
+   either way.
 3. **The total's wording** (section 3). Recommendation: the sentences in
    section 3, which say "not installed" rather than "you declined",
    because the ledger records `refused` for a no, for no answer and for a
@@ -92,8 +97,8 @@ Read while writing (file:function), and counted from
   unchecked.
 - Three approvals and seven other events are for paths outside both user
   roots and any repository skills folder (an app bundle and the plugin
-  cache). Not established: what wrote them. Section 10 keeps them out of
-  scope.
+  cache). Not established: what wrote them. Section 2 gives them the rule
+  for unlisted paths; finding their writer is in section 9.
 - `checked` is written once per check, in the same `_append` call as its
   outcome (`record_install`: `checked` then one `approved` per folder;
   `record_decision`: `checked` then one outcome), so it is the unit for
@@ -108,9 +113,12 @@ Read while writing (file:function), and counted from
 - The watcher's `_keep_refused` appends a second `refused` or `declined`
   with `"replay": true` when a remembered no keeps a hold. It is a mark,
   not a new no. This Mac's ledger has none yet, so the counts above stand.
-- `_append` writes through a buffered file object, one `write` call per
-  event in the worst case, so a line from a lockless writer can land
-  between a `checked` and its outcome.
+- `_append` writes a batch through a buffered text file object
+  (`os.fdopen(fd, "a")`). A batch larger than the buffer reaches the file
+  in more than one `write`, split wherever the buffer fills, possibly
+  mid-line. Every caller holds `_Lock`, so today no other writer lands
+  between those writes. A writer that skipped the lock could split a line
+  of someone else's batch and damage it.
 - `refused` is written by `canary/add.py` when the person says no to an
   UNSAFE skill and when nobody answers, and by `canary/replace.py` when a
   copy fails (`add.SourceError` or `OSError`) as well as on a no.
@@ -219,14 +227,18 @@ The allow path gains no import, no file access and no system call.
 
 ### 1.4 How `note_hook` writes
 
-- It opens the ledger with `O_WRONLY | O_APPEND | O_NOFOLLOW` and no
-  `O_CREAT`, writes the line with one `os.write`, and closes. A missing
-  ledger or Support folder means setup never ran; the record is dropped.
-- It does not take `_Lock`. The lock blocks, and a hook must not wait on
-  a scan. One `write` of one short line to a file opened with `O_APPEND`
-  lands whole at the end on macOS; if a line is ever damaged, `_events`
-  skips it.
+- It opens `ledger.lock` with `O_RDWR | O_NOFOLLOW` and no `O_CREAT`,
+  and takes `fcntl.flock(fd, LOCK_EX | LOCK_NB)`. If the lock is held (a
+  scan or a record is being written), it drops the record and returns: a
+  hook never waits on a scan. Holding the lock keeps its line out of the
+  middle of another writer's batch (section 0.2).
+- Holding the lock, it opens the ledger with `O_WRONLY | O_APPEND |
+  O_NOFOLLOW` and no `O_CREAT`, writes the line with one `os.write`, and
+  closes both. A missing ledger, lock file or Support folder means setup
+  never ran; the record is dropped.
 - It reads nothing from the ledger.
+- A dropped record makes the hook totals a lower bound. Section 3's
+  sentences state counts of records, so they stay true.
 
 ### 1.5 The total in `canary list`
 
@@ -288,11 +300,9 @@ repository skill linked into a user root) is a user skill.
   approvals outside user and repository roots (section 0.2): they persist
   while their folder exists, and are recorded `removed` once it is gone.
   The scan does not fingerprint these paths, so it records no `changed`
-  for them; the next scan that lists their root does. Known paths are
-  real paths, so a user skill reached through a link whose target lives
-  elsewhere also falls under this rule: unlinked, it keeps its record
-  while the target exists. It is not listed, and the watcher's byte
-  comparison still guards any automatic install from that record.
+  for them; the next scan that lists their root does. Owner decision 2
+  names this rule's one consequence for user roots (a linked skill whose
+  target lives elsewhere).
 
 "Repository skill" means a path the scan found in the repository set and
 not in the user set. The scan does not classify by path prefix.
@@ -343,8 +353,9 @@ numerals, because they are filled from counts.
 
 ## 4. Failure behaviour
 
-- A failed `note_hook` (any exception, a full disk, a missing ledger):
-  no record, the same answer, the same exit code, one answer on stdout.
+- A failed or dropped `note_hook` (any exception, a full disk, a missing
+  ledger, a held lock): no record, the same answer, the same exit code,
+  one answer on stdout.
 - A damaged `hook` line: skipped by `_events`, as any damaged line.
 - A ledger with no `checked` events: the first sentence reads "SkillCanary
   has not checked an install yet."
@@ -452,7 +463,7 @@ full text is in the owner's review cache, outside this repository, under
 | 2 | blocks | The slices share `guestlist.py` and its tests, so "either order" means a merge conflict | `canary/guestlist.py:scan`, `tests/test_guestlist.py` | Accepted. Header: slice 2 branches from `main` after slice 1 merges |
 | 3 | blocks | The gate cannot pass: no manifest step | `scripts/action.py:bundled_files`, `scanner_manifest` | Accepted. Section 8, bullet 2 copies the quiet-holds manifest steps |
 | 4 | blocks | The merge waits on an owner check that needs a release | Section 8, old bullet 6 | Accepted. The owner check sits after bullets 1 to 5 and does not gate the merge |
-| 5 | wrong-if-built | Totals have no pairing rule, and replayed marks count a no twice | `guestlist.py:record_install`, `record_decision`; `watcher.py:_keep_refused` | Accepted. Section 1.5 defines pairing, skips `hook` and `replay` lines, and defines `since`; section 6 test 3 pins it. Also found: `_append` can split a batch, so pairing skips `hook` lines between a check and its outcome (section 0.2) |
+| 5 | wrong-if-built | Totals have no pairing rule, and replayed marks count a no twice | `guestlist.py:record_install`, `record_decision`; `watcher.py:_keep_refused` | Accepted. Section 1.5 defines pairing, skips `hook` and `replay` lines, and defines `since`; section 6 test 3 pins it. The rule, run read-only on this Mac's ledger, gives section 0.2's counts exactly (184, 152, 8, 32), with no check lacking an outcome and no outcome lacking a check. Also found: `_append` can split a large batch mid-line, so `note_hook` takes the lock without waiting (section 1.4) |
 | 6 | wrong-if-built | Section 3 says "install commands" and "SkillCanary's own files", but the kinds include `new_skill`, `own_text` and `unreadable` | `gate.py` `NEW_SKILL`, `OWN_TEXT`, `UNREADABLE` | Accepted. Section 3 sentences reworded; owner decision 3 asks for confirmation of the new text |
 | 7 | wrong-if-built | Sections 2 and 7 disagree on paths under no listed root, and a deleted repository leaves its approvals forever | `guestlist.py:repo_roots` drops folders that do not exist | Accepted. Section 2: an unlisted known path is `removed` once its folder is gone, which covers deleted repositories and the out-of-root approvals; section 7 and decision 2 follow |
 | 8 | wrong-if-built | Test 2 says an allow writes an answer; it writes nothing | `cli.py:_hook` returns 0 silently | Accepted. Section 6, slice 1 test 2 |
