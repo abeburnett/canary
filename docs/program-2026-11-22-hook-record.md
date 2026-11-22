@@ -1,6 +1,6 @@
 # Program: record what the hook stops, and show a total
 
-Owner decisions: one of four made (2026-11-22, item 4). Section 0.1 lists
+Owner decisions: two of four made (2026-11-22, items 1 and 4). Section 0.1 lists
 all four, each open one with a recommendation.
 
 Status: design. Not refuted, no code written. Base: `main` at `e4df96a`
@@ -35,8 +35,8 @@ scan in one folder from erasing the approvals of skills in another.
 
 ### 0.1 Owner decisions this program needs
 
-1. **Refuter.** Recommendation: Spark 1.3 Contributor at `max` through
-   `refute-plan`, as for the last two programs.
+1. **Refuter.** Decided 2026-11-22: Spark 1.3 Contributor at `max`,
+   through `refute-plan`.
 2. **Repository approvals persist.** Today a scan from another folder
    erases them (section 0.2). Recommendation: yes, an approval of a
    repository skill lasts until the skill changes or a scan sees it gone.
