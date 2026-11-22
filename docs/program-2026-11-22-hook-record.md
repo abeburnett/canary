@@ -3,11 +3,13 @@
 Owner decisions: two of four made (2026-11-22, items 1 and 4). Section 0.1 lists
 all four, each open one with a recommendation.
 
-Status: design. Not refuted, no code written. Base: `main` at `e4df96a`
-(0.1.6 released, tag `v0.1.6` at `9472a1b`). Two slices that touch
-different files and can build in either order; each builds in a
-short-lived worktree branched from `main` and merges when its "Done when"
-list is shown. The coordinator writes the start commit into each worker's
+Status: design, refuted once (REWORK, 12 findings, all folded; section
+10). No code written. Base: `main` at `e4df96a` (0.1.6 released, tag
+`v0.1.6` at `9472a1b`). Two slices, built in order: both change
+`canary/guestlist.py` and `tests/test_guestlist.py`, so slice 2 branches
+from `main` after slice 1 merges. Each builds in a short-lived worktree
+branched from `main` and merges when bullets 1 to 5 of its "Done when"
+list are shown. The coordinator writes the start commit into each worker's
 contract, and the worker checks it with `git merge-base --is-ancestor
 <commit> HEAD` before editing. Gate: `python3 -m unittest discover -s
 tests` on `python3.10` and `/usr/bin/python3`. Builder: an Opus worker at
@@ -39,19 +41,23 @@ scan in one folder from erasing the approvals of skills in another.
    through `refute-plan`.
 2. **Repository approvals persist.** Today a scan from another folder
    erases them (section 0.2). Recommendation: yes, an approval of a
-   repository skill lasts until the skill changes or a scan sees it gone.
+   repository skill lasts until a scan sees the skill changed, or sees its
+   folder gone (section 2).
 3. **The total's wording** (section 3). Recommendation: the sentences in
    section 3, which say "not installed" rather than "you declined",
    because the ledger records `refused` for a no, for no answer and for a
-   failed copy alike. Hook refusals that are not installs (reading the
-   quarantine, naming the watcher, `canary explain`) are counted in a
-   separate sentence, not as installs stopped.
+   failed copy alike. The hook's count of installs covers installer
+   commands and new skill folders written by a file tool; its other
+   refusals (SkillCanary's records, its watcher, a quarantined package, a
+   skill's own text, a call it could not read) get a separate sentence.
+   The refutation changed these sentences, so the owner confirms the
+   section 3 text, not the earlier draft.
 4. **`this-mac.log` on a public repository.** Decided 2026-11-22: the
    owner chose a summary. `abeburnett/canary` is public, and `c3a14f0`
    pushed a log that listed every skill on this Mac with its home path.
    `e4df96a` replaced it with the held sections only; the full list stays
    in `c3a14f0`'s history, which is not rewritten. This program's owner
-   check saves the total paragraph only (section 8, bullet 6).
+   check saves the total paragraph only (section 8, after the bullets).
 
 ### 0.2 Verified against the tree at `e4df96a` and this Mac's ledger
 
@@ -88,8 +94,10 @@ Read while writing (file:function), and counted from
   roots and any repository skills folder (an app bundle and the plugin
   cache). Not established: what wrote them. Section 10 keeps them out of
   scope.
-- `checked` is written once per check, beside its outcome, so it is the
-  unit for "installs checked": 184 checks. 152 ended in an approval (117
+- `checked` is written once per check, in the same `_append` call as its
+  outcome (`record_install`: `checked` then one `approved` per folder;
+  `record_decision`: `checked` then one outcome), so it is the unit for
+  "installs checked": 184 checks. 152 ended in an approval (117
   through `canary add` or `canary install`, 35 through the watcher's
   dialog); 8 of those were approved after an UNSAFE verdict (1 through
   `canary add` or `canary install`, 7 through the watcher). 32 were not
@@ -97,6 +105,12 @@ Read while writing (file:function), and counted from
   LIKELY_SAFE, 45 NEEDS_REVIEW, 36 UNSAFE. The review counted 32 UNSAFE and
   24 refused on 2026-11-15; the ledger has grown since.
 - `approved` is per folder: 160 `approved` events for those 152 checks.
+- The watcher's `_keep_refused` appends a second `refused` or `declined`
+  with `"replay": true` when a remembered no keeps a hold. It is a mark,
+  not a new no. This Mac's ledger has none yet, so the counts above stand.
+- `_append` writes through a buffered file object, one `write` call per
+  event in the worst case, so a line from a lockless writer can land
+  between a `checked` and its outcome.
 - `refused` is written by `canary/add.py` when the person says no to an
   UNSAFE skill and when nobody answers, and by `canary/replace.py` when a
   copy fails (`add.SourceError` or `OSError`) as well as on a no.
@@ -105,11 +119,18 @@ Read while writing (file:function), and counted from
 
 ### 1.1 A kind code for each decision
 
-`gate.decide` returns a `gate.Denial`, a `str` subclass with a `kind`
-attribute, in place of each plain deny string. Its text is unchanged, so
-every caller and test that compares or prints the reason works as before.
-`Rewrite` gains a `kind` field with the value `installer_rewrite`. `None`
-stays `None`. The kinds:
+A new `gate.decide_kind(call, home, roots, canary_bin, can_rewrite=False)`
+returns a pair `(reason, kind)`. `reason` is exactly what `decide` returns
+today: `None`, a `Rewrite`, or a plain `str`. `gate.decide` becomes
+`return decide_kind(...)[0]` with the same signature, so its callers and
+tests do not change.
+
+The reason stays a plain `str` on purpose. Both adapters' `deny` reject
+anything else (`type(reason) is not str` in `canary/hosts/claude.py` and
+`canary/hosts/codex.py`) and answer with their generic fallback, so a
+`str` subclass would turn every deny into the fallback text. `Rewrite`
+stays a one-field frozen dataclass; tests build it positionally. Neither
+adapter changes. `kind` is `None` when `reason` is `None`. The kinds:
 
 | Kind | Returned for |
 |---|---|
@@ -123,8 +144,9 @@ stays `None`. The kinds:
 | `own_text` | `OWN_TEXT` |
 | `unreadable` | `UNREADABLE`, from `decide` or from `_hook` |
 
-The kind comes from the site that chose the reason. Nothing parses the
-message to find it.
+Each `return` in `decide`'s body becomes a pair at the site that chose
+the reason; its `except Exception` returns `(UNREADABLE, "unreadable")`.
+Nothing parses the message to find the kind.
 
 ### 1.2 The record
 
@@ -134,7 +156,9 @@ One JSON line, appended to the ledger:
 {"at": "2026-11-23T10:00:00Z", "event": "hook", "host": "claude", "kind": "installer_rewrite"}
 ```
 
-- `host` is `claude`, `codex` or `unknown`.
+- `host` is `claude` or `codex` when `_hook` was called with `--host`
+  and that value; anything else, including a missing `--host`, is
+  `unknown`.
 - The record has no `skill`, `name`, `command`, `cwd`, path or reason
   text. `_state` skips any event without a `skill` field, so readers from
   0.1.6 and earlier ignore it.
@@ -142,17 +166,51 @@ One JSON line, appended to the ledger:
 
 ### 1.3 Where the write sits in `_hook`
 
-The decision is fixed first, then recorded, then answered:
+The answer is fixed first, then recorded, then written. The shape, with
+today's start-up block unchanged and not recorded (if `gate` cannot be
+imported, `guestlist` likely cannot either):
 
-1. `_hook` computes the decision exactly as today, including the
-   `UNREADABLE` fallback.
-2. If the decision is not `None`, `_hook` calls a new
-   `guestlist.note_hook(home, host, kind)` inside its own `try: ...
-   except BaseException: pass`. This block is separate from the one that
-   computes the decision, so a failed write never turns an allow or a
-   rewrite into `UNREADABLE`.
-3. `_hook` writes the answer once, as today. The rewrite path records
-   before it writes and returns, like the deny path.
+```python
+def _hook(args):
+    host = ...                                   # as today
+    try:                                         # start-up block, as today
+        ...
+    except BaseException:
+        ...                                      # as today; no record
+    answer, kind = None, None                    # answer: (out, code) for a rewrite
+    try:
+        if host is None:
+            raise ValueError("unknown host")
+        ...                                      # envelope, parse, roots: as today
+        reason, kind = gate.decide_kind(call, home, roots, CANARY_BIN,
+                                        can_rewrite=can_rewrite)
+        if isinstance(reason, gate.Rewrite):
+            answer = adapter.rewrite(payload["tool_input"], reason.command)
+    except BaseException:
+        reason, kind, answer = gate.UNREADABLE, "unreadable", None
+    if reason is None:
+        return 0                                 # allow: nothing below runs
+    try:
+        from canary import guestlist             # lazy: the allow path never imports it
+        guestlist.note_hook(os.path.expanduser("~"),
+                            host if host in ("claude", "codex") else "unknown", kind)
+    except BaseException:
+        pass
+    if answer is not None:
+        out, code = answer
+        sys.stdout.write(out)
+        return code
+    out, code = adapter.deny(reason)             # as today
+    sys.stdout.write(out)
+    sys.stderr.write(reason + "\n")
+    return code
+```
+
+`adapter.rewrite` is still called inside the deciding `try`, as today, so
+an exception there still becomes an `UNREADABLE` deny, and its record says
+`unreadable`, not `installer_rewrite`. The record block is a separate
+`try`, so a failed write never turns an allow or a rewrite into
+`UNREADABLE`.
 
 The rule: **a record failure never changes the decision, in either
 direction, and never adds output.**
@@ -183,10 +241,20 @@ same schema, `canary.list/1`:
            "hook_installs_rewritten": 2, "hook_other": 5}
 ```
 
-- `checked` counts `checked` events. `installed` counts checks whose
-  outcome is an approval, once per check, not per folder.
-  `installed_after_unsafe` counts those whose approvals carry `override`.
-  `not_installed` counts `refused`, `declined` and `not_installed`.
+- Pairing. Read the ledger in file order and skip every `hook` event and
+  every event with `"replay": true`. A check is a `checked` event; its
+  outcome is the run of events after it, up to the next `checked`, that
+  have the same `name` and an `event` of `approved`, `refused`, `declined`
+  or `not_installed`. Other events in that run (`arrived`, `changed` and
+  so on, written by other scans) are skipped, not outcomes.
+- `checked` counts checks. `installed` counts checks with at least one
+  `approved` in their outcome, once per check, not per folder.
+  `installed_after_unsafe` counts those where any of those `approved`
+  events carries `override`. `not_installed` counts checks whose outcome
+  is `refused`, `declined` or `not_installed`. A check with no outcome
+  counts in `checked` only.
+- `since` is the date (`YYYY-MM-DD`, UTC) of the first `checked` event, or
+  `null` when there is none.
 - `hook_installs` counts `hook` records with kinds `installer_redirect`,
   `installer_instead`, `installer_rewrite` and `new_skill`;
   `hook_installs_rewritten` is the `installer_rewrite` share. `hook_other`
@@ -198,7 +266,10 @@ same schema, `canary.list/1`:
 
 ## 2. Slice 2: repository skills
 
-`guestlist.scan` lists user roots and repository roots separately:
+`guestlist.scan` lists user roots and repository roots separately: it
+calls `_skills(user_roots(home))` and `_skills(repo_roots(cwd))` and keeps
+two sets. `_skills` itself does not change. A real path found in both (a
+repository skill linked into a user root) is a user skill.
 
 - A skill under a user root: unchanged. `arrived`, `changed` and
   `removed` as today.
@@ -206,14 +277,30 @@ same schema, `canary.list/1`:
   no event. It is listed as unchecked, as today.
 - A skill under a repository root, with a record (approved or trusted):
   `changed` when its content changes, as today.
-- A known path that the scan did not find: `removed` only when the path is
-  inside a root the scan listed, user or repository, and the path is gone
-  from it. A path under a root the scan did not list gets no event, so a
-  scan in one folder leaves the approvals in another alone.
+- A known path that the scan did not find, and that sits directly in a
+  root the scan listed (its parent folder is that root): `removed`, as
+  today.
+- Any other known path the scan did not find: `removed` only when the
+  folder is gone (`os.path.lexists(path)` is false). While it exists, no
+  event. So a scan in one folder leaves the approvals in another alone,
+  and an approval whose repository was deleted is still recorded
+  `removed` the next time any scan runs. This rule also covers the
+  approvals outside user and repository roots (section 0.2): they persist
+  while their folder exists, and are recorded `removed` once it is gone.
+  The scan does not fingerprint these paths, so it records no `changed`
+  for them; the next scan that lists their root does. Known paths are
+  real paths, so a user skill reached through a link whose target lives
+  elsewhere also falls under this rule: unlinked, it keeps its record
+  while the target exists. It is not listed, and the watcher's byte
+  comparison still guards any automatic install from that record.
 
-"Repository skill" means a path the scan found under a root that
-`repo_roots(cwd)` returned and `user_roots(home)` did not. The scan knows
-the root of each path it lists; it does not classify by path prefix.
+"Repository skill" means a path the scan found in the repository set and
+not in the user set. The scan does not classify by path prefix.
+
+`first_look` (setup) baselines user-root skills only. Setup passes no
+`cwd`, so today `repo_roots` is empty there; with this slice, a scan with
+`first_look` and a `cwd` still writes no `baseline` for a repository
+skill. Repository skills never baseline.
 
 Existing ledger lines are not rewritten. The 10,510 old repository events
 stay; the 50 erased approvals stay erased.
@@ -223,7 +310,12 @@ approvals by path. A repository approval that now persists could name a
 path that is gone or changed. The refuter checks that every automatic
 install or drop still compares bytes with the folder at its place at that
 moment (`docs/program-2026-11-15-quiet-holds.md` section 0); if one does
-not, this slice stops until the spec says how it does.
+not, this slice stops until the spec says how it does. The refutation
+checked this: the watcher's automatic install and drop act only on places
+directly in watched user roots (`watcher.py`), re-digest the approval's
+folder (`_approved`) and compare trees (`same_tree`), so a persisted
+repository approval cannot trigger either. The builder confirms it still
+holds at slice 2's start commit.
 
 ## 3. Sentences, exact
 
@@ -235,9 +327,11 @@ The paragraph at the end of `canary list` text, filled from `totals`
 
 When there is at least one `hook` record:
 
-> Since 2026-11-23, the hook stopped 3 install commands that skipped the
-> check, and sent 2 of them through the check instead (they are also
-> counted above). It refused 5 other tool calls on SkillCanary's own files.
+> Since 2026-11-23, the hook stopped 3 attempts to install or create a
+> skill without the check, and sent 2 of them through the check instead
+> (they are also counted above). It also refused 5 other tool calls: ones
+> that touched SkillCanary's own files or watcher, read a skill's text
+> meant for you, or could not be checked.
 
 When there is none, the second paragraph is:
 
@@ -275,11 +369,14 @@ Slice 1:
 1. A denied installer call whose command carries a fake token writes
    exactly one `hook` record with kind `installer_redirect`, and the token
    appears nowhere in the ledger. An allowed call writes nothing.
-2. With `note_hook` made to raise: a deny stays the same deny, a rewrite
-   stays the same rewrite, an allow stays an allow, and stdout holds one
-   answer each time.
+2. With `note_hook` made to raise: a deny keeps its exit code, stdout and
+   stderr; a rewrite keeps its exit code and stdout; an allow exits 0
+   with empty stdout and stderr, as today.
 3. `canary list` on a fixture ledger prints the section 3 sentences with
-   the fixture's numbers, and `--json` carries the same `totals`.
+   the fixture's numbers, and `--json` carries the same `totals`. The
+   fixture holds a `hook` line between a `checked` and its `approved`, a
+   check approved into two folders (counted once), and a `"replay": true`
+   `refused` (not counted).
 
 Slice 2:
 
@@ -287,8 +384,9 @@ Slice 2:
    approval is still there (fails today: the scan writes `removed`).
 2. Two scans of a folder with an unrecorded repository skill write no
    `arrived` event.
-3. A recorded repository skill deleted from a root the scan lists is
-   recorded `removed`.
+3. A recorded repository skill deleted while its root is not listed (a
+   scan from another folder) is recorded `removed`; while it exists, the
+   same scan writes nothing for it.
 
 ## 7. Scope cuts
 
@@ -296,8 +394,9 @@ Slice 2:
 - No rewrite or compaction of existing ledger lines.
 - No record of allowed calls, and no command text in any record.
 - No change to what the hook allows or denies.
-- The approvals outside user and repository roots (section 0.2) keep
-  today's behaviour.
+- The approvals outside user and repository roots (section 0.2) follow
+  section 2's rule for unlisted paths; this program does not find what
+  wrote them.
 
 ## 8. Done when
 
@@ -308,20 +407,60 @@ second the interpreter's `--version`). For each slice:
 1. `red.log`: each new scenario fails at the slice's start commit with the
    tests applied, on an assertion or on the missing interface.
 2. `gate-python3.10.log` and `gate-usr-bin-python3.log`: the full gate
-   passes at the slice's final commit, tree clean.
-3. Slice 1 only, `latency.log`: the hook's wall time on this Mac, median of
-   20 runs each, for one allowed call and one denied installer call, at the
-   start commit and at the final commit. The allowed call is no slower by
-   more than 5 ms; the denied call by no more than 20 ms.
+   passes at the slice's final commit on both interpreters, tree clean.
+   The final commit is a manifest commit. `scripts/action.py:scanner_manifest`
+   checks every file under `canary/` against `scanner/manifest.json`, so a
+   change there fails the `tests/test_action.py` `CanaryActionTests` cases
+   until the manifest is rewritten. The builder commits the slice's last
+   code change (the source commit), runs `scripts/update-manifest.py
+   <source commit>`, and commits `scanner/manifest.json` alone, as
+   `a55073b` did for 0.1.5. A later change under `bin/` or `canary/`, such
+   as a fold from bullet 4, repeats those steps before the gate logs.
+3. Slice 1 only, `latency.log`: the hook's wall time on this Mac for one
+   allowed call and one denied installer call, at the start commit and at
+   the final commit. Each set is 3 discarded warm-up runs, then 20 timed
+   runs; the log records the median and the slowest. Conditions: on mains
+   power, no gate or build running, both commits measured in the same
+   sitting. The allowed call's median is no slower by more than 5 ms; the
+   denied call's by no more than 20 ms. A breach is measured once more;
+   if it holds, the slice does not merge until the spec says what to do.
 4. A pre-merge review (`premerge-review`) returns MERGE, after any fold.
 5. A done-when audit by a different model than the builder returns PASS.
-6. Owner check, after the release that carries slice 1: the owner runs
-   `canary list` on this Mac and confirms the total paragraph is there.
-   The agent saves only that paragraph, not the skill list, in
-   `slice-1/this-mac.log`.
+
+One owner check sits outside bullets 1 to 5 and does not gate the merge,
+because it needs the new version installed, which is the owner's release
+step. After the release that carries slice 1, the owner runs `canary
+list` on this Mac and confirms the total paragraph is there. The agent
+saves only that paragraph, not the skill list, in `slice-1/this-mac.log`.
 
 ## 9. Later
 
 - Show the total in the session-start notice, if the owner wants it there.
-- Find what wrote the approvals outside user and repository roots, and
-  decide whether a scan should ever erase them.
+- Find what wrote the approvals outside user and repository roots.
+
+## 10. Where each refutation finding is answered
+
+The refutation ran on 2026-11-22 against this document at `e3827db`.
+Verdict: REWORK, twelve findings. Each was checked against the tree at
+`e3827db` before it was folded; every cited line matched. The refuter's
+full text is in the owner's review cache, outside this repository, under
+`20261122-160925-refute-program-2026-11-22-hook-record`.
+
+| # | Severity | Finding | Checked against | Answer |
+|---|---|---|---|---|
+| 1 | blocks | A `str` subclass for the reason turns every deny into the adapters' fallback | `canary/hosts/claude.py:deny`, `canary/hosts/codex.py:deny` (`type(reason) is not str`) | Accepted. Section 1.1: `decide_kind` returns `(reason, kind)`; the reason stays a plain `str`; no adapter changes |
+| 2 | blocks | The slices share `guestlist.py` and its tests, so "either order" means a merge conflict | `canary/guestlist.py:scan`, `tests/test_guestlist.py` | Accepted. Header: slice 2 branches from `main` after slice 1 merges |
+| 3 | blocks | The gate cannot pass: no manifest step | `scripts/action.py:bundled_files`, `scanner_manifest` | Accepted. Section 8, bullet 2 copies the quiet-holds manifest steps |
+| 4 | blocks | The merge waits on an owner check that needs a release | Section 8, old bullet 6 | Accepted. The owner check sits after bullets 1 to 5 and does not gate the merge |
+| 5 | wrong-if-built | Totals have no pairing rule, and replayed marks count a no twice | `guestlist.py:record_install`, `record_decision`; `watcher.py:_keep_refused` | Accepted. Section 1.5 defines pairing, skips `hook` and `replay` lines, and defines `since`; section 6 test 3 pins it. Also found: `_append` can split a batch, so pairing skips `hook` lines between a check and its outcome (section 0.2) |
+| 6 | wrong-if-built | Section 3 says "install commands" and "SkillCanary's own files", but the kinds include `new_skill`, `own_text` and `unreadable` | `gate.py` `NEW_SKILL`, `OWN_TEXT`, `UNREADABLE` | Accepted. Section 3 sentences reworded; owner decision 3 asks for confirmation of the new text |
+| 7 | wrong-if-built | Sections 2 and 7 disagree on paths under no listed root, and a deleted repository leaves its approvals forever | `guestlist.py:repo_roots` drops folders that do not exist | Accepted. Section 2: an unlisted known path is `removed` once its folder is gone, which covers deleted repositories and the out-of-root approvals; section 7 and decision 2 follow |
+| 8 | wrong-if-built | Test 2 says an allow writes an answer; it writes nothing | `cli.py:_hook` returns 0 silently | Accepted. Section 6, slice 1 test 2 |
+| 9 | wrong-if-built | The `_hook` restructure is unspecified: rewrite exceptions, host value, lazy import | `cli.py:_hook` | Accepted. Section 1.3 gives the shape; `adapter.rewrite` stays inside the deciding `try`; host mapping in section 1.2; `guestlist` imported only on a non-allow |
+| 10 | cleanup | A required `kind` field breaks positional `Rewrite(...)` | `gate.py:Rewrite`; `tests/test_gate.py` | Accepted, by finding 1's answer: `Rewrite` does not change |
+| 11 | cleanup | The latency check has no warm-up, conditions or consequence | Section 8, bullet 3 | Accepted. Warm-up, conditions, one re-measure, and a breach blocks the merge |
+| 12 | cleanup | Section 2 hides the `_skills` change and leaves `first_look` open | `guestlist.py:_skills`, `setup.py` (`scan(home, first_look=True)`) | Accepted. Section 2: two `_skills` calls, `_skills` unchanged; repository skills never baseline |
+
+The refuter also confirmed: the fail-closed finding in section 0.2, the
+old-reader claim in section 1.2, and the byte comparison that section 2
+asked it to check.
