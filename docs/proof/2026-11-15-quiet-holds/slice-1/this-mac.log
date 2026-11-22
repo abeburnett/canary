@@ -1,0 +1,573 @@
+# Owner check (spec section 8): canary list before and after the new watcher's first start on this Mac.
+# Release: v0.1.6 at 9472a1b, installed from dist/SkillCanary-0.1.6.pkg with the owner's admin password.
+# The owner gave the go-ahead for the first start on 2026-11-22. The agent stopped the old watcher
+# (pid 92586, 0.1.5 code, up 4 days) at 2026-11-22T22:57:20Z; launchd started the 0.1.6 watcher (pid 30552).
+# Result: 4 of 8 holds dropped as exact copies (make-ugc, treg x3); 4 remain, each with its place taken.
+
+== before ==
+2026-11-22T22:50:09Z
+canary 0.1.5
+ab-testing                      checked                 /Users/abrahamburnett/.claude/skills/ab-testing
+accelerate-mobile-delivery      unchecked               /Users/abrahamburnett/.codex/skills/accelerate-mobile-delivery
+ad-creative                     checked                 /Users/abrahamburnett/.claude/skills/ad-creative
+ads                             checked                 /Users/abrahamburnett/.claude/skills/ads
+agent-desktop                   checked                 /Users/abrahamburnett/.agents/skills/agent-desktop  from installer
+agents-sdk                      yours                   /Users/abrahamburnett/.agents/skills/agents-sdk
+ai-seo                          checked                 /Users/abrahamburnett/.claude/skills/ai-seo
+analytics                       checked                 /Users/abrahamburnett/.claude/skills/analytics
+app-creator                     yours                   /Users/abrahamburnett/.agents/skills/app-creator
+app-store-readiness             checked                 /Users/abrahamburnett/.claude/skills/app-store-readiness  from local folder
+app-store-readiness             unchecked               /Users/abrahamburnett/.codex/skills/app-store-readiness
+app-store-screenshots           yours                   /Users/abrahamburnett/.agents/skills/app-store-screenshots
+app-store-screenshots           yours                   /Users/abrahamburnett/.claude/skills/app-store-screenshots
+appllama-app-design-skill       yours                   /Users/abrahamburnett/.agents/skills/appllama-app-design-skill
+appllama-usage                  yours                   /Users/abrahamburnett/.agents/skills/appllama-usage
+ask-matt                        yours                   /Users/abrahamburnett/.agents/skills/ask-matt
+aso                             checked                 /Users/abrahamburnett/.claude/skills/aso
+attribution                     checked                 /Users/abrahamburnett/.claude/skills/attribution
+baoyu-design                    yours                   /Users/abrahamburnett/.agents/skills/baoyu-design
+better-accessibility            yours                   /Users/abrahamburnett/.agents/skills/better-accessibility
+better-colors                   yours                   /Users/abrahamburnett/.agents/skills/better-colors
+better-interface                yours                   /Users/abrahamburnett/.agents/skills/better-interface
+better-layout                   yours                   /Users/abrahamburnett/.agents/skills/better-layout
+better-typography               yours                   /Users/abrahamburnett/.agents/skills/better-typography
+better-ui                       yours                   /Users/abrahamburnett/.agents/skills/better-ui
+better-writing                  yours                   /Users/abrahamburnett/.agents/skills/better-writing
+blog-analyze                    checked                 /Users/abrahamburnett/.agents/skills/blog-analyze
+blog-analyze                    checked                 /Users/abrahamburnett/.claude/skills/blog-analyze
+blog-cannibalization            checked                 /Users/abrahamburnett/.agents/skills/blog-cannibalization
+blog-cannibalization            checked                 /Users/abrahamburnett/.claude/skills/blog-cannibalization
+blog-factcheck                  checked                 /Users/abrahamburnett/.agents/skills/blog-factcheck
+blog-factcheck                  checked                 /Users/abrahamburnett/.claude/skills/blog-factcheck
+blog-write                      checked                 /Users/abrahamburnett/.agents/skills/blog-write
+blog-write                      checked                 /Users/abrahamburnett/.claude/skills/blog-write
+brandkit                        yours                   /Users/abrahamburnett/.agents/skills/brandkit
+build-with-exa                  yours                   /Users/abrahamburnett/.agents/skills/build-with-exa
+canary                          yours                   /Users/abrahamburnett/.agents/skills/canary
+canary                          yours                   /Users/abrahamburnett/.claude/skills/canary
+churn-prevention                checked                 /Users/abrahamburnett/.claude/skills/churn-prevention
+clear-writing                   yours                   /Users/abrahamburnett/.agents/skills/clear-writing
+cloudflare                      yours                   /Users/abrahamburnett/.agents/skills/cloudflare
+cloudflare-email-service        yours                   /Users/abrahamburnett/.agents/skills/cloudflare-email-service
+cloudflare-one                  yours                   /Users/abrahamburnett/.agents/skills/cloudflare-one
+cloudflare-one-migrations       yours                   /Users/abrahamburnett/.agents/skills/cloudflare-one-migrations
+co-marketing                    checked                 /Users/abrahamburnett/.claude/skills/co-marketing
+code-review                     yours                   /Users/abrahamburnett/.agents/skills/code-review
+codebase-design                 yours                   /Users/abrahamburnett/.agents/skills/codebase-design
+cold-email                      checked                 /Users/abrahamburnett/.claude/skills/cold-email
+community-marketing             checked                 /Users/abrahamburnett/.claude/skills/community-marketing
+company-research                yours                   /Users/abrahamburnett/.agents/skills/company-research
+competitor-profiling            checked                 /Users/abrahamburnett/.claude/skills/competitor-profiling
+competitors                     checked                 /Users/abrahamburnett/.claude/skills/competitors
+content-strategy                checked                 /Users/abrahamburnett/.claude/skills/content-strategy
+copy-editing                    checked                 /Users/abrahamburnett/.claude/skills/copy-editing
+copy-that-sells                 checked                 /Users/abrahamburnett/.agents/skills/copy-that-sells
+copy-that-sells                 checked                 /Users/abrahamburnett/.claude/skills/copy-that-sells
+copywriting                     checked                 /Users/abrahamburnett/.claude/skills/copywriting
+create-viral-content            checked                 /Users/abrahamburnett/.agents/skills/create-viral-content
+create-viral-content            checked                 /Users/abrahamburnett/.claude/skills/create-viral-content
+cro                             checked                 /Users/abrahamburnett/.claude/skills/cro
+customer-research               checked                 /Users/abrahamburnett/.claude/skills/customer-research
+design-taste-frontend           yours                   /Users/abrahamburnett/.agents/skills/design-taste-frontend
+design-taste-frontend           checked                 /Users/abrahamburnett/.claude/skills/design-taste-frontend
+diagnosing-bugs                 yours                   /Users/abrahamburnett/.agents/skills/diagnosing-bugs
+directory-submissions           checked                 /Users/abrahamburnett/.claude/skills/directory-submissions
+domain-modeling                 yours                   /Users/abrahamburnett/.agents/skills/domain-modeling
+done-when-audit                 yours                   /Users/abrahamburnett/workspace/ios-scaffolding/skills/done-when-audit
+durable-objects                 yours                   /Users/abrahamburnett/.agents/skills/durable-objects
+edit-article                    yours                   /Users/abrahamburnett/.agents/skills/edit-article
+emails                          checked                 /Users/abrahamburnett/.claude/skills/emails
+events                          checked                 /Users/abrahamburnett/.claude/skills/events
+exa-contents                    yours                   /Users/abrahamburnett/.agents/skills/exa-contents
+exa-search                      yours                   /Users/abrahamburnett/.agents/skills/exa-search
+find-skills                     yours                   /Users/abrahamburnett/.agents/skills/find-skills
+firecrawl                       yours                   /Users/abrahamburnett/.agents/skills/firecrawl
+firecrawl-agent                 yours                   /Users/abrahamburnett/.agents/skills/firecrawl-agent
+firecrawl-company-directories   yours                   /Users/abrahamburnett/.agents/skills/firecrawl-company-directories
+firecrawl-competitive-intel     yours                   /Users/abrahamburnett/.agents/skills/firecrawl-competitive-intel
+firecrawl-crawl                 yours                   /Users/abrahamburnett/.agents/skills/firecrawl-crawl
+firecrawl-dashboard-reporting   yours                   /Users/abrahamburnett/.agents/skills/firecrawl-dashboard-reporting
+firecrawl-deep-research         yours                   /Users/abrahamburnett/.agents/skills/firecrawl-deep-research
+firecrawl-demo-walkthrough      yours                   /Users/abrahamburnett/.agents/skills/firecrawl-demo-walkthrough
+firecrawl-developer-index       yours                   /Users/abrahamburnett/.agents/skills/firecrawl-developer-index
+firecrawl-download              yours                   /Users/abrahamburnett/.agents/skills/firecrawl-download
+firecrawl-interact              yours                   /Users/abrahamburnett/.agents/skills/firecrawl-interact
+firecrawl-knowledge-base        yours                   /Users/abrahamburnett/.agents/skills/firecrawl-knowledge-base
+firecrawl-knowledge-ingest      yours                   /Users/abrahamburnett/.agents/skills/firecrawl-knowledge-ingest
+firecrawl-lead-gen              yours                   /Users/abrahamburnett/.agents/skills/firecrawl-lead-gen
+firecrawl-lead-research         yours                   /Users/abrahamburnett/.agents/skills/firecrawl-lead-research
+firecrawl-map                   yours                   /Users/abrahamburnett/.agents/skills/firecrawl-map
+firecrawl-market-research       yours                   /Users/abrahamburnett/.agents/skills/firecrawl-market-research
+firecrawl-monitor               yours                   /Users/abrahamburnett/.agents/skills/firecrawl-monitor
+firecrawl-parse                 yours                   /Users/abrahamburnett/.agents/skills/firecrawl-parse
+firecrawl-qa                    yours                   /Users/abrahamburnett/.agents/skills/firecrawl-qa
+firecrawl-research-index        yours                   /Users/abrahamburnett/.agents/skills/firecrawl-research-index
+firecrawl-research-papers       yours                   /Users/abrahamburnett/.agents/skills/firecrawl-research-papers
+firecrawl-scrape                yours                   /Users/abrahamburnett/.agents/skills/firecrawl-scrape
+firecrawl-search                yours                   /Users/abrahamburnett/.agents/skills/firecrawl-search
+firecrawl-seo-audit             yours                   /Users/abrahamburnett/.agents/skills/firecrawl-seo-audit
+firecrawl-shop                  yours                   /Users/abrahamburnett/.agents/skills/firecrawl-shop
+firecrawl-website-design-clone  yours                   /Users/abrahamburnett/.agents/skills/firecrawl-website-design-clone
+firecrawl-workflows             yours                   /Users/abrahamburnett/.agents/skills/firecrawl-workflows
+free-tools                      checked                 /Users/abrahamburnett/.claude/skills/free-tools
+full-output-enforcement         yours                   /Users/abrahamburnett/.agents/skills/full-output-enforcement
+git-guardrails-claude-code      yours                   /Users/abrahamburnett/.agents/skills/git-guardrails-claude-code
+goldie                          unchecked               /Users/abrahamburnett/.codex/skills/goldie
+gpt-image-bridge                yours                   /Users/abrahamburnett/.claude/skills/gpt-image-bridge
+gpt-taste                       yours                   /Users/abrahamburnett/.agents/skills/gpt-taste
+grill-me                        yours                   /Users/abrahamburnett/.agents/skills/grill-me
+grill-with-docs                 yours                   /Users/abrahamburnett/.agents/skills/grill-with-docs
+grilling                        yours                   /Users/abrahamburnett/.agents/skills/grilling
+hallmark                        installed anyway        /Users/abrahamburnett/.claude/skills/hallmark  from installer
+handoff                         yours                   /Users/abrahamburnett/.agents/skills/handoff
+high-end-visual-design          yours                   /Users/abrahamburnett/.agents/skills/high-end-visual-design
+hyperframes                     changed since approval  /Users/abrahamburnett/.agents/skills/hyperframes
+hyperframes                     changed since approval  /Users/abrahamburnett/.claude/skills/hyperframes
+hyperframes-animation           changed since approval  /Users/abrahamburnett/.agents/skills/hyperframes-animation
+hyperframes-animation           changed since approval  /Users/abrahamburnett/.claude/skills/hyperframes-animation
+hyperframes-audio               changed since approval  /Users/abrahamburnett/.agents/skills/hyperframes-audio
+hyperframes-audio               changed since approval  /Users/abrahamburnett/.claude/skills/hyperframes-audio
+hyperframes-cli                 installed anyway        /Users/abrahamburnett/.agents/skills/hyperframes-cli
+hyperframes-cli                 installed anyway        /Users/abrahamburnett/.claude/skills/hyperframes-cli
+hyperframes-core                checked                 /Users/abrahamburnett/.agents/skills/hyperframes-core
+hyperframes-core                checked                 /Users/abrahamburnett/.claude/skills/hyperframes-core
+hyperframes-creative            checked                 /Users/abrahamburnett/.agents/skills/hyperframes-creative
+hyperframes-creative            checked                 /Users/abrahamburnett/.claude/skills/hyperframes-creative
+hyperframes-keyframes           checked                 /Users/abrahamburnett/.agents/skills/hyperframes-keyframes
+hyperframes-keyframes           checked                 /Users/abrahamburnett/.claude/skills/hyperframes-keyframes
+hyperframes-registry            checked                 /Users/abrahamburnett/.agents/skills/hyperframes-registry
+hyperframes-registry            checked                 /Users/abrahamburnett/.claude/skills/hyperframes-registry
+hyperframes-studio              checked                 /Users/abrahamburnett/.agents/skills/hyperframes-studio
+hyperframes-studio              checked                 /Users/abrahamburnett/.claude/skills/hyperframes-studio
+image                           checked                 /Users/abrahamburnett/.claude/skills/image
+image-to-code                   yours                   /Users/abrahamburnett/.agents/skills/image-to-code
+imagegen-frontend-mobile        yours                   /Users/abrahamburnett/.agents/skills/imagegen-frontend-mobile
+imagegen-frontend-web           yours                   /Users/abrahamburnett/.agents/skills/imagegen-frontend-web
+impeccable                      yours                   /Users/abrahamburnett/.agents/skills/impeccable
+impeccable                      yours                   /Users/abrahamburnett/.claude/skills/impeccable
+implement                       yours                   /Users/abrahamburnett/.agents/skills/implement
+improve-codebase-architecture   yours                   /Users/abrahamburnett/.agents/skills/improve-codebase-architecture
+industrial-brutalist-ui         yours                   /Users/abrahamburnett/.agents/skills/industrial-brutalist-ui
+influencer-marketing            checked                 /Users/abrahamburnett/.claude/skills/influencer-marketing
+interface-review                yours                   /Users/abrahamburnett/.agents/skills/interface-review
+ios-app-intents                 yours                   /Users/abrahamburnett/.agents/skills/ios-app-intents
+ios-debugger-agent              yours                   /Users/abrahamburnett/.agents/skills/ios-debugger-agent
+ios-ettrace-performance         yours                   /Users/abrahamburnett/.agents/skills/ios-ettrace-performance
+ios-localization                changed since approval  /Users/abrahamburnett/.agents/skills/ios-localization  from installer
+ios-memgraph-leaks              yours                   /Users/abrahamburnett/.agents/skills/ios-memgraph-leaks
+ios-preview-director            unchecked               /Users/abrahamburnett/.codex/skills/ios-preview-director
+ios-simulator-browser           yours                   /Users/abrahamburnett/.agents/skills/ios-simulator-browser
+kinocut                         yours                   /Users/abrahamburnett/.claude/skills/kinocut
+kinocut-repurpose               yours                   /Users/abrahamburnett/.claude/skills/kinocut-repurpose
+launch                          checked                 /Users/abrahamburnett/.claude/skills/launch
+lead-generation                 yours                   /Users/abrahamburnett/.agents/skills/lead-generation
+lead-magnets                    checked                 /Users/abrahamburnett/.claude/skills/lead-magnets
+lead-signals                    checked                 /Users/abrahamburnett/.agents/skills/lead-signals
+lead-signals                    checked                 /Users/abrahamburnett/.claude/skills/lead-signals
+lead-signals                    checked                 /Users/abrahamburnett/.codex/skills/lead-signals
+logo-design                     checked                 /Users/abrahamburnett/.agents/skills/logo-design  from kaankiziltug/logo-design-skill@0ecf52e
+logo-design                     checked                 /Users/abrahamburnett/.claude/skills/logo-design  from kaankiziltug/logo-design-skill@0ecf52e
+luna-review                     unchecked               /Users/abrahamburnett/.codex/skills/luna-review
+make-ugc                        checked                 /Users/abrahamburnett/.agents/skills/make-ugc
+make-ugc                        checked                 /Users/abrahamburnett/.claude/skills/make-ugc
+make-ugc                        checked                 /Users/abrahamburnett/.codex/skills/make-ugc
+marketing-council               checked                 /Users/abrahamburnett/.claude/skills/marketing-council
+marketing-ideas                 checked                 /Users/abrahamburnett/.claude/skills/marketing-ideas
+marketing-loops                 checked                 /Users/abrahamburnett/.claude/skills/marketing-loops
+marketing-plan                  checked                 /Users/abrahamburnett/.claude/skills/marketing-plan
+marketing-psychology            checked                 /Users/abrahamburnett/.claude/skills/marketing-psychology
+media-use                       installed anyway        /Users/abrahamburnett/.agents/skills/media-use
+media-use                       installed anyway        /Users/abrahamburnett/.claude/skills/media-use
+microsoft-foundry               yours                   /Users/abrahamburnett/.agents/skills/microsoft-foundry
+migrate-to-shoehorn             yours                   /Users/abrahamburnett/.agents/skills/migrate-to-shoehorn
+minimalist-ui                   yours                   /Users/abrahamburnett/.agents/skills/minimalist-ui
+motion-graphics                 checked                 /Users/abrahamburnett/.agents/skills/motion-graphics
+motion-graphics                 checked                 /Users/abrahamburnett/.claude/skills/motion-graphics
+native-test-loop                yours                   /Users/abrahamburnett/.claude/skills/native-test-loop
+obsidian-vault                  yours                   /Users/abrahamburnett/.agents/skills/obsidian-vault
+offers                          checked                 /Users/abrahamburnett/.claude/skills/offers
+onboarding                      checked                 /Users/abrahamburnett/.claude/skills/onboarding
+onepassword-environments        yours                   /Users/abrahamburnett/.agents/skills/onepassword-environments
+orchestrate                     yours                   /Users/abrahamburnett/.agents/skills/orchestrate
+paywalls                        checked                 /Users/abrahamburnett/.claude/skills/paywalls
+playwright                      unchecked               /Users/abrahamburnett/.codex/skills/playwright
+popups                          checked                 /Users/abrahamburnett/.claude/skills/popups
+pricing                         checked                 /Users/abrahamburnett/.claude/skills/pricing
+product-marketing               checked                 /Users/abrahamburnett/.claude/skills/product-marketing
+programmatic-seo                checked                 /Users/abrahamburnett/.claude/skills/programmatic-seo
+prospecting                     checked                 /Users/abrahamburnett/.claude/skills/prospecting
+prototype                       yours                   /Users/abrahamburnett/.agents/skills/prototype
+public-relations                checked                 /Users/abrahamburnett/.claude/skills/public-relations
+redesign-existing-projects      yours                   /Users/abrahamburnett/.agents/skills/redesign-existing-projects
+referrals                       checked                 /Users/abrahamburnett/.claude/skills/referrals
+release-judgment                unchecked               /Users/abrahamburnett/.codex/skills/release-judgment
+release-skills                  yours                   /Users/abrahamburnett/.agents/skills/release-skills
+research                        yours                   /Users/abrahamburnett/.agents/skills/research
+resolving-merge-conflicts       yours                   /Users/abrahamburnett/.agents/skills/resolving-merge-conflicts
+revops                          checked                 /Users/abrahamburnett/.claude/skills/revops
+rocketsim                       changed since approval  /Applications/RocketSim.app/Contents/Resources/Agent-Skill/rocketsim  from restored
+rocketsim                       yours                   /Users/abrahamburnett/.claude/skills/rocketsim
+sales-enablement                checked                 /Users/abrahamburnett/.claude/skills/sales-enablement
+sandbox-migrate-to-next         yours                   /Users/abrahamburnett/.agents/skills/sandbox-migrate-to-next
+sandbox-next                    yours                   /Users/abrahamburnett/.agents/skills/sandbox-next
+sandbox-sdk                     yours                   /Users/abrahamburnett/.agents/skills/sandbox-sdk
+sandbox-stable                  yours                   /Users/abrahamburnett/.agents/skills/sandbox-stable
+scaffold-exercises              yours                   /Users/abrahamburnett/.agents/skills/scaffold-exercises
+schema                          checked                 /Users/abrahamburnett/.claude/skills/schema
+seo-audit                       checked                 /Users/abrahamburnett/.claude/skills/seo-audit
+setup-matt-pocock-skills        yours                   /Users/abrahamburnett/.agents/skills/setup-matt-pocock-skills
+setup-pre-commit                yours                   /Users/abrahamburnett/.agents/skills/setup-pre-commit
+signup                          checked                 /Users/abrahamburnett/.claude/skills/signup
+simlock                         checked                 /Users/abrahamburnett/.agents/skills/simlock  from restored
+simlock                         checked                 /Users/abrahamburnett/.claude/skills/simlock  from restored
+simulator-strategy              yours                   /Users/abrahamburnett/.agents/skills/simulator-strategy
+simulator-strategy              yours                   /Users/abrahamburnett/.claude/skills/simulator-strategy
+site-architecture               checked                 /Users/abrahamburnett/.claude/skills/site-architecture
+sms                             checked                 /Users/abrahamburnett/.claude/skills/sms
+social                          checked                 /Users/abrahamburnett/.claude/skills/social
+spm-build-analysis              yours                   /Users/abrahamburnett/.agents/skills/spm-build-analysis
+stitch-design-taste             yours                   /Users/abrahamburnett/.agents/skills/stitch-design-taste
+swift-concurrency-pro           yours                   /Users/abrahamburnett/.agents/skills/swift-concurrency-pro
+swift-testing-pro               yours                   /Users/abrahamburnett/.agents/skills/swift-testing-pro
+swiftdata-pro                   yours                   /Users/abrahamburnett/.agents/skills/swiftdata-pro
+swiftui-expert-skill            yours                   /Users/abrahamburnett/.agents/skills/swiftui-expert-skill
+swiftui-liquid-glass            yours                   /Users/abrahamburnett/.agents/skills/swiftui-liquid-glass
+swiftui-performance-audit       yours                   /Users/abrahamburnett/.agents/skills/swiftui-performance-audit
+swiftui-specialist              yours                   /Users/abrahamburnett/.agents/skills/swiftui-specialist
+swiftui-specialist              yours                   /Users/abrahamburnett/.claude/skills/swiftui-specialist
+swiftui-specialist              unchecked               /Users/abrahamburnett/.codex/skills/swiftui-specialist
+swiftui-ui-patterns             yours                   /Users/abrahamburnett/.agents/skills/swiftui-ui-patterns
+swiftui-view-refactor           yours                   /Users/abrahamburnett/.agents/skills/swiftui-view-refactor
+swiftui-whats-new-27            yours                   /Users/abrahamburnett/.agents/skills/swiftui-whats-new-27
+swiftui-whats-new-27            yours                   /Users/abrahamburnett/.claude/skills/swiftui-whats-new-27
+swiftui-whats-new-27            unchecked               /Users/abrahamburnett/.codex/skills/swiftui-whats-new-27
+tdd                             yours                   /Users/abrahamburnett/.agents/skills/tdd
+teach                           yours                   /Users/abrahamburnett/.agents/skills/teach
+terra-review                    unchecked               /Users/abrahamburnett/.codex/skills/terra-review
+to-spec                         yours                   /Users/abrahamburnett/.agents/skills/to-spec
+to-tickets                      yours                   /Users/abrahamburnett/.agents/skills/to-tickets
+treg                            installed anyway        /Users/abrahamburnett/.agents/skills/treg
+treg                            installed anyway        /Users/abrahamburnett/.claude/skills/treg
+treg                            installed anyway        /Users/abrahamburnett/.codex/skills/treg
+triage                          yours                   /Users/abrahamburnett/.agents/skills/triage
+turnstile-spin                  yours                   /Users/abrahamburnett/.agents/skills/turnstile-spin
+ui-verify                       yours                   /Users/abrahamburnett/.claude/skills/ui-verify
+video                           checked                 /Users/abrahamburnett/.claude/skills/video
+watcher-test                    checked                 /Users/abrahamburnett/.agents/skills/watcher-test
+wayfinder                       yours                   /Users/abrahamburnett/.agents/skills/wayfinder
+web-design-guidelines           checked                 /Users/abrahamburnett/.claude/skills/web-design-guidelines
+web-perf                        yours                   /Users/abrahamburnett/.agents/skills/web-perf
+web-research-routing            yours                   /Users/abrahamburnett/.agents/skills/web-research-routing
+wizard                          yours                   /Users/abrahamburnett/.agents/skills/wizard
+workers-best-practices          yours                   /Users/abrahamburnett/.agents/skills/workers-best-practices
+workspace-storage-audit         checked                 /Users/abrahamburnett/.agents/skills/workspace-storage-audit  from local folder
+wrangler                        yours                   /Users/abrahamburnett/.agents/skills/wrangler
+writing-great-skills            yours                   /Users/abrahamburnett/.agents/skills/writing-great-skills
+writing-guidelines              checked                 /Users/abrahamburnett/.agents/skills/writing-guidelines
+xcode-build-benchmark           yours                   /Users/abrahamburnett/.agents/skills/xcode-build-benchmark
+xcode-build-fixer               yours                   /Users/abrahamburnett/.agents/skills/xcode-build-fixer
+xcode-build-orchestrator        yours                   /Users/abrahamburnett/.agents/skills/xcode-build-orchestrator
+xcode-compilation-analyzer      yours                   /Users/abrahamburnett/.agents/skills/xcode-compilation-analyzer
+xcode-makefiles                 yours                   /Users/abrahamburnett/.agents/skills/xcode-makefiles
+xcode-project-analyzer          yours                   /Users/abrahamburnett/.agents/skills/xcode-project-analyzer
+xcodebuildmcp-cli               yours                   /Users/abrahamburnett/.agents/skills/xcodebuildmcp-cli
+xcodebuildmcp-cli               yours                   /Users/abrahamburnett/.claude/skills/xcodebuildmcp-cli
+xcodebuildmcp-cli               unchecked               /Users/abrahamburnett/.codex/skills/xcodebuildmcp-cli
+
+Held by SkillCanary (arrived without its check; nothing is deleted):
+  hyperframes-cli  from /Users/abrahamburnett/.agents/skills/hyperframes-cli  to restore: canary restore 20261007T003205Z-ec791cb3
+  media-use  from /Users/abrahamburnett/.claude/skills/media-use  to restore: canary restore 20261010T053330Z-3a6bbc5c
+  hyperframes-cli  from /Users/abrahamburnett/.claude/skills/hyperframes-cli  to restore: canary restore 20261010T053330Z-ceb38961
+  media-use  from /Users/abrahamburnett/.agents/skills/media-use  to restore: canary restore 20261010T053331Z-c4408326
+  make-ugc  from /Users/abrahamburnett/.claude/skills/make-ugc  to restore: canary restore 20261013T065006Z-684a17d3
+  treg  from /Users/abrahamburnett/.agents/skills/treg  to restore: canary restore 20261013T070644Z-3c9cc233
+  treg  from /Users/abrahamburnett/.claude/skills/treg  to restore: canary restore 20261013T070644Z-99c2baec
+  treg  from /Users/abrahamburnett/.codex/skills/treg  to restore: canary restore 20261013T070644Z-e9e2403b
+exit 0
+
+== after ==
+2026-11-22T22:57:42Z
+canary 0.1.6
+ab-testing                      checked                 /Users/abrahamburnett/.claude/skills/ab-testing
+accelerate-mobile-delivery      unchecked               /Users/abrahamburnett/.codex/skills/accelerate-mobile-delivery
+ad-creative                     checked                 /Users/abrahamburnett/.claude/skills/ad-creative
+ads                             checked                 /Users/abrahamburnett/.claude/skills/ads
+agent-desktop                   checked                 /Users/abrahamburnett/.agents/skills/agent-desktop  from installer
+agents-sdk                      yours                   /Users/abrahamburnett/.agents/skills/agents-sdk
+ai-seo                          checked                 /Users/abrahamburnett/.claude/skills/ai-seo
+analytics                       checked                 /Users/abrahamburnett/.claude/skills/analytics
+app-creator                     yours                   /Users/abrahamburnett/.agents/skills/app-creator
+app-store-readiness             checked                 /Users/abrahamburnett/.claude/skills/app-store-readiness  from local folder
+app-store-readiness             unchecked               /Users/abrahamburnett/.codex/skills/app-store-readiness
+app-store-screenshots           yours                   /Users/abrahamburnett/.agents/skills/app-store-screenshots
+app-store-screenshots           yours                   /Users/abrahamburnett/.claude/skills/app-store-screenshots
+appllama-app-design-skill       yours                   /Users/abrahamburnett/.agents/skills/appllama-app-design-skill
+appllama-usage                  yours                   /Users/abrahamburnett/.agents/skills/appllama-usage
+ask-matt                        yours                   /Users/abrahamburnett/.agents/skills/ask-matt
+aso                             checked                 /Users/abrahamburnett/.claude/skills/aso
+attribution                     checked                 /Users/abrahamburnett/.claude/skills/attribution
+baoyu-design                    yours                   /Users/abrahamburnett/.agents/skills/baoyu-design
+better-accessibility            yours                   /Users/abrahamburnett/.agents/skills/better-accessibility
+better-colors                   yours                   /Users/abrahamburnett/.agents/skills/better-colors
+better-interface                yours                   /Users/abrahamburnett/.agents/skills/better-interface
+better-layout                   yours                   /Users/abrahamburnett/.agents/skills/better-layout
+better-typography               yours                   /Users/abrahamburnett/.agents/skills/better-typography
+better-ui                       yours                   /Users/abrahamburnett/.agents/skills/better-ui
+better-writing                  yours                   /Users/abrahamburnett/.agents/skills/better-writing
+blog-analyze                    checked                 /Users/abrahamburnett/.agents/skills/blog-analyze
+blog-analyze                    checked                 /Users/abrahamburnett/.claude/skills/blog-analyze
+blog-cannibalization            checked                 /Users/abrahamburnett/.agents/skills/blog-cannibalization
+blog-cannibalization            checked                 /Users/abrahamburnett/.claude/skills/blog-cannibalization
+blog-factcheck                  checked                 /Users/abrahamburnett/.agents/skills/blog-factcheck
+blog-factcheck                  checked                 /Users/abrahamburnett/.claude/skills/blog-factcheck
+blog-write                      checked                 /Users/abrahamburnett/.agents/skills/blog-write
+blog-write                      checked                 /Users/abrahamburnett/.claude/skills/blog-write
+brandkit                        yours                   /Users/abrahamburnett/.agents/skills/brandkit
+build-with-exa                  yours                   /Users/abrahamburnett/.agents/skills/build-with-exa
+canary                          yours                   /Users/abrahamburnett/.agents/skills/canary
+canary                          yours                   /Users/abrahamburnett/.claude/skills/canary
+churn-prevention                checked                 /Users/abrahamburnett/.claude/skills/churn-prevention
+clear-writing                   yours                   /Users/abrahamburnett/.agents/skills/clear-writing
+cloudflare                      yours                   /Users/abrahamburnett/.agents/skills/cloudflare
+cloudflare-email-service        yours                   /Users/abrahamburnett/.agents/skills/cloudflare-email-service
+cloudflare-one                  yours                   /Users/abrahamburnett/.agents/skills/cloudflare-one
+cloudflare-one-migrations       yours                   /Users/abrahamburnett/.agents/skills/cloudflare-one-migrations
+co-marketing                    checked                 /Users/abrahamburnett/.claude/skills/co-marketing
+code-review                     yours                   /Users/abrahamburnett/.agents/skills/code-review
+codebase-design                 yours                   /Users/abrahamburnett/.agents/skills/codebase-design
+cold-email                      checked                 /Users/abrahamburnett/.claude/skills/cold-email
+community-marketing             checked                 /Users/abrahamburnett/.claude/skills/community-marketing
+company-research                yours                   /Users/abrahamburnett/.agents/skills/company-research
+competitor-profiling            checked                 /Users/abrahamburnett/.claude/skills/competitor-profiling
+competitors                     checked                 /Users/abrahamburnett/.claude/skills/competitors
+content-strategy                checked                 /Users/abrahamburnett/.claude/skills/content-strategy
+copy-editing                    checked                 /Users/abrahamburnett/.claude/skills/copy-editing
+copy-that-sells                 checked                 /Users/abrahamburnett/.agents/skills/copy-that-sells
+copy-that-sells                 checked                 /Users/abrahamburnett/.claude/skills/copy-that-sells
+copywriting                     checked                 /Users/abrahamburnett/.claude/skills/copywriting
+create-viral-content            checked                 /Users/abrahamburnett/.agents/skills/create-viral-content
+create-viral-content            checked                 /Users/abrahamburnett/.claude/skills/create-viral-content
+cro                             checked                 /Users/abrahamburnett/.claude/skills/cro
+customer-research               checked                 /Users/abrahamburnett/.claude/skills/customer-research
+design-taste-frontend           yours                   /Users/abrahamburnett/.agents/skills/design-taste-frontend
+design-taste-frontend           checked                 /Users/abrahamburnett/.claude/skills/design-taste-frontend
+diagnosing-bugs                 yours                   /Users/abrahamburnett/.agents/skills/diagnosing-bugs
+directory-submissions           checked                 /Users/abrahamburnett/.claude/skills/directory-submissions
+domain-modeling                 yours                   /Users/abrahamburnett/.agents/skills/domain-modeling
+done-when-audit                 yours                   /Users/abrahamburnett/workspace/ios-scaffolding/skills/done-when-audit
+durable-objects                 yours                   /Users/abrahamburnett/.agents/skills/durable-objects
+edit-article                    yours                   /Users/abrahamburnett/.agents/skills/edit-article
+emails                          checked                 /Users/abrahamburnett/.claude/skills/emails
+events                          checked                 /Users/abrahamburnett/.claude/skills/events
+exa-contents                    yours                   /Users/abrahamburnett/.agents/skills/exa-contents
+exa-search                      yours                   /Users/abrahamburnett/.agents/skills/exa-search
+find-skills                     yours                   /Users/abrahamburnett/.agents/skills/find-skills
+firecrawl                       yours                   /Users/abrahamburnett/.agents/skills/firecrawl
+firecrawl-agent                 yours                   /Users/abrahamburnett/.agents/skills/firecrawl-agent
+firecrawl-company-directories   yours                   /Users/abrahamburnett/.agents/skills/firecrawl-company-directories
+firecrawl-competitive-intel     yours                   /Users/abrahamburnett/.agents/skills/firecrawl-competitive-intel
+firecrawl-crawl                 yours                   /Users/abrahamburnett/.agents/skills/firecrawl-crawl
+firecrawl-dashboard-reporting   yours                   /Users/abrahamburnett/.agents/skills/firecrawl-dashboard-reporting
+firecrawl-deep-research         yours                   /Users/abrahamburnett/.agents/skills/firecrawl-deep-research
+firecrawl-demo-walkthrough      yours                   /Users/abrahamburnett/.agents/skills/firecrawl-demo-walkthrough
+firecrawl-developer-index       yours                   /Users/abrahamburnett/.agents/skills/firecrawl-developer-index
+firecrawl-download              yours                   /Users/abrahamburnett/.agents/skills/firecrawl-download
+firecrawl-interact              yours                   /Users/abrahamburnett/.agents/skills/firecrawl-interact
+firecrawl-knowledge-base        yours                   /Users/abrahamburnett/.agents/skills/firecrawl-knowledge-base
+firecrawl-knowledge-ingest      yours                   /Users/abrahamburnett/.agents/skills/firecrawl-knowledge-ingest
+firecrawl-lead-gen              yours                   /Users/abrahamburnett/.agents/skills/firecrawl-lead-gen
+firecrawl-lead-research         yours                   /Users/abrahamburnett/.agents/skills/firecrawl-lead-research
+firecrawl-map                   yours                   /Users/abrahamburnett/.agents/skills/firecrawl-map
+firecrawl-market-research       yours                   /Users/abrahamburnett/.agents/skills/firecrawl-market-research
+firecrawl-monitor               yours                   /Users/abrahamburnett/.agents/skills/firecrawl-monitor
+firecrawl-parse                 yours                   /Users/abrahamburnett/.agents/skills/firecrawl-parse
+firecrawl-qa                    yours                   /Users/abrahamburnett/.agents/skills/firecrawl-qa
+firecrawl-research-index        yours                   /Users/abrahamburnett/.agents/skills/firecrawl-research-index
+firecrawl-research-papers       yours                   /Users/abrahamburnett/.agents/skills/firecrawl-research-papers
+firecrawl-scrape                yours                   /Users/abrahamburnett/.agents/skills/firecrawl-scrape
+firecrawl-search                yours                   /Users/abrahamburnett/.agents/skills/firecrawl-search
+firecrawl-seo-audit             yours                   /Users/abrahamburnett/.agents/skills/firecrawl-seo-audit
+firecrawl-shop                  yours                   /Users/abrahamburnett/.agents/skills/firecrawl-shop
+firecrawl-website-design-clone  yours                   /Users/abrahamburnett/.agents/skills/firecrawl-website-design-clone
+firecrawl-workflows             yours                   /Users/abrahamburnett/.agents/skills/firecrawl-workflows
+free-tools                      checked                 /Users/abrahamburnett/.claude/skills/free-tools
+full-output-enforcement         yours                   /Users/abrahamburnett/.agents/skills/full-output-enforcement
+git-guardrails-claude-code      yours                   /Users/abrahamburnett/.agents/skills/git-guardrails-claude-code
+goldie                          unchecked               /Users/abrahamburnett/.codex/skills/goldie
+gpt-image-bridge                yours                   /Users/abrahamburnett/.claude/skills/gpt-image-bridge
+gpt-taste                       yours                   /Users/abrahamburnett/.agents/skills/gpt-taste
+grill-me                        yours                   /Users/abrahamburnett/.agents/skills/grill-me
+grill-with-docs                 yours                   /Users/abrahamburnett/.agents/skills/grill-with-docs
+grilling                        yours                   /Users/abrahamburnett/.agents/skills/grilling
+hallmark                        installed anyway        /Users/abrahamburnett/.claude/skills/hallmark  from installer
+handoff                         yours                   /Users/abrahamburnett/.agents/skills/handoff
+high-end-visual-design          yours                   /Users/abrahamburnett/.agents/skills/high-end-visual-design
+hyperframes                     changed since approval  /Users/abrahamburnett/.agents/skills/hyperframes
+hyperframes                     changed since approval  /Users/abrahamburnett/.claude/skills/hyperframes
+hyperframes-animation           changed since approval  /Users/abrahamburnett/.agents/skills/hyperframes-animation
+hyperframes-animation           changed since approval  /Users/abrahamburnett/.claude/skills/hyperframes-animation
+hyperframes-audio               changed since approval  /Users/abrahamburnett/.agents/skills/hyperframes-audio
+hyperframes-audio               changed since approval  /Users/abrahamburnett/.claude/skills/hyperframes-audio
+hyperframes-cli                 installed anyway        /Users/abrahamburnett/.agents/skills/hyperframes-cli
+hyperframes-cli                 installed anyway        /Users/abrahamburnett/.claude/skills/hyperframes-cli
+hyperframes-core                checked                 /Users/abrahamburnett/.agents/skills/hyperframes-core
+hyperframes-core                checked                 /Users/abrahamburnett/.claude/skills/hyperframes-core
+hyperframes-creative            checked                 /Users/abrahamburnett/.agents/skills/hyperframes-creative
+hyperframes-creative            checked                 /Users/abrahamburnett/.claude/skills/hyperframes-creative
+hyperframes-keyframes           checked                 /Users/abrahamburnett/.agents/skills/hyperframes-keyframes
+hyperframes-keyframes           checked                 /Users/abrahamburnett/.claude/skills/hyperframes-keyframes
+hyperframes-registry            checked                 /Users/abrahamburnett/.agents/skills/hyperframes-registry
+hyperframes-registry            checked                 /Users/abrahamburnett/.claude/skills/hyperframes-registry
+hyperframes-studio              checked                 /Users/abrahamburnett/.agents/skills/hyperframes-studio
+hyperframes-studio              checked                 /Users/abrahamburnett/.claude/skills/hyperframes-studio
+image                           checked                 /Users/abrahamburnett/.claude/skills/image
+image-to-code                   yours                   /Users/abrahamburnett/.agents/skills/image-to-code
+imagegen-frontend-mobile        yours                   /Users/abrahamburnett/.agents/skills/imagegen-frontend-mobile
+imagegen-frontend-web           yours                   /Users/abrahamburnett/.agents/skills/imagegen-frontend-web
+impeccable                      yours                   /Users/abrahamburnett/.agents/skills/impeccable
+impeccable                      yours                   /Users/abrahamburnett/.claude/skills/impeccable
+implement                       yours                   /Users/abrahamburnett/.agents/skills/implement
+improve-codebase-architecture   yours                   /Users/abrahamburnett/.agents/skills/improve-codebase-architecture
+industrial-brutalist-ui         yours                   /Users/abrahamburnett/.agents/skills/industrial-brutalist-ui
+influencer-marketing            checked                 /Users/abrahamburnett/.claude/skills/influencer-marketing
+interface-review                yours                   /Users/abrahamburnett/.agents/skills/interface-review
+ios-app-intents                 yours                   /Users/abrahamburnett/.agents/skills/ios-app-intents
+ios-debugger-agent              yours                   /Users/abrahamburnett/.agents/skills/ios-debugger-agent
+ios-ettrace-performance         yours                   /Users/abrahamburnett/.agents/skills/ios-ettrace-performance
+ios-localization                changed since approval  /Users/abrahamburnett/.agents/skills/ios-localization  from installer
+ios-memgraph-leaks              yours                   /Users/abrahamburnett/.agents/skills/ios-memgraph-leaks
+ios-preview-director            unchecked               /Users/abrahamburnett/.codex/skills/ios-preview-director
+ios-simulator-browser           yours                   /Users/abrahamburnett/.agents/skills/ios-simulator-browser
+kinocut                         yours                   /Users/abrahamburnett/.claude/skills/kinocut
+kinocut-repurpose               yours                   /Users/abrahamburnett/.claude/skills/kinocut-repurpose
+launch                          checked                 /Users/abrahamburnett/.claude/skills/launch
+lead-generation                 yours                   /Users/abrahamburnett/.agents/skills/lead-generation
+lead-magnets                    checked                 /Users/abrahamburnett/.claude/skills/lead-magnets
+lead-signals                    checked                 /Users/abrahamburnett/.agents/skills/lead-signals
+lead-signals                    checked                 /Users/abrahamburnett/.claude/skills/lead-signals
+lead-signals                    checked                 /Users/abrahamburnett/.codex/skills/lead-signals
+logo-design                     checked                 /Users/abrahamburnett/.agents/skills/logo-design  from kaankiziltug/logo-design-skill@0ecf52e
+logo-design                     checked                 /Users/abrahamburnett/.claude/skills/logo-design  from kaankiziltug/logo-design-skill@0ecf52e
+luna-review                     unchecked               /Users/abrahamburnett/.codex/skills/luna-review
+make-ugc                        checked                 /Users/abrahamburnett/.agents/skills/make-ugc
+make-ugc                        checked                 /Users/abrahamburnett/.claude/skills/make-ugc
+make-ugc                        checked                 /Users/abrahamburnett/.codex/skills/make-ugc
+marketing-council               checked                 /Users/abrahamburnett/.claude/skills/marketing-council
+marketing-ideas                 checked                 /Users/abrahamburnett/.claude/skills/marketing-ideas
+marketing-loops                 checked                 /Users/abrahamburnett/.claude/skills/marketing-loops
+marketing-plan                  checked                 /Users/abrahamburnett/.claude/skills/marketing-plan
+marketing-psychology            checked                 /Users/abrahamburnett/.claude/skills/marketing-psychology
+media-use                       installed anyway        /Users/abrahamburnett/.agents/skills/media-use
+media-use                       installed anyway        /Users/abrahamburnett/.claude/skills/media-use
+microsoft-foundry               yours                   /Users/abrahamburnett/.agents/skills/microsoft-foundry
+migrate-to-shoehorn             yours                   /Users/abrahamburnett/.agents/skills/migrate-to-shoehorn
+minimalist-ui                   yours                   /Users/abrahamburnett/.agents/skills/minimalist-ui
+motion-graphics                 checked                 /Users/abrahamburnett/.agents/skills/motion-graphics
+motion-graphics                 checked                 /Users/abrahamburnett/.claude/skills/motion-graphics
+native-test-loop                yours                   /Users/abrahamburnett/.claude/skills/native-test-loop
+obsidian-vault                  yours                   /Users/abrahamburnett/.agents/skills/obsidian-vault
+offers                          checked                 /Users/abrahamburnett/.claude/skills/offers
+onboarding                      checked                 /Users/abrahamburnett/.claude/skills/onboarding
+onepassword-environments        yours                   /Users/abrahamburnett/.agents/skills/onepassword-environments
+orchestrate                     yours                   /Users/abrahamburnett/.agents/skills/orchestrate
+paywalls                        checked                 /Users/abrahamburnett/.claude/skills/paywalls
+playwright                      unchecked               /Users/abrahamburnett/.codex/skills/playwright
+popups                          checked                 /Users/abrahamburnett/.claude/skills/popups
+pricing                         checked                 /Users/abrahamburnett/.claude/skills/pricing
+product-marketing               checked                 /Users/abrahamburnett/.claude/skills/product-marketing
+programmatic-seo                checked                 /Users/abrahamburnett/.claude/skills/programmatic-seo
+prospecting                     checked                 /Users/abrahamburnett/.claude/skills/prospecting
+prototype                       yours                   /Users/abrahamburnett/.agents/skills/prototype
+public-relations                checked                 /Users/abrahamburnett/.claude/skills/public-relations
+redesign-existing-projects      yours                   /Users/abrahamburnett/.agents/skills/redesign-existing-projects
+referrals                       checked                 /Users/abrahamburnett/.claude/skills/referrals
+release-judgment                unchecked               /Users/abrahamburnett/.codex/skills/release-judgment
+release-skills                  yours                   /Users/abrahamburnett/.agents/skills/release-skills
+research                        yours                   /Users/abrahamburnett/.agents/skills/research
+resolving-merge-conflicts       yours                   /Users/abrahamburnett/.agents/skills/resolving-merge-conflicts
+revops                          checked                 /Users/abrahamburnett/.claude/skills/revops
+rocketsim                       changed since approval  /Applications/RocketSim.app/Contents/Resources/Agent-Skill/rocketsim  from restored
+rocketsim                       yours                   /Users/abrahamburnett/.claude/skills/rocketsim
+sales-enablement                checked                 /Users/abrahamburnett/.claude/skills/sales-enablement
+sandbox-migrate-to-next         yours                   /Users/abrahamburnett/.agents/skills/sandbox-migrate-to-next
+sandbox-next                    yours                   /Users/abrahamburnett/.agents/skills/sandbox-next
+sandbox-sdk                     yours                   /Users/abrahamburnett/.agents/skills/sandbox-sdk
+sandbox-stable                  yours                   /Users/abrahamburnett/.agents/skills/sandbox-stable
+scaffold-exercises              yours                   /Users/abrahamburnett/.agents/skills/scaffold-exercises
+schema                          checked                 /Users/abrahamburnett/.claude/skills/schema
+seo-audit                       checked                 /Users/abrahamburnett/.claude/skills/seo-audit
+setup-matt-pocock-skills        yours                   /Users/abrahamburnett/.agents/skills/setup-matt-pocock-skills
+setup-pre-commit                yours                   /Users/abrahamburnett/.agents/skills/setup-pre-commit
+signup                          checked                 /Users/abrahamburnett/.claude/skills/signup
+simlock                         checked                 /Users/abrahamburnett/.agents/skills/simlock  from restored
+simlock                         checked                 /Users/abrahamburnett/.claude/skills/simlock  from restored
+simulator-strategy              yours                   /Users/abrahamburnett/.agents/skills/simulator-strategy
+simulator-strategy              yours                   /Users/abrahamburnett/.claude/skills/simulator-strategy
+site-architecture               checked                 /Users/abrahamburnett/.claude/skills/site-architecture
+sms                             checked                 /Users/abrahamburnett/.claude/skills/sms
+social                          checked                 /Users/abrahamburnett/.claude/skills/social
+spm-build-analysis              yours                   /Users/abrahamburnett/.agents/skills/spm-build-analysis
+stitch-design-taste             yours                   /Users/abrahamburnett/.agents/skills/stitch-design-taste
+swift-concurrency-pro           yours                   /Users/abrahamburnett/.agents/skills/swift-concurrency-pro
+swift-testing-pro               yours                   /Users/abrahamburnett/.agents/skills/swift-testing-pro
+swiftdata-pro                   yours                   /Users/abrahamburnett/.agents/skills/swiftdata-pro
+swiftui-expert-skill            yours                   /Users/abrahamburnett/.agents/skills/swiftui-expert-skill
+swiftui-liquid-glass            yours                   /Users/abrahamburnett/.agents/skills/swiftui-liquid-glass
+swiftui-performance-audit       yours                   /Users/abrahamburnett/.agents/skills/swiftui-performance-audit
+swiftui-specialist              yours                   /Users/abrahamburnett/.agents/skills/swiftui-specialist
+swiftui-specialist              yours                   /Users/abrahamburnett/.claude/skills/swiftui-specialist
+swiftui-specialist              unchecked               /Users/abrahamburnett/.codex/skills/swiftui-specialist
+swiftui-ui-patterns             yours                   /Users/abrahamburnett/.agents/skills/swiftui-ui-patterns
+swiftui-view-refactor           yours                   /Users/abrahamburnett/.agents/skills/swiftui-view-refactor
+swiftui-whats-new-27            yours                   /Users/abrahamburnett/.agents/skills/swiftui-whats-new-27
+swiftui-whats-new-27            yours                   /Users/abrahamburnett/.claude/skills/swiftui-whats-new-27
+swiftui-whats-new-27            unchecked               /Users/abrahamburnett/.codex/skills/swiftui-whats-new-27
+tdd                             yours                   /Users/abrahamburnett/.agents/skills/tdd
+teach                           yours                   /Users/abrahamburnett/.agents/skills/teach
+terra-review                    unchecked               /Users/abrahamburnett/.codex/skills/terra-review
+to-spec                         yours                   /Users/abrahamburnett/.agents/skills/to-spec
+to-tickets                      yours                   /Users/abrahamburnett/.agents/skills/to-tickets
+treg                            installed anyway        /Users/abrahamburnett/.agents/skills/treg
+treg                            installed anyway        /Users/abrahamburnett/.claude/skills/treg
+treg                            installed anyway        /Users/abrahamburnett/.codex/skills/treg
+triage                          yours                   /Users/abrahamburnett/.agents/skills/triage
+turnstile-spin                  yours                   /Users/abrahamburnett/.agents/skills/turnstile-spin
+ui-verify                       yours                   /Users/abrahamburnett/.claude/skills/ui-verify
+video                           checked                 /Users/abrahamburnett/.claude/skills/video
+watcher-test                    checked                 /Users/abrahamburnett/.agents/skills/watcher-test
+wayfinder                       yours                   /Users/abrahamburnett/.agents/skills/wayfinder
+web-design-guidelines           checked                 /Users/abrahamburnett/.claude/skills/web-design-guidelines
+web-perf                        yours                   /Users/abrahamburnett/.agents/skills/web-perf
+web-research-routing            yours                   /Users/abrahamburnett/.agents/skills/web-research-routing
+wizard                          yours                   /Users/abrahamburnett/.agents/skills/wizard
+workers-best-practices          yours                   /Users/abrahamburnett/.agents/skills/workers-best-practices
+workspace-storage-audit         checked                 /Users/abrahamburnett/.agents/skills/workspace-storage-audit  from local folder
+wrangler                        yours                   /Users/abrahamburnett/.agents/skills/wrangler
+writing-great-skills            yours                   /Users/abrahamburnett/.agents/skills/writing-great-skills
+writing-guidelines              checked                 /Users/abrahamburnett/.agents/skills/writing-guidelines
+xcode-build-benchmark           yours                   /Users/abrahamburnett/.agents/skills/xcode-build-benchmark
+xcode-build-fixer               yours                   /Users/abrahamburnett/.agents/skills/xcode-build-fixer
+xcode-build-orchestrator        yours                   /Users/abrahamburnett/.agents/skills/xcode-build-orchestrator
+xcode-compilation-analyzer      yours                   /Users/abrahamburnett/.agents/skills/xcode-compilation-analyzer
+xcode-makefiles                 yours                   /Users/abrahamburnett/.agents/skills/xcode-makefiles
+xcode-project-analyzer          yours                   /Users/abrahamburnett/.agents/skills/xcode-project-analyzer
+xcodebuildmcp-cli               yours                   /Users/abrahamburnett/.agents/skills/xcodebuildmcp-cli
+xcodebuildmcp-cli               yours                   /Users/abrahamburnett/.claude/skills/xcodebuildmcp-cli
+xcodebuildmcp-cli               unchecked               /Users/abrahamburnett/.codex/skills/xcodebuildmcp-cli
+
+Held by SkillCanary (arrived without its check):
+  hyperframes-cli  from /Users/abrahamburnett/.agents/skills/hyperframes-cli  held since 2026-10-07  (its place is taken)
+    to delete the held copy: canary drop 20261007T003205Z-ec791cb3
+  media-use  from /Users/abrahamburnett/.claude/skills/media-use  held since 2026-10-10  (its place is taken)
+    to delete the held copy: canary drop 20261010T053330Z-3a6bbc5c
+  hyperframes-cli  from /Users/abrahamburnett/.claude/skills/hyperframes-cli  held since 2026-10-10  (its place is taken)
+    to delete the held copy: canary drop 20261010T053330Z-ceb38961
+  media-use  from /Users/abrahamburnett/.agents/skills/media-use  held since 2026-10-10  (its place is taken)
+    to delete the held copy: canary drop 20261010T053331Z-c4408326
+exit 0
+
+== dropped records the sweep wrote (ledger, fields at/event/id/name) ==
+{"at": "2026-11-22T22:57:20Z", "event": "dropped", "id": "20261013T065006Z-684a17d3", "name": "make-ugc"}
+{"at": "2026-11-22T22:57:20Z", "event": "dropped", "id": "20261013T070644Z-3c9cc233", "name": "treg"}
+{"at": "2026-11-22T22:57:20Z", "event": "dropped", "id": "20261013T070644Z-99c2baec", "name": "treg"}
+{"at": "2026-11-22T22:57:20Z", "event": "dropped", "id": "20261013T070644Z-e9e2403b", "name": "treg"}
