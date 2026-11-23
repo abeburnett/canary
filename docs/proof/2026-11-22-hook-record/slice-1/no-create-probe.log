@@ -1,0 +1,11 @@
+commit d8883771baeacf1b31e7497828ce07d68a1d2a6b (bin/ and canary/ as at 419d29cb9b2a2654f335da431914c0274ebdfa1d)
+Python 3.9.6
+probe: program 2026-11-22 1.2, note_hook never creates the Support folder, lock or ledger
+command: /usr/bin/python3 -I nocreate.py <final tree>; denied installer payload; throwaway HOME
+
+tree: /private/tmp/claude-501/-Users-abrahamburnett-workspace-canary--claude-worktrees-review-keep-or-scrap-f2bb69/3639c82a-28c0-46dd-87a2-0a27e1de5438/scratchpad/lat/final
+exit: 2 stdout bytes: 549 stderr bytes: 433
+entries under HOME after the call: ['work']
+Library exists: False
+case folder only: exit 2, Support folder holds []
+case folder + lock, no ledger: exit 2, Support folder holds ['ledger.lock']

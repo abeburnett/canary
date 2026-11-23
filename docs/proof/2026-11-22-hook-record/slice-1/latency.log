@@ -24,3 +24,24 @@ denied.json: final median - start median = -7.20 ms, within the 20 ms limit
 Note: the start set ran first and its allowed median includes a slower opening stretch;
 the run-to-run spread (about 10 ms) is larger than any cost of the record, so the negative
 deltas mean no measurable slowdown, not a speed-up.
+
+== Second run, opposite order (final first), same sitting, after the second gate ==
+power: Now drawing from 'AC Power'
+The final tree is 419d29c; d888377 changes only tests/test_setup.py, so bin/ and canary/ are identical.
+
+order: final then start
+final 419d29cb9b2a2654f335da431914c0274ebdfa1d allowed.json: median 227.72 ms, slowest 249.11 ms, (exit, stdout, stderr) seen [(0, False, False)]
+  runs ms: 227.9, 223.2, 238.5, 226.1, 215.9, 218.0, 218.1, 227.5, 242.3, 249.1, 238.1, 233.1, 221.8, 220.0, 230.8, 233.0, 228.2, 218.4, 228.7, 223.2
+final 419d29cb9b2a2654f335da431914c0274ebdfa1d denied.json: median 228.57 ms, slowest 245.19 ms, (exit, stdout, stderr) seen [(2, True, True)]
+  runs ms: 245.2, 234.7, 221.6, 215.7, 219.9, 220.0, 226.8, 240.7, 242.1, 237.9, 243.0, 237.8, 230.8, 235.6, 230.4, 224.8, 224.9, 220.9, 223.0, 222.6
+  hook records written in this set: 23, kinds ['installer_redirect']
+start 28d396b1b231e48149e826afb7f24ea7b9ba602b allowed.json: median 226.49 ms, slowest 245.74 ms, (exit, stdout, stderr) seen [(0, False, False)]
+  runs ms: 238.3, 238.1, 245.7, 232.7, 218.5, 225.2, 226.2, 232.3, 222.0, 217.3, 228.0, 227.0, 232.3, 226.8, 219.2, 220.4, 221.2, 223.8, 224.4, 228.2
+start 28d396b1b231e48149e826afb7f24ea7b9ba602b denied.json: median 226.51 ms, slowest 250.60 ms, (exit, stdout, stderr) seen [(2, True, True)]
+  runs ms: 215.8, 216.0, 216.2, 224.6, 223.5, 222.8, 215.1, 226.4, 226.6, 217.7, 225.8, 237.3, 231.9, 231.7, 236.6, 246.4, 247.5, 250.5, 249.8, 250.6
+  hook records written in this set: 0
+allowed.json: final median - start median = +1.23 ms, within the 5 ms limit
+denied.json: final median - start median = +2.06 ms, within the 20 ms limit
+
+Both orders are within both limits. Across the two runs the allowed delta is -8.34 / +1.23 ms
+(limit +5) and the denied delta is -7.20 / +2.06 ms (limit +20).
