@@ -106,7 +106,8 @@ class GuardInstallsBothHooks(unittest.TestCase):
         self.assertEqual((level, gaps), ("guard", []))
         self.assertEqual(claim, setup.CLAIMS["guard"])
         proc = subprocess.run(shlex.split(setup.hook_command(mac.prefix, "claude")),
-                              input="not json", capture_output=True, text=True, timeout=60)
+                              input="not json", capture_output=True, text=True, timeout=60,
+                              env={"HOME": mac.home, "PATH": os.environ.get("PATH", "")})
         self.assertEqual(proc.returncode, 2)
 
     def test_guard_starts_the_watcher_and_scan_removes_it(self):
